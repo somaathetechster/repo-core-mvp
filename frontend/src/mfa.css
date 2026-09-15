@@ -1,0 +1,36 @@
+.mfa-loading { color: var(--text-dim); padding: 2rem; }
+.mfa-panel { max-width: 520px; }
+.mfa-panel h3 { font-size: 1.3rem; margin: 0 0 0.5rem; }
+.mfa-desc { color: var(--text-dim); font-size: 0.92rem; margin-bottom: 1.5rem; }
+
+.mfa-active {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+}
+.mfa-active p { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.mfa-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; display: inline-block; }
+
+.mfa-enroll {
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+  border-radius: 10px;
+  padding: 1.5rem;
+}
+.mfa-step-label { font-size: 0.85rem; color: var(--text-dim); margin: 0 0 0.75rem; font-weight: 500; }
+.mfa-qr { background: var(--paper); border-radius: 8px; padding: 1rem; display: inline-block; margin-bottom: 1rem; }
+.mfa-qr svg { display: block; width: 160px; height: 160px; }
+.mfa-secret { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 1.5rem; }
+.mfa-secret code {
+  background: var(--ink);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.mfa-verify-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.mfa-verify-row input { max-width: 140px; }

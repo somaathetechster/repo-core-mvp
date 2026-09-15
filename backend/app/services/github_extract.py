@@ -50,11 +50,18 @@ async def _gh_get(client: httpx.AsyncClient, path: str, token: str) -> httpx.Res
     )
 
 
-async def list_user_repos(token: str) -> list[dict]:
-    """List repos the connected token can see (for the user to pick from)."""
+async def list_installation_repos(token: str, installation_id: str) -> list[dict]:
+    """
+    List only the repos the user actually granted during GitHub App install —
+    not everything the token could theoretically see. This is the whole point
+    of using a GitHub App instead of a plain OAuth App.
+    """
     async with httpx.AsyncClient() as client:
-        resp = await _gh_get(client, "/user/repos?per_page=100&sort=updated", token)
+        resp = await _gh_get(
+            client, f"/user/installations/{installation_id}/repositories?per_page=100", token
+        )
         resp.raise_for_status()
+        data = resp.json()
         return [
             {
                 "full_name": r["full_name"],
@@ -62,13 +69,17 @@ async def list_user_repos(token: str) -> list[dict]:
                 "description": r.get("description"),
                 "updated_at": r["updated_at"],
             }
-            for r in resp.json()
+            for r in data.get("repositories", [])
         ]
 
 
 async def extract_repo_summary(token: str, full_name: str) -> RepoSummary:
     async with httpx.AsyncClient() as client:
-        repo = (await _gh_get(client, f"/repos/{full_name}", token)).json()
+        repo_resp = await _gh_get(client, f"/repos/{full_name}", token)
+        if repo_resp.status_code in (403, 404):
+            raise ValueError(f"Repo '{full_name}' not found or not accessible — check it was granted during GitHub App install.")
+        repo_resp.raise_for_status()
+        repo = repo_resp.json()
         languages = (await _gh_get(client, f"/repos/{full_name}/languages", token)).json()
         contributors = (await _gh_get(client, f"/repos/{full_name}/contributors?per_page=100", token)).json()
         commits = (await _gh_get(

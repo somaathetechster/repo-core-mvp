@@ -1,0 +1,72 @@
+.freeform-wrapper { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+
+.freeform-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  align-self: flex-end;
+}
+.freeform-zoom-controls .p-btn { padding: 0.3rem 0.7rem; }
+
+.freeform-stage-outer { overflow: hidden; border-radius: 14px; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5); }
+
+.freeform-stage {
+  position: relative;
+  background: var(--paper);
+  color: #201c10;
+}
+
+.freeform-element {
+  border: 1px dashed transparent;
+}
+.freeform-element:hover {
+  border-color: rgba(242, 183, 5, 0.5);
+}
+
+.freeform-title-text,
+.freeform-block-text {
+  width: 100%;
+  height: 100%;
+  padding: 0.4rem;
+  overflow: auto;
+  cursor: move;
+}
+.freeform-title-text {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+.freeform-block-text {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.freeform-text-input {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--gold-dim);
+  background: rgba(242, 183, 5, 0.08);
+  font-family: inherit;
+  padding: 0.4rem;
+  resize: none;
+}
+.freeform-title-input { font-size: 1.7rem; font-weight: 600; }
+
+.freeform-image,
+.freeform-image-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  cursor: move;
+}
+.freeform-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e4ddc9;
+  color: #8a8368;
+  font-size: 0.8rem;
+}

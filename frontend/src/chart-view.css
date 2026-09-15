@@ -1,0 +1,11 @@
+.chart-empty-note { color: var(--text-dim); font-size: 0.9rem; font-style: italic; }
+
+.chart-table-wrap { overflow-x: auto; }
+.chart-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.chart-table th,
+.chart-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--ink-border);
+}
+.chart-table th { color: var(--text-dim); font-weight: 600; font-size: 0.8rem; }

@@ -1,0 +1,79 @@
+.data-studio-loading { padding: 3rem 2rem; color: var(--text-dim); }
+.data-studio { max-width: 1100px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+.data-studio-notice { color: #4ade80; font-size: 0.9rem; }
+
+.data-studio-layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 2rem; margin: 2rem 0 3rem; align-items: start; }
+
+.data-studio-type-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+.data-studio-type-row select { flex: 0 0 220px; }
+.data-studio-type-row input { flex: 1; }
+
+.data-studio-import { margin-bottom: 1.25rem; }
+.data-studio-import-controls { display: flex; gap: 0.6rem; align-items: flex-start; }
+.data-studio-import-format { flex: 0 0 90px; }
+.data-studio-import-controls textarea { flex: 1; resize: vertical; }
+
+.data-studio-table-wrap { margin-bottom: 1.25rem; }
+.data-studio-table { width: 100%; border-collapse: collapse; margin-bottom: 0.6rem; }
+.data-studio-table th, .data-studio-table td { padding: 0.3rem; border-bottom: 1px solid var(--ink-border); }
+.data-studio-col-input {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem;
+}
+.data-studio-col-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.7rem; }
+.data-studio-cell-input {
+  width: 100%;
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+}
+.data-studio-row-remove { background: none; border: none; color: var(--text-dim); font-size: 0.75rem; cursor: pointer; text-decoration: underline; white-space: nowrap; }
+.data-studio-row-remove:hover { color: var(--danger); }
+
+.data-studio-chart-type-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+.data-studio-chart-type-row span { font-size: 0.85rem; color: var(--text-dim); margin-right: 0.3rem; }
+.data-studio-chart-btn {
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+  color: var(--text-dim);
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.data-studio-chart-btn-active { border-color: var(--gold); color: var(--gold); }
+
+.data-studio-preview h3 { font-size: 1rem; color: var(--text-dim); margin: 0 0 0.75rem; }
+.data-studio-preview-box {
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 1.25rem;
+  color: #201c10;
+}
+
+.data-studio-saved h2 { font-size: 1.4rem; margin-bottom: 1rem; }
+.data-studio-empty { color: var(--text-dim); }
+.data-studio-saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; }
+.data-studio-saved-card {
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+.data-studio-saved-card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; gap: 0.5rem; }
+.data-studio-saved-type { font-size: 0.72rem; color: var(--gold-dim); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+.data-studio-saved-preview { background: var(--paper); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.9rem; color: #201c10; }
+.data-studio-saved-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.data-studio-delete:hover { color: var(--danger); }
+
+@media (max-width: 900px) {
+  .data-studio-layout { grid-template-columns: 1fr; }
+}

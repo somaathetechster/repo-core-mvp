@@ -9,20 +9,23 @@ router = APIRouter(prefix="/repos", tags=["repos"])
 
 @router.get("")
 async def list_repos(user_id: str = Depends(get_current_user_id)):
-    token = await github_store.get_user_token(user_id)
-    if not token:
-        raise HTTPException(status_code=400, detail="GitHub not connected. Call /auth/github/login first.")
-    return await github_extract.list_user_repos(token)
+    connection = await github_store.get_user_connection(user_id)
+    if not connection:
+        raise HTTPException(status_code=400, detail="GitHub not connected. Call /auth/github/install first.")
+    return await github_extract.list_installation_repos(connection.access_token, connection.installation_id)
 
 
 @router.post("/{owner}/{repo}/analyze")
 async def analyze_repo(owner: str, repo: str, user_id: str = Depends(get_current_user_id)):
-    token = await github_store.get_user_token(user_id)
-    if not token:
+    connection = await github_store.get_user_connection(user_id)
+    if not connection:
         raise HTTPException(status_code=400, detail="GitHub not connected.")
 
     full_name = f"{owner}/{repo}"
-    summary = await github_extract.extract_repo_summary(token, full_name)
+    try:
+        summary = await github_extract.extract_repo_summary(connection.access_token, full_name)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     slide_content = build_technology_slide_content(summary)
 
     return {

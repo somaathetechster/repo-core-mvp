@@ -12,23 +12,30 @@
    - Generate `TOKEN_ENCRYPTION_KEY`:
      `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
    - Add your `ANTHROPIC_API_KEY`
+   - Create a Supabase project at supabase.com, then from Project Settings -> API fill in:
+     `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_JWT_SECRET` (under JWT Settings —
+     the signing secret, not the anon/service keys)
 4. `uvicorn app.main:app --reload --port 8000`
 5. Visit `http://localhost:8000/docs` for interactive API docs.
 
-## Flow to test manually right now (no frontend needed yet)
+## Auth model
 
-1. `GET /auth/github/login` with header `X-User-Id: test-user-1` — this redirects to GitHub.
-2. Approve access to a repo you own (can be private).
-3. You'll land back at `FRONTEND_URL/connect/github?status=success` — ignore the 404, the token is already saved.
-4. `GET /repos` with `X-User-Id: test-user-1` — lists repos the token can see.
-5. `POST /repos/{owner}/{repo}/analyze` with `X-User-Id: test-user-1` — runs extraction + generates
-   the first AI-written slide content, with every claim traceable to the returned `summary` object.
+Real users authenticate via Supabase (email/password by default; Google/GitHub login etc.
+can be turned on in the Supabase dashboard with no code changes). The frontend gets a JWT
+from Supabase and sends it as `Authorization: Bearer <token>` on every request. The backend
+verifies that JWT locally in `app/core/deps.py` (no network call per request) and trusts the
+`sub` claim as the user id — that's the entire trust boundary.
+
+The one exception: `GET /auth/github/login` is a plain browser redirect (an `<a href>` /
+`window.location`), which can't carry a custom header — so that single route accepts the
+token as a query param instead (`get_current_user_id_from_query`). Every other route uses
+the header-based path. Don't extend the query-param path to other routes; a token in a URL
+is more exposure-prone (browser history, server access logs) than one in a header.
 
 ## What's intentionally stubbed for now
 
-- `app/core/deps.py` — trusts an `X-User-Id` header. Replace with real session/JWT auth before
-  anything touches production.
-- `app/services/github_store.py` — in-memory dict instead of a real DB table. Swap in SQLAlchemy
-  once Postgres is wired up; the function signatures won't need to change.
-- OAuth `state` param is stored in-memory — fine for one process, needs Redis/DB once you run
-  more than one backend instance.
+- `app/services/github_store.py` — in-memory dict instead of a real DB table. Swap in
+  SQLAlchemy once Postgres is wired up (Supabase's own Postgres instance works fine for this —
+  one less service to run); the function signatures won't need to change.
+- OAuth `state` param (CSRF protection during the GitHub handshake) is stored in-memory —
+  fine for one process, needs Redis/DB once you run more than one backend instance.
