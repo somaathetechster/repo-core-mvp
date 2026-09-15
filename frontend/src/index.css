@@ -6,6 +6,8 @@ html, body {
   margin: 0;
   padding: 0;
   width: 100%;
+  background: #0a0a0a; /* matches --ink in theme.css; prevents white flashes on
+                          overflow, short content, or error states */
 }
 
 #root {

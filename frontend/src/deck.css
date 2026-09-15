@@ -1,8 +1,8 @@
 .deck-empty { max-width: 700px; margin: 0 auto; padding: 3rem 2rem; }
 .deck-error { margin-top: 1rem; }
 
-.deck-viewer { max-width: 900px; margin: 0 auto; padding: 2rem; }
-.deck-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+.deck-editor { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+.deck-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem; }
 .deck-position { color: var(--text-dim); font-size: 0.88rem; }
 
 .deck-stage { display: flex; align-items: center; gap: 1rem; }
@@ -206,6 +206,15 @@
   .deck-editor-body { grid-template-columns: 1fr; }
   .deck-sidebar { flex-direction: row; overflow-x: auto; max-height: none; }
   .slide-thumb { min-width: 140px; }
+}
+
+@media (max-width: 700px) {
+  .deck-editor { padding: 1.25rem; }
+  .deck-toolbar-left { flex-wrap: wrap; gap: 0.5rem; }
+  .deck-name-input { min-width: 100px; flex: 1; }
+  .deck-position { width: 100%; order: 10; }
+  .deck-nav { width: 32px; height: 32px; font-size: 0.85rem; }
+  .deck-slide { padding: 1.5rem; }
 }
 
 .deck-stage-column { display: flex; flex-direction: column; gap: 0.75rem; flex: 1; min-width: 0; }

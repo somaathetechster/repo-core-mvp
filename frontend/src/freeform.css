@@ -1,4 +1,4 @@
-.freeform-wrapper { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+.freeform-wrapper { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; max-width: 100%; }
 
 .freeform-zoom-controls {
   display: flex;
@@ -10,7 +10,7 @@
 }
 .freeform-zoom-controls .p-btn { padding: 0.3rem 0.7rem; }
 
-.freeform-stage-outer { overflow: hidden; border-radius: 14px; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5); }
+.freeform-stage-outer { overflow: auto; max-width: 100%; border-radius: 14px; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5); }
 
 .freeform-stage {
   position: relative;
