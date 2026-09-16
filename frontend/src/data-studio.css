@@ -84,3 +84,46 @@
   .data-studio-type-row select { flex: none; width: 100%; }
   .data-studio-import-controls { flex-direction: column; }
 }
+
+/* Multi-section CSV import: picker shown when one paste holds several tables. */
+.data-studio-section-picker {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--ink-raised);
+  border: 1px solid var(--gold-dim);
+  border-radius: 10px;
+}
+.data-studio-section-hint { font-size: 0.85rem; color: var(--text-dim); margin: 0 0 0.75rem; }
+.data-studio-section-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
+.data-studio-section-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: var(--ink);
+  border: 1px solid var(--ink-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  color: var(--text);
+}
+.data-studio-section-item:hover { border-color: var(--gold); }
+.data-studio-section-item span { font-size: 0.78rem; color: var(--text-dim); }
+
+/* Row of actions under the editable table. */
+.data-studio-table-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.data-studio-clear-table:hover:not(:disabled) { color: var(--danger); }
+.data-studio-clear-table:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Visual refinements to the data section. */
+.data-studio-table-wrap { overflow-x: auto; }
+.data-studio-table th { text-align: left; vertical-align: bottom; }
+.data-studio-table tbody tr:hover td { background: var(--ink-raised); }
+.data-studio-table tbody tr:last-child td { border-bottom: none; }
+.data-studio-import-controls textarea { min-height: 3rem; }
+
+@media (max-width: 700px) {
+  .data-studio-section-item { flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+  .data-studio-table-actions > .p-btn { flex: 1 1 auto; }
+}

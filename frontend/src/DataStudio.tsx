@@ -43,6 +43,9 @@ export default function DataStudio() {
   const [saving, setSaving] = useState(false);
   const [addingToDeckId, setAddingToDeckId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [detectedSections, setDetectedSections] = useState<
+    { title: string; columns: string[]; rows: string[][] }[] | null
+  >(null);
 
   useEffect(() => {
     Promise.all([listRecordTypes(), listDataRecords()])
@@ -109,18 +112,116 @@ export default function DataStudio() {
     setRows((r) => r.map((row) => row.filter((_, i) => i !== index)));
   }
 
+  function clearTable() {
+    const hasContent = rows.some((row) => row.some((cell) => cell.trim()));
+    if (hasContent && !window.confirm("Clear every row in this table? The columns stay as they are.")) return;
+    setRows([columns.map(() => "")]);
+    setNotice("Table cleared.");
+    setTimeout(() => setNotice(null), 2000);
+  }
+
+  function parseCsvLine(line: string): string[] {
+    const cells: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        cells.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    cells.push(current.trim());
+    return cells.map((c) => c.replace(/^"|"$/g, ""));
+  }
+
+  function detectSections(rawText: string): { title: string; columns: string[]; rows: string[][] }[] {
+    const cleaned = rawText.replace(/\r/g, "");
+    const lines = cleaned.split("\n");
+    const sections: { title: string; columns: string[]; rows: string[][] }[] = [];
+    let current: { title: string; columns: string[]; rows: string[][] } | null = null;
+
+    function isTitleLine(idx: number): boolean {
+      const cells = parseCsvLine(lines[idx]);
+      if (cells.length !== 1) return false;
+      let j = idx + 1;
+      while (j < lines.length && lines[j].trim() === "") j++;
+      if (j >= lines.length) return false;
+      return parseCsvLine(lines[j]).length > 1;
+    }
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (line.trim() === "") {
+        i++;
+        continue;
+      }
+      if (isTitleLine(i)) {
+        const title = parseCsvLine(line)[0];
+        i++;
+        while (i < lines.length && lines[i].trim() === "") i++;
+        const header = parseCsvLine(lines[i]);
+        current = { title, columns: header, rows: [] };
+        sections.push(current);
+        i++;
+      } else if (current === null) {
+        const header = parseCsvLine(line);
+        current = { title: `Section ${sections.length + 1}`, columns: header, rows: [] };
+        sections.push(current);
+        i++;
+      } else {
+        current.rows.push(parseCsvLine(line));
+        i++;
+      }
+    }
+    return sections;
+  }
+
+  function applySection(section: { title: string; columns: string[]; rows: string[][] }) {
+    if (section.columns.length > 30) {
+      setError(
+        `"${section.title}" parsed into ${section.columns.length} columns, which almost certainly means this isn't comma-separated data. Check the format, or try JSON instead.`
+      );
+      setDetectedSections(null);
+      return;
+    }
+    setColumns(section.columns);
+    setRows(section.rows.length > 0 ? section.rows : [section.columns.map(() => "")]);
+    if (!title) setTitle(section.title);
+    setDetectedSections(null);
+    setImportText("");
+    setNotice(`Imported "${section.title}": ${section.rows.length} row${section.rows.length === 1 ? "" : "s"}.`);
+    setTimeout(() => setNotice(null), 3000);
+  }
+
   function handleImport() {
     setError(null);
     try {
       if (importFormat === "csv") {
-        const cleaned = importText.replace(/\r/g, "");
-        const lines = cleaned.trim().split("\n").filter(Boolean);
-        if (lines.length === 0) return;
-        const parsedColumns = lines[0].split(",").map((c) => c.trim());
-        const parsedRows = lines.slice(1).map((line) => line.split(",").map((c) => c.trim()));
-        setColumns(parsedColumns);
-        setRows(parsedRows.length > 0 ? parsedRows : [parsedColumns.map(() => "")]);
-        setNotice(`Imported ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"}.`);
+        const trimmedInput = importText.trim();
+        if (trimmedInput.startsWith("[") || trimmedInput.startsWith("{")) {
+          setError('This looks like JSON, not CSV. Switch the format dropdown to "JSON" above and try again.');
+          return;
+        }
+
+        const sections = detectSections(importText);
+
+        if (sections.length === 0) {
+          setError("Couldn't find any table in that paste.");
+          return;
+        }
+
+        if (sections.length > 1) {
+          setDetectedSections(sections);
+          return;
+        }
+
+        applySection(sections[0]);
       } else {
         const parsed = JSON.parse(importText);
         if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -133,10 +234,10 @@ export default function DataStudio() {
         );
         setColumns(parsedColumns);
         setRows(parsedRows);
+        setImportText("");
         setNotice(`Imported ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"}.`);
+        setTimeout(() => setNotice(null), 3000);
       }
-      setImportText("");
-      setTimeout(() => setNotice(null), 3000);
     } catch {
       setError("Couldn't parse that import. Check the format and try again.");
     }
@@ -280,6 +381,27 @@ export default function DataStudio() {
                 Import
               </button>
             </div>
+
+            {detectedSections && (
+              <div className="data-studio-section-picker">
+                <p className="data-studio-section-hint">
+                  Found {detectedSections.length} tables in that paste. Choose one to import:
+                </p>
+                <div className="data-studio-section-list">
+                  {detectedSections.map((s, i) => (
+                    <button key={i} className="data-studio-section-item" onClick={() => applySection(s)}>
+                      <strong>{s.title}</strong>
+                      <span>
+                        {s.columns.length} columns, {s.rows.length} row{s.rows.length === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button className="p-btn p-btn-ghost" onClick={() => setDetectedSections(null)}>
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="data-studio-table-wrap">
@@ -328,9 +450,18 @@ export default function DataStudio() {
                 ))}
               </tbody>
             </table>
-            <button className="p-btn p-btn-ghost" onClick={addRow}>
-              + Add row
-            </button>
+            <div className="data-studio-table-actions">
+              <button className="p-btn p-btn-ghost" onClick={addRow}>
+                + Add row
+              </button>
+              <button
+                className="p-btn p-btn-ghost data-studio-clear-table"
+                onClick={clearTable}
+                disabled={rows.length === 0}
+              >
+                Clear table
+              </button>
+            </div>
           </div>
 
           <div className="data-studio-chart-type-row">
