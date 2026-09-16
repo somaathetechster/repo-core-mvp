@@ -113,12 +113,14 @@ export default function DataStudio() {
     setError(null);
     try {
       if (importFormat === "csv") {
-        const lines = importText.trim().split("\n").filter(Boolean);
+        const cleaned = importText.replace(/\r/g, "");
+        const lines = cleaned.trim().split("\n").filter(Boolean);
         if (lines.length === 0) return;
         const parsedColumns = lines[0].split(",").map((c) => c.trim());
         const parsedRows = lines.slice(1).map((line) => line.split(",").map((c) => c.trim()));
         setColumns(parsedColumns);
         setRows(parsedRows.length > 0 ? parsedRows : [parsedColumns.map(() => "")]);
+        setNotice(`Imported ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"}.`);
       } else {
         const parsed = JSON.parse(importText);
         if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -131,8 +133,10 @@ export default function DataStudio() {
         );
         setColumns(parsedColumns);
         setRows(parsedRows);
+        setNotice(`Imported ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"}.`);
       }
       setImportText("");
+      setTimeout(() => setNotice(null), 3000);
     } catch {
       setError("Couldn't parse that import. Check the format and try again.");
     }

@@ -23,6 +23,9 @@ MANIFEST_FILES = {
     "Cargo.toml": "rust",
 }
 
+# Directory segments whose manifests describe someone else's code, not the repo's.
+_SKIP_DIRS = {"node_modules", "vendor", "dist"}
+
 
 class RepoSummary(BaseModel):
     full_name: str
@@ -108,10 +111,21 @@ async def extract_repo_summary(token: str, full_name: str) -> RepoSummary:
             )
             for path in paths:
                 filename = path.split("/")[-1]
-                if filename in MANIFEST_FILES and "/" not in path:  # root-level only for v1
-                    deps = await _fetch_and_parse_manifest(client, full_name, path, filename, token)
-                    if deps:
-                        detected_deps[filename] = deps
+                if filename not in MANIFEST_FILES:
+                    continue
+                # Scan the root plus up to 2 directory levels (backend/, frontend/,
+                # packages/foo/) — deeper than that is almost always vendored code.
+                if path.count("/") > 2:
+                    continue
+                segments = path.split("/")[:-1]
+                if any(seg in _SKIP_DIRS for seg in segments):
+                    continue
+                deps = await _fetch_and_parse_manifest(client, full_name, path, filename, token)
+                if deps:
+                    # Keyed by full path, not bare filename, so a monorepo's
+                    # backend/package.json and frontend/package.json both survive
+                    # instead of one silently overwriting the other.
+                    detected_deps[path] = deps
 
         return RepoSummary(
             full_name=repo["full_name"],

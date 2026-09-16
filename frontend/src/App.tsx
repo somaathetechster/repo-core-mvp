@@ -1,20 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabaseClient";
 import { startGithubConnect, listRepos, analyzeRepo, type RepoListing, type AnalyzeResult } from "./api";
 import Login from "./Login";
 import MfaChallenge from "./MfaChallenge";
 import Landing from "./marketing/Landing";
-import CompanyProfileForm from "./CompanyProfileForm";
+const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
 import MfaSettings from "./MfaSettings";
-import DecksHome from "./DecksHome";
+const DecksHome = lazy(() => import("./DecksHome"));
 import HomeDashboard from "./HomeDashboard";
-import DataStudio from "./DataStudio";
+const DataStudio = lazy(() => import("./DataStudio"));
 import "./theme.css";
 import "./dashboard.css";
 
 type LoggedOutView = "landing" | "login";
 type AalStatus = "checking" | "ok" | "needs-mfa";
+
+function TabLoading() {
+  return <p style={{ padding: "2rem", color: "var(--text-dim)" }}>Loading...</p>;
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
@@ -197,11 +201,23 @@ function Dashboard({ userEmail, userName }: { userEmail: string; userName: strin
         </div>
       </div>
 
-      {tab === "profile" && <CompanyProfileForm />}
+      {tab === "profile" && (
+        <Suspense fallback={<TabLoading />}>
+          <CompanyProfileForm />
+        </Suspense>
+      )}
 
-      {tab === "deck" && <DecksHome analyzedRepos={analyzedRepos} />}
+      {tab === "deck" && (
+        <Suspense fallback={<TabLoading />}>
+          <DecksHome analyzedRepos={analyzedRepos} />
+        </Suspense>
+      )}
 
-      {tab === "data" && <DataStudio />}
+      {tab === "data" && (
+        <Suspense fallback={<TabLoading />}>
+          <DataStudio />
+        </Suspense>
+      )}
 
       {tab === "security" && (
         <div className="dash-body">
