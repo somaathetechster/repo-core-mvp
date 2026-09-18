@@ -318,3 +318,16 @@
   pointer-events: none;
 }
 .overview-card:hover .overview-card-slide { border-color: var(--gold); }
+
+/* Design view: live preview beside the controls, so a template change is
+   seen on the actual deck rather than on an abstract sample. */
+.deck-design-view { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 2rem; align-items: start; }
+.deck-design-preview { position: sticky; top: 1rem; }
+.deck-design-note { font-size: 0.76rem; color: var(--text-dim); margin-top: 0.75rem; text-align: center; }
+.deck-design-controls { max-height: calc(100vh - 8rem); overflow-y: auto; padding-right: 0.5rem; }
+
+@media (max-width: 1000px) {
+  .deck-design-view { grid-template-columns: 1fr; }
+  .deck-design-preview { position: static; }
+  .deck-design-controls { max-height: none; }
+}

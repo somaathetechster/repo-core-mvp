@@ -1,7 +1,9 @@
 import { useState } from "react";
-import Slide, { type SlideContent } from "./deck/SlideLayouts";
+import { type SlideContent } from "./deck/SlideLayouts";
+import TemplatedSlide from "./deck/TemplatedSlide";
 import SlideFrame from "./deck/SlideFrame";
-import { chooseLayout, buildPalette, type SlideLayout } from "./deck/design";
+import { buildPalette, mix, type SlideLayout } from "./deck/design";
+import { getTemplate, applyScheme } from "./deck/templates";
 import ChartRenderer, { type ColumnMeta } from "./viz/ChartRenderer";
 import type { DeckSlide, DeckTheme } from "./api";
 import "./designed-slide.css";
@@ -17,6 +19,8 @@ interface Props {
   editable?: boolean;
   /** Overrides the automatically chosen layout, when the user picks one. */
   layoutOverride?: SlideLayout | null;
+  templateId?: string;
+  schemeId?: string;
 }
 
 /**
@@ -30,12 +34,21 @@ interface Props {
 export default function DesignedSlide({
   slide, theme, companyName, logo, pageNumber, totalPages,
   onChange, editable = false, layoutOverride = null,
+  templateId, schemeId,
 }: Props) {
   const [editing, setEditing] = useState(false);
 
-  const palette = buildPalette(theme?.primary_color, theme?.secondary_color);
-  const fontSet = (theme?.font_style as "serif" | "sans" | "classic") ?? "serif";
-  const layout = layoutOverride ?? chooseLayout(slide);
+  const template = getTemplate(templateId);
+  // The scheme sets the base colours, then the founder's brand colours
+  // override the accent and ink on top of it.
+  const colors = applyScheme(template, schemeId, theme?.primary_color, theme?.secondary_color);
+  const base = buildPalette(colors.accent, colors.ink);
+  const palette = {
+    ...base,
+    paper: colors.paper,
+    muted: mix(colors.ink, colors.paper, 0.45),
+    rule: mix(colors.ink, colors.paper, 0.86),
+  };
 
   const content: SlideContent = {
     id: slide.id,
@@ -68,16 +81,16 @@ export default function DesignedSlide({
   return (
     <div className="dsl">
       <SlideFrame className="dsl-frame">
-        <Slide
+        <TemplatedSlide
           slide={content}
-          layout={layout}
+          template={template}
           palette={palette}
-          fontSet={fontSet}
           logo={logo}
           companyName={companyName}
           pageNumber={pageNumber}
           totalPages={totalPages}
           chartNode={chartNode}
+          layoutOverride={layoutOverride}
         />
       </SlideFrame>
 

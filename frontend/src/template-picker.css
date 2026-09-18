@@ -1,0 +1,35 @@
+.tp { display: flex; flex-direction: column; gap: 2rem; }
+.tp-section h3 {
+  font-size: 0.82rem; color: var(--text-dim); font-weight: 600;
+  margin: 0 0 0.35rem; font-family: var(--font-body);
+}
+.tp-hint { font-size: 0.76rem; color: var(--text-dim); margin: 0 0 1rem; line-height: 1.5; opacity: 0.8; }
+
+.tp-templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 0.75rem; }
+.tp-template {
+  display: flex; flex-direction: column; gap: 0.4rem; text-align: left;
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 10px; padding: 0.9rem; cursor: pointer;
+  font-family: var(--font-body); transition: border-color 0.15s ease;
+}
+.tp-template:hover { border-color: var(--gold-dim); }
+.tp-template.is-active { border-color: var(--gold); background: rgba(242, 183, 5, 0.06); }
+.tp-template svg { border-radius: 4px; width: 100%; height: auto; display: block; margin-bottom: 0.3rem; }
+.tp-template-name { font-size: 0.92rem; color: var(--text); font-family: var(--font-display); }
+.tp-template-desc { font-size: 0.74rem; color: var(--text-dim); line-height: 1.45; }
+.tp-template-best { font-size: 0.71rem; color: var(--gold-dim); line-height: 1.4; font-style: italic; }
+
+.tp-schemes { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.5rem; }
+.tp-scheme {
+  display: flex; align-items: center; gap: 0.55rem;
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 8px; padding: 0.55rem 0.7rem; cursor: pointer;
+  font-family: var(--font-body); color: var(--text-dim); font-size: 0.78rem;
+}
+.tp-scheme:hover { border-color: var(--gold-dim); color: var(--text); }
+.tp-scheme.is-active { border-color: var(--gold); color: var(--text); }
+.tp-swatches { display: flex; flex-shrink: 0; }
+.tp-swatches span { width: 12px; height: 18px; display: block; }
+.tp-swatches span:first-child { border-radius: 3px 0 0 3px; }
+.tp-swatches span:last-child { border-radius: 0 3px 3px 0; }
+.tp-scheme-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

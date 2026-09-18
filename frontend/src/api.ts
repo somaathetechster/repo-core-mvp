@@ -154,6 +154,9 @@ export interface DeckTheme {
   primary_color: string | null;
   secondary_color: string | null;
   font_style: string;
+  /** Compositional template and colour scheme, persisted with the deck. */
+  template_id?: string | null;
+  scheme_id?: string | null;
 }
 
 export interface DeckSummary {

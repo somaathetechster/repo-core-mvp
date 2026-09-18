@@ -21,6 +21,8 @@ import {
 } from "./api";
 import SlideThumb from "./SlideThumb";
 import DesignedSlide from "./DesignedSlide";
+import TemplatePicker, { type DeckStyle } from "./TemplatePicker";
+import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
 import FreeformCanvas from "./FreeformCanvas";
 import CompanyProfileForm from "./CompanyProfileForm";
 import { defaultLayoutForSlide, type LayoutElement } from "./layoutTypes";
@@ -33,13 +35,19 @@ interface DeckViewerProps {
   onBack: () => void;
 }
 
-type ViewMode = "single" | "overview" | "profile";
+type ViewMode = "single" | "overview" | "profile" | "design";
 
 export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewerProps) {
   const [deckName, setDeckName] = useState("");
   const [slides, setSlides] = useState<DeckSlide[] | null>(null);
   const [theme, setTheme] = useState<DeckTheme | null>(null);
   const [deckProfile, setDeckProfile] = useState<CompanyProfile | null>(null);
+  // Template and colour scheme live on the deck's theme so they persist and
+  // travel with the deck, rather than being a per-session preference.
+  const [style, setStyle] = useState<DeckStyle>({
+    templateId: DEFAULT_TEMPLATE_ID,
+    schemeId: "template",
+  });
   const [current, setCurrent] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingDeck, setLoadingDeck] = useState(true);
@@ -59,6 +67,10 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
         setDeckName(d.name);
         setSlides(d.slides);
         setTheme(d.theme);
+        setStyle({
+          templateId: d.theme?.template_id ?? DEFAULT_TEMPLATE_ID,
+          schemeId: d.theme?.scheme_id ?? "template",
+        });
         setDeckProfile(d.profile_snapshot as unknown as CompanyProfile);
         setLayouts((d.layouts as Record<string, LayoutElement[]>) ?? {});
         setFreeformSlideIds(new Set(d.freeform_slide_ids ?? []));
@@ -219,6 +231,12 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
               Overview
             </button>
             <button
+              className={`deck-view-btn ${viewMode === "design" ? "deck-view-btn-active" : ""}`}
+              onClick={() => setViewMode("design")}
+            >
+              Design
+            </button>
+            <button
               className={`deck-view-btn ${viewMode === "profile" ? "deck-view-btn-active" : ""}`}
               onClick={() => setViewMode("profile")}
             >
@@ -235,7 +253,34 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
 
       {error && <p className="p-error deck-error">{error}</p>}
 
-      {viewMode === "profile" ? (
+      {viewMode === "design" ? (
+        <div className="deck-design-view">
+          <div className="deck-design-preview">
+            <DesignedSlide
+              slide={slides[current]}
+              theme={theme}
+              companyName={deckName}
+              pageNumber={current + 1}
+              totalPages={slides.length}
+              templateId={style.templateId}
+              schemeId={style.schemeId}
+            />
+            <p className="deck-design-note">
+              Previewing slide {current + 1}. Changes apply to every slide in this deck.
+            </p>
+          </div>
+          <div className="deck-design-controls">
+            <TemplatePicker
+              value={style}
+              onChange={(next) => {
+                setStyle(next);
+                setDirty(true);
+              }}
+              brandPrimary={theme?.primary_color}
+            />
+          </div>
+        </div>
+      ) : viewMode === "profile" ? (
         deckProfile && (
           <CompanyProfileForm
             heading="Profile for this deck"
@@ -253,6 +298,8 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
             <div className="deck-overview-grid">
               {slides.map((s, i) => (
                 <OverviewCard
+                  templateId={style.templateId}
+                  schemeId={style.schemeId}
                   key={s.id}
                   slide={s}
                   index={i}
@@ -328,6 +375,8 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
                   pageNumber={current + 1}
                   totalPages={slides.length}
                   editable
+                  templateId={style.templateId}
+                  schemeId={style.schemeId}
                   onChange={(updated) => handleSlideChange(current, updated)}
                 />
               )}
@@ -425,6 +474,8 @@ function OverviewCard({
   canDelete,
   onOpen,
   onDelete,
+  templateId,
+  schemeId,
 }: {
   slide: DeckSlide;
   index: number;
@@ -432,11 +483,19 @@ function OverviewCard({
   canDelete: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  templateId?: string;
+  schemeId?: string;
 }) {
   return (
     <div className="overview-card" onClick={onOpen}>
       <div className="overview-card-slide">
-        <DesignedSlide slide={slide} theme={theme} pageNumber={index + 1} />
+        <DesignedSlide
+          slide={slide}
+          theme={theme}
+          pageNumber={index + 1}
+          templateId={templateId}
+          schemeId={schemeId}
+        />
       </div>
       <div className="overview-card-footer">
         <span>
