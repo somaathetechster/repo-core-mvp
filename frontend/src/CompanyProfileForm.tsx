@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import DeckImport from "./DeckImport";
 import { getCompanyProfile, saveCompanyProfile, type CompanyProfile, type TeamMember, type TaggedImage } from "./api";
 import { fileToDataUrl, extractDominantColor, MAX_IMAGE_BYTES } from "./fileUtils";
 import "./theme.css";
@@ -155,6 +156,7 @@ export default function CompanyProfileForm({ load, save, heading, description }:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const doLoad = load ?? getCompanyProfile;
   const doSave = save ?? saveCompanyProfile;
@@ -259,6 +261,18 @@ export default function CompanyProfileForm({ load, save, heading, description }:
 
   return (
     <div className="profile-form">
+      {importing && (
+        <DeckImport
+          onClose={() => setImporting(false)}
+          onApply={(fields) => {
+            // Merge rather than replace: an import fills gaps, it does not
+            // wipe work the founder already did.
+            setProfile((p) => ({ ...p, ...fields }));
+            setImporting(false);
+          }}
+        />
+      )}
+
       <div className="profile-header">
         <div>
           <h2>{heading ?? "Company profile"}</h2>
@@ -268,6 +282,9 @@ export default function CompanyProfileForm({ load, save, heading, description }:
           </p>
         </div>
         <div className="profile-save-area">
+          <button className="p-btn p-btn-secondary" onClick={() => setImporting(true)}>
+            Import existing deck
+          </button>
           {savedAt && <span className="profile-saved-note">Saved {savedAt.toLocaleTimeString()}</span>}
           <button className="p-btn p-btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save profile"}

@@ -444,3 +444,34 @@ export async function transformTable(
   if (!res.ok) await throwWithDetail(res, "Could not apply that transform.");
   return res.json();
 }
+
+/* ---------------------------------------------------------------- */
+/* Pitch deck import                                                 */
+/* ---------------------------------------------------------------- */
+
+export interface ImportSuggestion {
+  field: string;
+  value: string;
+  source_slides: number[];
+  confidence: "high" | "medium" | "low";
+}
+
+export interface DeckImportResult {
+  detected_company_name: string | null;
+  slide_count: number;
+  slides: { index: number; title: string; excerpt: string }[];
+  suggestions: ImportSuggestion[];
+  warnings: string[];
+}
+
+export async function importPitchDeck(file: File): Promise<DeckImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/company-profile/import-deck`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: form,
+  });
+  if (!res.ok) await throwWithDetail(res, "Could not import that deck.");
+  return res.json();
+}

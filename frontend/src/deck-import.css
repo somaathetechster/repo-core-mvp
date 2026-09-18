@@ -1,0 +1,24 @@
+.di-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 70; padding: 1.5rem; }
+.di-modal { background: var(--ink-raised); border: 1px solid var(--ink-border); border-radius: 14px; padding: 1.75rem; width: 100%; max-width: 680px; max-height: 88vh; overflow-y: auto; }
+.di-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.di-head h2 { margin: 0; font-size: 1.25rem; }
+.di-close { background: none; border: none; color: var(--text-dim); font-size: 1.6rem; cursor: pointer; line-height: 1; }
+.di-intro { font-size: 0.86rem; color: var(--text-dim); line-height: 1.6; margin: 0 0 1.25rem; }
+.di-drop { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; width: 100%; padding: 2.5rem 1.5rem; border: 1px dashed var(--ink-border); border-radius: 12px; background: var(--ink); cursor: pointer; font-family: var(--font-body); }
+.di-drop:hover:not(:disabled) { border-color: var(--gold-dim); }
+.di-drop span { color: var(--text); font-size: 0.95rem; }
+.di-drop em { color: var(--text-dim); font-size: 0.78rem; font-style: normal; }
+.di-summary { font-size: 0.88rem; color: var(--text); margin: 0 0 0.75rem; }
+.di-warning { font-size: 0.78rem; color: var(--gold); background: rgba(242,183,5,0.08); padding: 0.55rem 0.7rem; border-radius: 6px; margin: 0 0 0.5rem; line-height: 1.5; }
+.di-suggestions { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
+.di-suggestion { border: 1px solid var(--ink-border); border-radius: 9px; padding: 0.8rem; opacity: 0.6; }
+.di-suggestion.is-accepted { opacity: 1; border-color: var(--gold-dim); }
+.di-suggestion-head { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.5rem; cursor: pointer; flex-wrap: wrap; }
+.di-field-name { font-size: 0.85rem; color: var(--text); flex: 1; }
+.di-confidence { font-size: 0.66rem; padding: 0.12rem 0.38rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.03em; }
+.di-high { background: rgba(74,222,128,0.16); color: #4ade80; }
+.di-medium { background: rgba(242,183,5,0.16); color: var(--gold); }
+.di-low { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+.di-slides { font-size: 0.7rem; color: var(--text-dim); }
+.di-value { width: 100%; font-size: 0.82rem; resize: vertical; font-family: var(--font-body); line-height: 1.5; }
+.di-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.25rem; }

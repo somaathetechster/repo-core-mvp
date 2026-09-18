@@ -1,0 +1,27 @@
+.cv-wrap { position: relative; width: 100%; overflow: hidden; }
+.cv-canvas {
+  position: absolute; top: 0; left: 0;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -24px rgba(0,0,0,0.5);
+}
+
+.cv-el { outline: 1px solid transparent; transition: outline-color 0.1s ease; }
+.cv-el:hover { outline-color: rgba(120,140,255,0.45); cursor: move; }
+.cv-el.is-selected { outline: 1.5px solid #5b7cfa; }
+.cv-el.is-locked:hover { outline-color: rgba(160,160,160,0.4); cursor: default; }
+
+.cv-handle {
+  position: absolute; width: 9px; height: 9px;
+  background: #fff; border: 1.5px solid #5b7cfa; border-radius: 2px;
+  z-index: 100;
+}
+.cv-handle-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.cv-handle-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.cv-handle-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.cv-handle-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.cv-handle-n { left: 50%; top: -5px; margin-left: -4.5px; cursor: ns-resize; }
+.cv-handle-s { left: 50%; bottom: -5px; margin-left: -4.5px; cursor: ns-resize; }
+.cv-handle-w { left: -5px; top: 50%; margin-top: -4.5px; cursor: ew-resize; }
+.cv-handle-e { right: -5px; top: 50%; margin-top: -4.5px; cursor: ew-resize; }
+
+.cv-guide { position: absolute; background: #ff3b7b; z-index: 200; pointer-events: none; }
