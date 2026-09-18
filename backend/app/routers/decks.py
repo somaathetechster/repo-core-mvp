@@ -23,7 +23,14 @@ async def _shared_profile_dict(session, user_id: str) -> dict:
     row = await session.get(CompanyProfileModel, user_id)
     if not row:
         return {}
-    return {col.name: getattr(row, col.name) for col in CompanyProfileModel.__table__.columns if col.name != "user_id"}
+    # Exclude user_id (not part of the profile content) and updated_at
+    # (a datetime, which isn't JSON-serializable and would break the
+    # profile_snapshot JSON column on insert).
+    return {
+        col.name: getattr(row, col.name)
+        for col in CompanyProfileModel.__table__.columns
+        if col.name not in ("user_id", "updated_at")
+    }
 
 
 def _deck_summary(d: DeckModel) -> dict:
