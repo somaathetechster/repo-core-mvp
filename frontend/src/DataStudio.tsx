@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import {
   ingestText, ingestFile, profileTable, transformTable,
-  listDecks, getDeck, saveDeckEditorState,
+  saveDeckEditorState,
   type DetectedTable, type ProfileResponse, type ChartSpecDTO,
   type SuggestedTransform,
 } from "./api";
 import ChartRenderer, { type ColumnMeta } from "./viz/ChartRenderer";
+import PlacementPicker, { type Placement } from "./PlacementPicker";
 import "./theme.css";
 import "./data-studio.css";
 
@@ -23,6 +24,7 @@ export default function DataStudio() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showAllColumns, setShowAllColumns] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   function flash(message: string) {
@@ -104,39 +106,52 @@ export default function DataStudio() {
     }
   }
 
-  async function addToDeck() {
+  async function applyPlacement(placement: Placement) {
     if (!table || !analysis) return;
     const spec = analysis.charts.recommendations[activeChart];
+    setPlacing(false);
     setBusy("Adding to deck");
     setError(null);
     try {
-      const decks = await listDecks();
-      if (decks.length === 0) {
-        setError("Create a deck first in the Deck tab, then come back to add this.");
-        return;
-      }
-      const options = decks.map((d, i) => `${i + 1}. ${d.name}`).join("\n");
-      const choice = window.prompt(`Add "${spec.title}" to which deck?\n${options}\n\nEnter a number:`);
-      const index = choice ? parseInt(choice, 10) - 1 : -1;
-      if (index < 0 || index >= decks.length) return;
-
-      const target = await getDeck(decks[index].id);
-      const slide = {
-        id: `chart-${Date.now()}`,
-        type: "chart" as const,
-        title: spec.title,
-        blocks: [],
-        image_data_url: null,
-        team_members: null,
-        toc_entries: null,
-        chart: {
-          chart_type: (spec.chart_type === "pie" ? "pie" : spec.chart_type === "line" ? "line" : spec.chart_type === "bar" ? "bar" : "table") as "bar" | "line" | "pie" | "table",
-          columns: table.columns,
-          rows: table.rows.map((r) => r.map((c) => (c === null ? "" : String(c)))),
-        },
+      const chart = {
+        chart_type: (["bar", "line", "pie"].includes(spec.chart_type)
+          ? spec.chart_type
+          : "table") as "bar" | "line" | "pie" | "table",
+        columns: table.columns,
+        rows: table.rows.map((r) => r.map((c) => (c === null ? "" : String(c)))),
       };
+
+      const target = placement.deck;
+      let slides = [...target.slides];
+
+      if (placement.mode === "existing_slide" && placement.slideIndex !== null) {
+        // Attach the chart to a slide that already exists, so it supports
+        // the argument there rather than interrupting it with a new page.
+        const i = placement.slideIndex;
+        slides[i] = {
+          ...slides[i],
+          chart,
+          blocks: placement.note
+            ? [...slides[i].blocks, { text: placement.note, source: "Data Studio" }]
+            : slides[i].blocks,
+        };
+      } else {
+        const newSlide = {
+          id: `chart-${Date.now()}`,
+          type: "chart" as const,
+          title: spec.title,
+          blocks: placement.note ? [{ text: placement.note, source: "Data Studio" }] : [],
+          image_data_url: null,
+          team_members: null,
+          toc_entries: null,
+          chart,
+        };
+        const at = (placement.insertAfter ?? slides.length - 1) + 1;
+        slides = [...slides.slice(0, at), newSlide, ...slides.slice(at)];
+      }
+
       await saveDeckEditorState(target.id, {
-        slides: [...target.slides.filter((s) => s.id !== slide.id), slide],
+        slides,
         theme: target.theme,
         layouts: target.layouts,
         freeform_slide_ids: target.freeform_slide_ids,
@@ -267,7 +282,7 @@ export default function DataStudio() {
           </p>
         </div>
         <div className="ds-head-actions">
-          <button className="p-btn p-btn-secondary" onClick={addToDeck} disabled={!!busy}>
+          <button className="p-btn p-btn-secondary" onClick={() => setPlacing(true)} disabled={!!busy}>
             Add to deck
           </button>
           <button className="p-btn p-btn-ghost" onClick={reset}>New import</button>
@@ -277,6 +292,14 @@ export default function DataStudio() {
       {error && <p className="p-error">{error}</p>}
       {notice && <p className="ds-notice">{notice}</p>}
       {busy && <p className="ds-busy">{busy}…</p>}
+
+      {placing && spec && (
+        <PlacementPicker
+          itemTitle={spec.title}
+          onConfirm={applyPlacement}
+          onCancel={() => setPlacing(false)}
+        />
+      )}
 
       <div className="ds-grid">
         <main className="ds-main">

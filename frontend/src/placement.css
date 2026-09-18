@@ -1,0 +1,60 @@
+.pp-overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 60; padding: 1.5rem;
+}
+.pp-modal {
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 14px; padding: 1.75rem;
+  width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto;
+}
+.pp-modal h2 { font-size: 1.25rem; margin: 0 0 1.25rem; }
+.pp-loading, .pp-empty { color: var(--text-dim); font-size: 0.88rem; }
+.pp-step {
+  font-size: 0.78rem; color: var(--text-dim); font-weight: 600;
+  margin: 1.25rem 0 0.6rem;
+}
+.pp-back {
+  background: none; border: none; color: var(--gold);
+  font-size: 0.8rem; cursor: pointer; padding: 0; text-decoration: underline;
+}
+
+.pp-decks { display: flex; flex-direction: column; gap: 0.5rem; }
+.pp-deck {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--ink); border: 1px solid var(--ink-border);
+  border-radius: 8px; padding: 0.8rem 1rem; cursor: pointer;
+  font-family: var(--font-body); color: var(--text); text-align: left;
+}
+.pp-deck:hover { border-color: var(--gold); }
+.pp-deck-name { font-size: 0.92rem; }
+.pp-deck-meta { font-size: 0.75rem; color: var(--text-dim); }
+
+.pp-modes { display: flex; flex-direction: column; gap: 0.5rem; }
+.pp-mode {
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  border: 1px solid var(--ink-border); border-radius: 8px;
+  padding: 0.75rem 0.9rem; cursor: pointer;
+}
+.pp-mode.is-active { border-color: var(--gold); background: rgba(242, 183, 5, 0.06); }
+.pp-mode span { display: flex; flex-direction: column; gap: 0.15rem; }
+.pp-mode strong { font-size: 0.88rem; color: var(--text); font-weight: 500; }
+.pp-mode em { font-size: 0.76rem; color: var(--text-dim); font-style: normal; }
+
+.pp-slides { display: flex; flex-direction: column; gap: 0.25rem; max-height: 180px; overflow-y: auto; }
+.pp-slide {
+  display: flex; align-items: center; gap: 0.7rem;
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 0.45rem 0.6rem; cursor: pointer; text-align: left;
+  font-family: var(--font-body); color: var(--text-dim); font-size: 0.84rem;
+}
+.pp-slide:hover { color: var(--text); }
+.pp-slide.is-active { border-color: var(--gold); color: var(--gold); background: rgba(242, 183, 5, 0.07); }
+.pp-slide-num { font-size: 0.72rem; width: 18px; font-variant-numeric: tabular-nums; }
+.pp-slide-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pp-note { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 1.25rem; }
+.pp-note span { font-size: 0.78rem; color: var(--text-dim); }
+.pp-note textarea { resize: vertical; font-family: var(--font-body); }
+
+.pp-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; }
