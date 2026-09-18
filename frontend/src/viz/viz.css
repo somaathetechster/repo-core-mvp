@@ -1,0 +1,99 @@
+/* Chart surface: charts live on paper, matching the deck they'll end up in. */
+.viz-surface {
+  background: #f7f4ec;
+  color: #1f1d1a;
+  border-radius: 12px;
+  padding: 1.5rem 1.5rem 1.25rem;
+}
+
+.viz-title {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: #1f1d1a;
+}
+.viz-subtitle {
+  font-size: 0.8rem;
+  color: #8a8272;
+  margin: 0 0 1.25rem;
+  line-height: 1.5;
+}
+
+/* Stat cards -------------------------------------------------------- */
+.viz-stats { display: flex; flex-direction: column; gap: 1.5rem; }
+.viz-stat { display: flex; flex-direction: column; gap: 0.2rem; }
+.viz-stat-lead { padding-bottom: 1.25rem; border-bottom: 1px solid #e0dacb; }
+.viz-stat-value {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 2.4rem;
+  line-height: 1;
+  color: #1f1d1a;
+  font-variant-numeric: tabular-nums;
+}
+.viz-stat-value-sm { font-size: 1.4rem; }
+.viz-stat-label { font-size: 0.78rem; color: #8a8272; }
+.viz-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1.25rem 1.5rem;
+}
+
+/* Donut ------------------------------------------------------------- */
+.viz-donut-wrap { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+.viz-donut-legend { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 180px; }
+.viz-legend-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  background: none; border: none; padding: 0.35rem 0.4rem;
+  border-radius: 5px; cursor: default; width: 100%; text-align: left;
+  font-family: "Inter", sans-serif; font-size: 0.82rem; color: #1f1d1a;
+}
+.viz-legend-row.is-active { background: rgba(31, 29, 26, 0.05); }
+.viz-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.viz-legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viz-legend-value { color: #8a8272; font-variant-numeric: tabular-nums; }
+
+/* Regional breakdown ------------------------------------------------ */
+.viz-regions { display: flex; flex-direction: column; gap: 1.1rem; }
+.viz-region-head { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.4rem; }
+.viz-region-code {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+  padding: 0.2rem 0.4rem; border-radius: 3px; min-width: 32px; text-align: center;
+}
+.viz-region-name { flex: 1; font-size: 0.9rem; color: #1f1d1a; }
+.viz-region-value { font-size: 0.9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.viz-region-bar { height: 6px; background: #e8e3d6; border-radius: 3px; overflow: hidden; }
+.viz-region-fill { height: 100%; border-radius: 3px; }
+.viz-region-share { font-size: 0.72rem; color: #8a8272; margin-top: 0.3rem; display: block; }
+
+/* Data table -------------------------------------------------------- */
+.viz-table-wrap { overflow-x: auto; }
+.viz-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.viz-table th {
+  text-align: left; font-weight: 600; font-size: 0.72rem;
+  color: #8a8272; padding: 0.5rem 0.75rem;
+  border-bottom: 1.5px solid #c9c2b2; white-space: nowrap;
+}
+.viz-table td {
+  padding: 0.5rem 0.75rem; border-bottom: 1px solid #eae5d9; color: #1f1d1a;
+}
+.viz-table tr:last-child td { border-bottom: none; }
+.viz-table tr:hover td { background: rgba(31, 29, 26, 0.03); }
+.viz-table .is-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.viz-table-note { font-size: 0.75rem; color: #8a8272; margin-top: 0.6rem; font-style: italic; }
+
+/* Chart footnote (warnings, caveats) --------------------------------- */
+.viz-note {
+  font-size: 0.75rem;
+  color: #8a8272;
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e8e3d6;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .viz-surface { padding: 1.1rem; }
+  .viz-stat-value { font-size: 1.9rem; }
+  .viz-donut-wrap { flex-direction: column; align-items: stretch; }
+}

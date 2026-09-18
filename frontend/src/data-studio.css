@@ -1,129 +1,103 @@
-.data-studio-loading { padding: 3rem 2rem; color: var(--text-dim); }
-.data-studio { max-width: 1100px; margin: 0 auto; padding: 3rem 2rem 5rem; }
-.data-studio-notice { color: #4ade80; font-size: 0.9rem; }
+.ds { max-width: 1240px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+.ds-head { margin-bottom: 2rem; }
+.ds-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap; }
+.ds-head-actions { display: flex; gap: 0.6rem; flex-shrink: 0; }
+.ds-notice { color: #4ade80; font-size: 0.88rem; }
+.ds-busy { color: var(--text-dim); font-size: 0.88rem; }
+.ds-empty { color: var(--text-dim); font-style: italic; }
 
-.data-studio-layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 2rem; margin: 2rem 0 3rem; align-items: start; }
-
-.data-studio-type-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
-.data-studio-type-row select { flex: 0 0 220px; }
-.data-studio-type-row input { flex: 1; }
-
-.data-studio-import { margin-bottom: 1.25rem; }
-.data-studio-import-controls { display: flex; gap: 0.6rem; align-items: flex-start; }
-.data-studio-import-format { flex: 0 0 90px; }
-.data-studio-import-controls textarea { flex: 1; resize: vertical; }
-
-.data-studio-table-wrap { margin-bottom: 1.25rem; }
-.data-studio-table { width: 100%; border-collapse: collapse; margin-bottom: 0.6rem; }
-.data-studio-table th, .data-studio-table td { padding: 0.3rem; border-bottom: 1px solid var(--ink-border); }
-.data-studio-col-input {
-  width: 100%;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.2rem;
+/* Intake ------------------------------------------------------------ */
+.ds-intake { max-width: 620px; display: flex; flex-direction: column; gap: 1rem; }
+.ds-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.4rem; padding: 3rem 2rem;
+  border: 1px dashed var(--ink-border); border-radius: 14px;
+  background: var(--ink-raised); cursor: pointer;
+  font-family: var(--font-body); transition: border-color 0.15s ease, background 0.15s ease;
 }
-.data-studio-col-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.7rem; }
-.data-studio-cell-input {
-  width: 100%;
-  background: var(--ink-raised);
-  border: 1px solid var(--ink-border);
-  border-radius: 4px;
-  color: var(--text);
-  padding: 0.4rem 0.5rem;
-  font-size: 0.85rem;
-}
-.data-studio-row-remove { background: none; border: none; color: var(--text-dim); font-size: 0.75rem; cursor: pointer; text-decoration: underline; white-space: nowrap; }
-.data-studio-row-remove:hover { color: var(--danger); }
+.ds-drop:hover:not(:disabled) { border-color: var(--gold-dim); background: rgba(242, 183, 5, 0.04); }
+.ds-drop-title { font-size: 1rem; color: var(--text); font-family: var(--font-display); }
+.ds-drop-formats { font-size: 0.8rem; color: var(--text-dim); }
+.ds-or { text-align: center; font-size: 0.8rem; color: var(--text-dim); }
+.ds-paste { resize: vertical; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.82rem; line-height: 1.5; }
 
-.data-studio-chart-type-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
-.data-studio-chart-type-row span { font-size: 0.85rem; color: var(--text-dim); margin-right: 0.3rem; }
-.data-studio-chart-btn {
-  background: var(--ink-raised);
-  border: 1px solid var(--ink-border);
-  color: var(--text-dim);
-  padding: 0.4rem 0.8rem;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  cursor: pointer;
+/* Table picker ------------------------------------------------------ */
+.ds-table-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.ds-table-option {
+  display: flex; flex-direction: column; gap: 0.35rem; text-align: left;
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 12px; padding: 1.25rem; cursor: pointer; font-family: var(--font-body);
 }
-.data-studio-chart-btn-active { border-color: var(--gold); color: var(--gold); }
+.ds-table-option:hover:not(:disabled) { border-color: var(--gold); }
+.ds-option-title { font-family: var(--font-display); font-size: 1.05rem; color: var(--text); }
+.ds-option-meta { font-size: 0.78rem; color: var(--text-dim); }
+.ds-option-cols { font-size: 0.76rem; color: var(--text-dim); opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-option-note { font-size: 0.74rem; color: var(--gold-dim); font-style: italic; }
 
-.data-studio-preview h3 { font-size: 1rem; color: var(--text-dim); margin: 0 0 0.75rem; }
-.data-studio-preview-box {
-  background: var(--paper);
-  border-radius: 12px;
-  padding: 1.25rem;
-  color: #201c10;
+/* Workspace --------------------------------------------------------- */
+.ds-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.5rem; align-items: start; }
+.ds-main { min-width: 0; display: flex; flex-direction: column; gap: 1.25rem; }
+
+.ds-chart-tabs { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.2rem; }
+.ds-chart-tabs::-webkit-scrollbar { height: 0; }
+.ds-chart-tab {
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  color: var(--text-dim); padding: 0.45rem 0.85rem; border-radius: 6px;
+  font-size: 0.8rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  font-family: var(--font-body);
 }
+.ds-chart-tab:hover { color: var(--text); }
+.ds-chart-tab.is-active { border-color: var(--gold); color: var(--gold); background: rgba(242, 183, 5, 0.08); }
 
-.data-studio-saved h2 { font-size: 1.4rem; margin-bottom: 1rem; }
-.data-studio-empty { color: var(--text-dim); }
-.data-studio-saved-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; }
-.data-studio-saved-card {
-  background: var(--ink-raised);
-  border: 1px solid var(--ink-border);
-  border-radius: 12px;
-  padding: 1.25rem;
+.ds-panel {
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 12px; padding: 1.25rem;
 }
-.data-studio-saved-card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem; gap: 0.5rem; }
-.data-studio-saved-type { font-size: 0.72rem; color: var(--gold-dim); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
-.data-studio-saved-preview { background: var(--paper); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.9rem; color: #201c10; }
-.data-studio-saved-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.data-studio-delete:hover { color: var(--danger); }
-
-@media (max-width: 900px) {
-  .data-studio-layout { grid-template-columns: 1fr; }
+.ds-panel h3 {
+  font-size: 0.82rem; color: var(--text-dim); margin: 0 0 0.9rem;
+  font-family: var(--font-body); font-weight: 600;
 }
 
+.ds-rejections p { font-size: 0.82rem; color: var(--text-dim); line-height: 1.55; margin: 0 0 0.6rem; }
+.ds-rejections strong { color: var(--text); text-transform: capitalize; }
+
+.ds-side { display: flex; flex-direction: column; gap: 1rem; position: sticky; top: 1rem; }
+
+.ds-columns { display: flex; flex-direction: column; gap: 0.85rem; }
+.ds-column { display: flex; flex-direction: column; gap: 0.2rem; }
+.ds-column-head { display: flex; align-items: center; gap: 0.5rem; }
+.ds-column-name { font-size: 0.86rem; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-role { font-size: 0.66rem; padding: 0.12rem 0.35rem; border-radius: 3px; flex-shrink: 0; }
+.ds-role-measure { background: rgba(242, 183, 5, 0.16); color: var(--gold); }
+.ds-role-temporal { background: rgba(61, 90, 128, 0.25); color: #93b4d8; }
+.ds-role-categorical { background: rgba(45, 95, 86, 0.28); color: #7fc3b4; }
+.ds-role-identifier { background: rgba(255, 255, 255, 0.07); color: var(--text-dim); }
+.ds-role-text { background: rgba(255, 255, 255, 0.07); color: var(--text-dim); }
+.ds-column-detail { font-size: 0.73rem; color: var(--text-dim); }
+.ds-column-issue { font-size: 0.72rem; color: var(--danger); line-height: 1.45; }
+
+.ds-link { background: none; border: none; color: var(--gold); font-size: 0.78rem; cursor: pointer; padding: 0.6rem 0 0; text-decoration: underline; }
+.ds-issues { margin-top: 0.9rem; padding-top: 0.75rem; border-top: 1px solid var(--ink-border); }
+.ds-issues p { font-size: 0.76rem; color: var(--text-dim); margin: 0 0 0.35rem; line-height: 1.5; }
+
+.ds-transform {
+  display: flex; flex-direction: column; gap: 0.2rem; text-align: left; width: 100%;
+  background: var(--ink); border: 1px solid var(--ink-border); border-radius: 8px;
+  padding: 0.7rem 0.85rem; margin-bottom: 0.5rem; cursor: pointer; font-family: var(--font-body);
+}
+.ds-transform:hover:not(:disabled) { border-color: var(--gold-dim); }
+.ds-transform-label { font-size: 0.83rem; color: var(--text); }
+.ds-transform-reason { font-size: 0.73rem; color: var(--text-dim); line-height: 1.45; }
+
+.ds-history { margin: 0; padding-left: 1.1rem; }
+.ds-history li { font-size: 0.76rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 0.35rem; }
+
+@media (max-width: 960px) {
+  .ds-grid { grid-template-columns: 1fr; }
+  .ds-side { position: static; }
+}
 @media (max-width: 700px) {
-  .data-studio { padding: 2rem 1.25rem; }
-  .data-studio-type-row { flex-direction: column; }
-  .data-studio-type-row select { flex: none; width: 100%; }
-  .data-studio-import-controls { flex-direction: column; }
-}
-
-/* Multi-section CSV import: picker shown when one paste holds several tables. */
-.data-studio-section-picker {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: var(--ink-raised);
-  border: 1px solid var(--gold-dim);
-  border-radius: 10px;
-}
-.data-studio-section-hint { font-size: 0.85rem; color: var(--text-dim); margin: 0 0 0.75rem; }
-.data-studio-section-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
-.data-studio-section-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  text-align: left;
-  background: var(--ink);
-  border: 1px solid var(--ink-border);
-  border-radius: 6px;
-  padding: 0.6rem 0.9rem;
-  cursor: pointer;
-  color: var(--text);
-}
-.data-studio-section-item:hover { border-color: var(--gold); }
-.data-studio-section-item span { font-size: 0.78rem; color: var(--text-dim); }
-
-/* Row of actions under the editable table. */
-.data-studio-table-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.data-studio-clear-table:hover:not(:disabled) { color: var(--danger); }
-.data-studio-clear-table:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Visual refinements to the data section. */
-.data-studio-table-wrap { overflow-x: auto; }
-.data-studio-table th { text-align: left; vertical-align: bottom; }
-.data-studio-table tbody tr:hover td { background: var(--ink-raised); }
-.data-studio-table tbody tr:last-child td { border-bottom: none; }
-.data-studio-import-controls textarea { min-height: 3rem; }
-
-@media (max-width: 700px) {
-  .data-studio-section-item { flex-direction: column; align-items: flex-start; gap: 0.25rem; }
-  .data-studio-table-actions > .p-btn { flex: 1 1 auto; }
+  .ds { padding: 2rem 1.25rem 4rem; }
+  .ds-head-row { flex-direction: column; }
+  .ds-table-options { grid-template-columns: 1fr; }
 }

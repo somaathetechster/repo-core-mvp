@@ -319,3 +319,125 @@ export async function saveCompanyProfile(profile: CompanyProfile): Promise<void>
   });
   if (!res.ok) await throwWithDetail(res, `Failed to save company profile: ${res.status}`);
 }
+
+/* ---------------------------------------------------------------- */
+/* Data Studio                                                       */
+/* ---------------------------------------------------------------- */
+
+export interface DetectedTable {
+  title: string;
+  columns: string[];
+  rows: string[][];
+  source: string;
+  row_count: number;
+  column_count: number;
+  notes: string[];
+}
+
+export interface ColumnProfileDTO {
+  name: string;
+  index: number;
+  type: string;
+  role: string;
+  null_count: number;
+  unique_count: number;
+  currency: string | null;
+  is_percentage: boolean;
+  date_granularity: string | null;
+  min: number | null;
+  max: number | null;
+  mean: number | null;
+  sample_values: string[];
+  issues: string[];
+  confidence: number;
+}
+
+export interface TableProfileDTO {
+  title: string;
+  row_count: number;
+  columns: ColumnProfileDTO[];
+  issues: string[];
+}
+
+export interface ChartSpecDTO {
+  chart_type: string;
+  title: string;
+  reason: string;
+  score: number;
+  encoding: Record<string, unknown>;
+  warnings: string[];
+}
+
+export interface ChartAdviceDTO {
+  recommendations: ChartSpecDTO[];
+  rejections: { chart_type: string; reason: string }[];
+}
+
+export interface SuggestedTransform {
+  op: string;
+  label: string;
+  reason: string;
+  params: Record<string, unknown>;
+}
+
+export interface ProfileResponse {
+  profile: TableProfileDTO;
+  charts: ChartAdviceDTO;
+  suggested_transforms: SuggestedTransform[];
+}
+
+export async function ingestText(text: string): Promise<{ tables: DetectedTable[] }> {
+  const res = await fetch(`${API_BASE}/data-studio/ingest`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Could not read that data.");
+  return res.json();
+}
+
+export async function ingestFile(file: File): Promise<{ tables: DetectedTable[]; filename: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/data-studio/ingest-file`, {
+    method: "POST",
+    headers: await authHeaders(),
+    body: form,
+  });
+  if (!res.ok) await throwWithDetail(res, "Could not read that file.");
+  return res.json();
+}
+
+export async function profileTable(
+  title: string,
+  columns: string[],
+  rows: (string | number | null)[][]
+): Promise<ProfileResponse> {
+  const res = await fetch(`${API_BASE}/data-studio/profile`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ title, columns, rows }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Could not analyse that table.");
+  return res.json();
+}
+
+export interface TransformResponse extends ProfileResponse {
+  result: { columns: string[]; rows: (string | number | null)[][]; description: string; notes: string[] };
+}
+
+export async function transformTable(
+  op: string,
+  columns: string[],
+  rows: (string | number | null)[][],
+  params: Record<string, unknown>,
+  title = "Transformed data"
+): Promise<TransformResponse> {
+  const res = await fetch(`${API_BASE}/data-studio/transform`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ op, columns, rows, params, title }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Could not apply that transform.");
+  return res.json();
+}
