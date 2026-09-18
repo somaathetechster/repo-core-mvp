@@ -1,0 +1,119 @@
+.ev { max-width: 1000px; margin: 0 auto; padding: 3rem 2rem 5rem; }
+.ev-head { margin-bottom: 2rem; }
+.ev-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+
+/* Repository list ---------------------------------------------------- */
+.ev-repos { display: flex; flex-direction: column; gap: 0.6rem; }
+.ev-repo {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 10px; padding: 1rem 1.25rem;
+}
+.ev-repo-info { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.ev-repo-name { display: flex; align-items: center; gap: 0.5rem; color: var(--text); font-weight: 500; }
+.ev-private {
+  font-size: 0.68rem; background: rgba(242, 183, 5, 0.15); color: var(--gold);
+  padding: 0.1rem 0.4rem; border-radius: 3px;
+}
+.ev-repo-desc { font-size: 0.83rem; color: var(--text-dim); line-height: 1.5; }
+
+.ev-progress { padding: 2rem 0; }
+.ev-progress p { color: var(--text); margin: 0 0 0.4rem; }
+.ev-progress-note { color: var(--text-dim); font-size: 0.85rem; }
+
+/* Report ------------------------------------------------------------- */
+.ev-report-head {
+  display: flex; align-items: center; gap: 1rem;
+  padding-bottom: 1.25rem; margin-bottom: 2rem;
+  border-bottom: 1px solid var(--ink-border);
+}
+.ev-repo-label { font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; color: var(--text-dim); }
+
+/* The headline is the one thing an investor should remember, so it gets
+   real weight rather than sitting inside the body flow. */
+.ev-headline {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  line-height: 1.35;
+  color: var(--text);
+  margin: 0 0 2.5rem;
+  padding-left: 1.25rem;
+  border-left: 3px solid var(--gold);
+}
+
+.ev-section { margin-bottom: 2.5rem; }
+.ev-section h2 {
+  font-size: 0.78rem; font-family: var(--font-body); font-weight: 600;
+  color: var(--text-dim); margin: 0 0 0.9rem;
+}
+.ev-section > p { color: var(--text); line-height: 1.65; margin: 0; }
+.ev-lead { font-size: 1.02rem; line-height: 1.6; }
+
+.ev-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+
+.ev-list { margin: 0; padding: 0; list-style: none; }
+.ev-list li {
+  position: relative; padding-left: 1.1rem; margin-bottom: 0.75rem;
+  line-height: 1.6; color: var(--text); font-size: 0.94rem;
+}
+.ev-list li::before {
+  content: ""; position: absolute; left: 0; top: 0.62em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim);
+}
+.ev-list-strong li::before { background: var(--gold); }
+.ev-list-muted li { color: var(--text-dim); }
+.ev-list-check li::before { background: #4ade80; }
+.ev-list-risk li::before { background: var(--danger); }
+
+.ev-integrations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.ev-integration {
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  border-radius: 8px; padding: 1rem;
+}
+.ev-integration-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem; }
+.ev-integration-name { font-weight: 600; color: var(--text); font-size: 0.92rem; }
+.ev-integration-count { font-size: 0.72rem; color: var(--gold); }
+.ev-integration p { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.55; }
+
+.ev-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 1rem; }
+.ev-chip {
+  font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem;
+  background: var(--ink-raised); border: 1px solid var(--ink-border);
+  color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 4px;
+}
+
+.ev-slide-preview { padding: 1.5rem; background: var(--paper); border-radius: 12px; }
+.ev-slide-preview h2 { color: #8a8272; }
+.ev-slide-text {
+  font-family: var(--font-display); font-size: 1.1rem; line-height: 1.6;
+  color: #201c10; margin: 0;
+}
+
+.ev-toggle {
+  background: none; border: none; color: var(--gold);
+  font-size: 0.85rem; cursor: pointer; padding: 0; text-decoration: underline;
+}
+.ev-evidence { margin-top: 1.5rem; }
+.ev-evidence h4 {
+  font-size: 0.75rem; color: var(--text-dim); font-weight: 600;
+  margin: 1.5rem 0 0.6rem;
+}
+.ev-stat-row { display: flex; flex-wrap: wrap; gap: 2rem; }
+.ev-stat { display: flex; flex-direction: column; }
+.ev-stat-value {
+  font-family: var(--font-display); font-size: 1.6rem; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ev-stat-label { font-size: 0.72rem; color: var(--text-dim); }
+.ev-files { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.ev-files code {
+  font-size: 0.7rem; background: var(--ink-raised); color: var(--text-dim);
+  padding: 0.18rem 0.42rem; border-radius: 3px;
+}
+
+@media (max-width: 800px) {
+  .ev-columns { grid-template-columns: 1fr; gap: 0; }
+  .ev { padding: 2rem 1.25rem 4rem; }
+  .ev-headline { font-size: 1.3rem; }
+  .ev-repo { flex-direction: column; align-items: stretch; }
+}

@@ -20,7 +20,7 @@ import {
   type AnalyzeResult,
 } from "./api";
 import SlideThumb from "./SlideThumb";
-import EditableSlide from "./EditableSlide";
+import DesignedSlide from "./DesignedSlide";
 import FreeformCanvas from "./FreeformCanvas";
 import CompanyProfileForm from "./CompanyProfileForm";
 import { defaultLayoutForSlide, type LayoutElement } from "./layoutTypes";
@@ -321,9 +321,13 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
                   onSlideChange={(updated) => handleSlideChange(current, updated)}
                 />
               ) : (
-                <EditableSlide
+                <DesignedSlide
                   slide={slide}
                   theme={theme}
+                  companyName={deckName}
+                  pageNumber={current + 1}
+                  totalPages={slides.length}
+                  editable
                   onChange={(updated) => handleSlideChange(current, updated)}
                 />
               )}
@@ -429,17 +433,10 @@ function OverviewCard({
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const fontClass = theme?.font_style ? `deck-font-${theme.font_style}` : "deck-font-serif";
-  const preview = slide.blocks[0]?.text ?? "";
-
   return (
     <div className="overview-card" onClick={onOpen}>
-      <div className={`overview-card-mini ${fontClass}`}>
-        <div className="overview-card-mini-label">{slide.title}</div>
-        {slide.type === "cover" && slide.image_data_url && (
-          <img className="overview-card-mini-logo" src={slide.image_data_url} alt="" />
-        )}
-        {preview && <p className="overview-card-mini-text">{preview}</p>}
+      <div className="overview-card-slide">
+        <DesignedSlide slide={slide} theme={theme} pageNumber={index + 1} />
       </div>
       <div className="overview-card-footer">
         <span>

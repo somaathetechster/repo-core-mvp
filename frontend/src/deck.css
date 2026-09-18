@@ -307,3 +307,14 @@
 }
 .download-menu button:hover { background: rgba(242, 183, 5, 0.1); }
 .download-menu-error { display: block; margin-top: 0.4rem; font-size: 0.78rem; }
+
+/* Overview cards now show the real composed slide, scaled down, so what
+   you see in the grid is exactly what exports. */
+.overview-card-slide {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--ink-border);
+  transition: border-color 0.15s ease;
+  pointer-events: none;
+}
+.overview-card:hover .overview-card-slide { border-color: var(--gold); }

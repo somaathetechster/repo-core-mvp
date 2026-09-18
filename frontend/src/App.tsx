@@ -1,24 +1,31 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabaseClient";
-import { startGithubConnect, listRepos, analyzeRepo, type RepoListing, type AnalyzeResult } from "./api";
+import { type AnalyzeResult } from "./api";
 import Login from "./Login";
 import MfaChallenge from "./MfaChallenge";
 import Landing from "./marketing/Landing";
-const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
 import MfaSettings from "./MfaSettings";
-const DecksHome = lazy(() => import("./DecksHome"));
 import HomeDashboard from "./HomeDashboard";
-const DataStudio = lazy(() => import("./DataStudio"));
 import "./theme.css";
 import "./dashboard.css";
 
-type LoggedOutView = "landing" | "login";
-type AalStatus = "checking" | "ok" | "needs-mfa";
+// These three pull in the heaviest dependencies in the app (recharts,
+// react-rnd, @dnd-kit, html2canvas), so they're loaded on demand instead of
+// bundled into the initial page load. Someone who only ever uses Evidence
+// and Home shouldn't have to download charting/drag-and-drop code they
+// never touch.
+const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
+const DecksHome = lazy(() => import("./DecksHome"));
+const DataStudio = lazy(() => import("./DataStudio"));
+const Evidence = lazy(() => import("./Evidence"));
 
 function TabLoading() {
   return <p style={{ padding: "2rem", color: "var(--text-dim)" }}>Loading...</p>;
 }
+
+type LoggedOutView = "landing" | "login";
+type AalStatus = "checking" | "ok" | "needs-mfa";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
@@ -120,52 +127,18 @@ type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "data";
 
 function Dashboard({ userEmail, userName }: { userEmail: string; userName: string }) {
   const [tab, setTab] = useState<DashTab>("home");
-  const [repos, setRepos] = useState<RepoListing[] | null>(null);
-  const [selected, setSelected] = useState<AnalyzeResult | null>(null);
   const [analyzedRepos, setAnalyzedRepos] = useState<AnalyzeResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
+  // Returning from the GitHub install flow lands here with ?status=success.
+  // Clear the param and open the Evidence tab, which handles loading repos
+  // itself now.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("status") === "success") {
       window.history.replaceState({}, "", window.location.pathname);
-      handleLoadRepos();
+      setTab("evidence");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function messageOf(e: unknown, fallback: string): string {
-    return e instanceof Error && e.message ? e.message : fallback;
-  }
-
-  async function handleLoadRepos() {
-    setError(null);
-    setLoading(true);
-    try {
-      setRepos(await listRepos());
-    } catch (e) {
-      setError(messageOf(e, "Couldn't load repos. Did you connect GitHub first?"));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleAnalyze(fullName: string) {
-    setError(null);
-    setLoading(true);
-    setSelected(null);
-    try {
-      const [owner, repo] = fullName.split("/");
-      const result = await analyzeRepo(owner, repo);
-      setSelected(result);
-      setAnalyzedRepos((prev) => [...prev.filter((r) => r.summary.full_name !== result.summary.full_name), result]);
-    } catch (e) {
-      setError(messageOf(e, "Analysis failed. Check the backend logs."));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div className="provisio dashboard">
@@ -232,49 +205,18 @@ function Dashboard({ userEmail, userName }: { userEmail: string; userName: strin
       )}
 
       {tab === "evidence" && (
-        <div className="dash-body">
-          <h1 className="dash-title">Connect your evidence</h1>
-          <p className="dash-subtitle">Connect a repo. See what it actually says about your company.</p>
-
-          <div className="dash-actions">
-            <button className="p-btn p-btn-primary" onClick={() => startGithubConnect()}>
-              Connect GitHub
-            </button>
-            <button className="p-btn p-btn-secondary" onClick={handleLoadRepos} disabled={loading}>
-              Load my repos
-            </button>
-          </div>
-
-          {error && <p className="p-error dash-error">{error}</p>}
-          {loading && <p className="dash-loading">Working...</p>}
-
-          {repos && (
-            <ul className="dash-repo-list">
-              {repos.map((r) => (
-                <li key={r.full_name} className="dash-repo-item">
-                  <div>
-                    <strong>{r.full_name}</strong>{" "}
-                    {r.private && <span className="dash-badge">private</span>}
-                    <p>{r.description}</p>
-                  </div>
-                  <button className="p-btn p-btn-secondary" onClick={() => handleAnalyze(r.full_name)} disabled={loading}>
-                    Analyze
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {selected && (
-            <div className="dash-result">
-              <h2>Technology slide draft</h2>
-              <p className="dash-slide-content">{selected.technology_slide_content}</p>
-
-              <h3>Underlying evidence (what the AI was given, nothing more)</h3>
-              <pre className="dash-evidence">{JSON.stringify(selected.summary, null, 2)}</pre>
-            </div>
-          )}
-        </div>
+        <Suspense fallback={<TabLoading />}>
+          <Evidence
+            onAnalyzed={(res) => {
+              // Keep analysed repos available to the deck builder, which
+              // uses them as the evidence source when generating slides.
+              setAnalyzedRepos((prev) => [
+                ...prev.filter((r) => r.summary.full_name !== res.summary.full_name),
+                res as unknown as AnalyzeResult,
+              ]);
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );
