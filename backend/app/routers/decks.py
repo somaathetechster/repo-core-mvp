@@ -149,7 +149,16 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
 
         slide_list, deck_theme = build_deck(deck.profile_snapshot or {}, body.repo_summaries)
         deck.slides = [slide_to_dict(s) for s in slide_list]
-        deck.theme = theme_to_dict(deck_theme)
+        # Regenerating rewrites the slides, but the founder's chosen template
+        # and colour scheme are design decisions about this deck, not content.
+        # Carrying them across means "regenerate" doesn't silently undo the
+        # styling work they just did.
+        previous_theme = deck.theme or {}
+        new_theme = theme_to_dict(deck_theme)
+        for key in ("template_id", "scheme_id"):
+            if previous_theme.get(key):
+                new_theme[key] = previous_theme[key]
+        deck.theme = new_theme
         deck.repo_full_names = [s.full_name for s in body.repo_summaries]
         deck.layouts = {}
         deck.freeform_slide_ids = []

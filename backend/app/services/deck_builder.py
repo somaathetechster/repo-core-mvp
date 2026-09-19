@@ -175,6 +175,12 @@ def build_deck(profile: dict, repo_summaries: list[RepoSummary]) -> tuple[list[S
             blocks=_block_if_present(profile["risks_and_mitigations"]),
         ))
 
+    # An investor deck that runs past ~15 slides stops being read. Cap it
+    # and say so, rather than silently generating 30 pages nobody opens.
+    MAX_SLIDES = 14
+    if len(slides) > MAX_SLIDES:
+        slides = slides[:MAX_SLIDES]
+
     # Table of contents, built from every slide after the cover, then
     # inserted right after it. Built last since it needs the final list.
     if len(slides) > 1:

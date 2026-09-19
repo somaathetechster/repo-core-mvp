@@ -32,12 +32,22 @@ import fnmatch
 import httpx
 from dataclasses import dataclass, field
 
+from app.services.source_distiller import budget_files
+
 GITHUB_API = "https://api.github.com"
 
 # Hard caps so a huge monorepo can't blow up latency or token cost.
+#
+# MAX_TOTAL_CONTENT_BYTES is the budget for DISTILLED source that reaches
+# the model, not raw file bytes. Roughly 4 characters per token, so 48,000
+# characters is about 12k tokens, leaving comfortable room under a 30k
+# tokens-per-minute account limit once the prompt and response are counted.
+# Raising this without checking the deployment's rate limit is how the
+# analysis endpoint starts failing with 429s.
 MAX_FILES_TO_READ = 40
 MAX_FILE_BYTES = 60_000
-MAX_TOTAL_CONTENT_BYTES = 400_000
+MAX_RAW_FETCH_BYTES = 500_000
+MAX_TOTAL_CONTENT_BYTES = 48_000
 
 # Directories that are never architecturally interesting.
 SKIP_DIR_SEGMENTS = {
@@ -405,7 +415,7 @@ async def analyze_repo_deeply(token: str, full_name: str) -> DeepRepoAnalysis:
         )
         for r in results:
             if isinstance(r, SourceFile):
-                if total_bytes + len(r.content) > MAX_TOTAL_CONTENT_BYTES:
+                if total_bytes + len(r.content) > MAX_RAW_FETCH_BYTES:
                     continue
                 total_bytes += len(r.content)
                 source_files.append(r)
@@ -443,10 +453,13 @@ async def analyze_repo_deeply(token: str, full_name: str) -> DeepRepoAnalysis:
         detected_integrations=_detect_integrations(source_files),
         maturity_signals=_detect_maturity(all_paths),
         dependencies_by_manifest=deps,
-        source_excerpts=[
-            {"path": f.path, "category": f.category, "content": f.content[:6000]}
-            for f in source_files
-        ],
+        # Distilled, not truncated: each file is reduced to its structural
+        # skeleton so the model sees architecture across many files rather
+        # than the opening lines of a few.
+        source_excerpts=budget_files(
+            [(f.path, f.category, f.content) for f in source_files],
+            MAX_TOTAL_CONTENT_BYTES,
+        ),
         api_endpoint_count=_count_api_endpoints(source_files),
         data_model_names=_extract_model_names(source_files),
     )

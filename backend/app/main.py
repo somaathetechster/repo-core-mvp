@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.db import init_models
-from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio
+from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import
 
 app = FastAPI(title="repo-core API")
 
@@ -42,6 +42,7 @@ app.include_router(decks.router)
 app.include_router(data_records.router)
 app.include_router(export.router)
 app.include_router(data_studio.router)
+app.include_router(deck_import.router)
 
 
 @app.on_event("startup")

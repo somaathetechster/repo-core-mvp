@@ -13,6 +13,9 @@ from app.core.deps import get_current_user_id
 from app.core.db import AsyncSessionLocal
 from app.models.deck import DeckModel
 from app.services.exporters import build_pptx, build_pdf
+from app.services.element_export import (
+    build_pptx_from_elements, build_pdf_from_elements, deck_has_elements,
+)
 
 router = APIRouter(prefix="/decks", tags=["decks"])
 
@@ -38,12 +41,25 @@ async def export_deck(
 
         safe_name = "".join(c for c in deck.name if c.isalnum() or c in " -_").strip() or "deck"
 
+        # Decks that have been through the element editor export from their
+        # element frames, so hand-positioned layouts survive. Decks not yet
+        # opened since the migration still export via the legacy path.
+        use_elements = deck_has_elements(deck.slides)
+
         if body.format == "pptx":
-            content = build_pptx(deck.name, deck.slides, deck.theme, body.chart_images)
+            content = (
+                build_pptx_from_elements(deck.name, deck.slides, deck.theme, body.chart_images)
+                if use_elements
+                else build_pptx(deck.name, deck.slides, deck.theme, body.chart_images)
+            )
             media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
             filename = f"{safe_name}.pptx"
         else:
-            content = build_pdf(deck.name, deck.slides, deck.theme, body.chart_images)
+            content = (
+                build_pdf_from_elements(deck.name, deck.slides, deck.theme, body.chart_images)
+                if use_elements
+                else build_pdf(deck.name, deck.slides, deck.theme, body.chart_images)
+            )
             media_type = "application/pdf"
             filename = f"{safe_name}.pdf"
 
