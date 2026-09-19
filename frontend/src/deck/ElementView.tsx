@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { SlideElement, ElementStyle } from "./elements";
 import type { DeckTheme } from "./theme";
+import { treatmentFilter, objectPosition, type ImageTreatment } from "./images";
 
 /**
  * Renders a single element.
@@ -135,17 +136,33 @@ export default function ElementView({
           </div>
         );
       }
-      return (
+      // Crop is presentation-only: focal point and zoom are applied here
+      // rather than baked into the data, so they stay adjustable.
+      const crop = { focusX: s.focusX ?? 0.5, focusY: s.focusY ?? 0.5, zoom: s.zoom ?? 1 };
+      const filter = s.filter ?? treatmentFilter(s.treatment as ImageTreatment | undefined);
+      const zoomed = crop.zoom !== 1;
+      const img = (
         <img
           src={element.src}
           alt=""
           style={{
-            ...css,
+            width: "100%",
+            height: "100%",
             objectFit: s.objectFit ?? "cover",
-            filter: s.filter,
-            borderRadius: s.borderRadius ?? 0,
+            objectPosition: objectPosition(crop),
+            filter,
+            transform: zoomed ? `scale(${crop.zoom})` : undefined,
+            transformOrigin: `${crop.focusX * 100}% ${crop.focusY * 100}%`,
+            display: "block",
           }}
         />
+      );
+      // Zoom needs a clipping wrapper, otherwise the scaled image bleeds
+      // past its frame and over neighbouring elements.
+      return (
+        <div style={{ ...css, overflow: "hidden", borderRadius: s.borderRadius ?? 0 }}>
+          {img}
+        </div>
       );
     }
 

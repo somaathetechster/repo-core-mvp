@@ -73,6 +73,12 @@ export interface ElementStyle {
   /** Image-specific */
   objectFit?: "cover" | "contain";
   filter?: string;
+  /** Focal point and zoom, so cropping keeps the subject in frame rather
+   *  than defaulting to the centre. */
+  focusX?: number;
+  focusY?: number;
+  zoom?: number;
+  treatment?: string;
   /** Shape-specific */
   shape?: "rect" | "circle" | "line";
 }

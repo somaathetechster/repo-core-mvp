@@ -10,6 +10,8 @@ import {
   type ElementSlide, type SlideElement,
 } from "./deck/elements";
 import { COMPOSERS } from "./deck/composers";
+import ImageLibrary from "./ImageLibrary";
+import { DEFAULT_CROP, type BrandImage } from "./deck/images";
 import "./deck-studio.css";
 
 const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; accent: string }[] = [
@@ -23,7 +25,7 @@ const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; ac
   { id: "signal", name: "Signal", ink: "#0d0d0d", paper: "#fafafa", accent: "#d64933" },
 ];
 
-type Panel = "template" | "theme" | "library" | "element";
+type Panel = "template" | "theme" | "library" | "images" | "element";
 
 export interface DeckStudioProps {
   slides: ElementSlide[];
@@ -31,6 +33,8 @@ export interface DeckStudioProps {
   themeSettings: ThemeSettings;
   templateId: string;
   industry?: string | null;
+  images?: BrandImage[];
+  onImagesChange?: (images: BrandImage[]) => void;
   onSlidesChange: (slides: ElementSlide[], label?: string) => void;
   onThemeChange: (settings: ThemeSettings) => void;
   onTemplateChange: (templateId: string) => void;
@@ -40,6 +44,7 @@ export interface DeckStudioProps {
 
 export default function DeckStudio({
   slides, current, themeSettings, templateId, industry,
+  images = [], onImagesChange,
   onSlidesChange, onThemeChange, onTemplateChange, onCurrentChange,
   renderChart,
 }: DeckStudioProps) {
@@ -70,6 +75,33 @@ export default function DeckStudio({
     if (els.length === 1) setSelectedId(els[0].id);
   }
 
+  /**
+   * Places an image, sized from its own aspect ratio rather than dropped
+   * into a fixed box. A 3:1 banner and a 1:1 headshot forced into the same
+   * frame is a large part of why auto-placed imagery looks wrong.
+   */
+  function insertImage(img: BrandImage, at?: { x: number; y: number }) {
+    const ratio = img.width && img.height ? img.width / img.height : 1.5;
+    const targetW = Math.min(560, ratio >= 1 ? 560 : 360);
+    const targetH = Math.round(targetW / ratio);
+    const x = at?.x ?? Math.round((CANVAS_W - targetW) / 2);
+    const y = at?.y ?? Math.round((CANVAS_H - targetH) / 2);
+
+    const el = makeElement(
+      "image",
+      { x, y, w: targetW, h: Math.min(targetH, 560), z: 25 },
+      {
+        objectFit: "cover",
+        focusX: img.crop?.focusX ?? DEFAULT_CROP.focusX,
+        focusY: img.crop?.focusY ?? DEFAULT_CROP.focusY,
+        zoom: img.crop?.zoom ?? DEFAULT_CROP.zoom,
+        treatment: img.treatment ?? "none",
+      },
+      { src: img.data_url },
+    );
+    addElements([el]);
+  }
+
   function patchSelected(patch: Partial<SlideElement>) {
     if (!selected) return;
     updateSlide({
@@ -87,7 +119,30 @@ export default function DeckStudio({
   return (
     <div className="dst">
       <div className="dst-stage">
-        <div className="dst-canvas-hold">
+        <div
+          className="dst-canvas-hold"
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("application/x-provisio-image")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(e) => {
+            const id = e.dataTransfer.getData("application/x-provisio-image");
+            if (!id) return;
+            e.preventDefault();
+            const img = images.find((i) => i.id === id);
+            if (!img) return;
+            // Convert the drop point from screen space into canvas space so
+            // the image lands where it was released, not at a default spot.
+            const rect = e.currentTarget.getBoundingClientRect();
+            const scale = rect.width / CANVAS_W;
+            insertImage(img, {
+              x: Math.round((e.clientX - rect.left) / scale) - 120,
+              y: Math.round((e.clientY - rect.top) / scale) - 80,
+            });
+          }}
+        >
           <SlideCanvas
             slide={slide}
             theme={theme}
@@ -115,7 +170,7 @@ export default function DeckStudio({
 
       <aside className="dst-panel">
         <nav className="dst-tabs">
-          {(["template", "theme", "library", "element"] as Panel[]).map((p) => (
+          {(["template", "theme", "library", "images", "element"] as Panel[]).map((p) => (
             <button
               key={p}
               className={`dst-tab ${panel === p ? "is-active" : ""}`}
@@ -253,6 +308,20 @@ export default function DeckStudio({
           </section>
         )}
 
+        {panel === "images" && (
+          <section className="dst-section">
+            <p className="dst-hint">
+              Drag an image onto the slide to place it exactly, or click to drop it in the middle.
+              Adjust sets the focal point so cropping keeps the subject in frame.
+            </p>
+            <ImageLibrary
+              images={images}
+              onChange={(next) => onImagesChange?.(next)}
+              onInsert={(img) => insertImage(img)}
+            />
+          </section>
+        )}
+
         {panel === "element" && selected && (
           <section className="dst-section">
             <h4>{selected.type}</h4>
@@ -338,6 +407,58 @@ export default function DeckStudio({
                 </label>
               ))}
             </div>
+
+            {(selected.type === "image" || selected.type === "portrait" || selected.type === "logo") && (
+              <>
+                <label className="dst-field">
+                  <span>Focal point X</span>
+                  <input
+                    type="range" min={0} max={1} step={0.02}
+                    value={selected.style.focusX ?? 0.5}
+                    onChange={(e) => patchSelected({ style: { ...selected.style, focusX: parseFloat(e.target.value) } })}
+                  />
+                </label>
+                <label className="dst-field">
+                  <span>Focal point Y</span>
+                  <input
+                    type="range" min={0} max={1} step={0.02}
+                    value={selected.style.focusY ?? 0.5}
+                    onChange={(e) => patchSelected({ style: { ...selected.style, focusY: parseFloat(e.target.value) } })}
+                  />
+                </label>
+                <label className="dst-field">
+                  <span>Zoom</span>
+                  <input
+                    type="range" min={1} max={2.5} step={0.05}
+                    value={selected.style.zoom ?? 1}
+                    onChange={(e) => patchSelected({ style: { ...selected.style, zoom: parseFloat(e.target.value) } })}
+                  />
+                </label>
+                <label className="dst-field">
+                  <span>Treatment</span>
+                  <select
+                    className="p-input"
+                    value={selected.style.treatment ?? "none"}
+                    onChange={(e) => patchSelected({ style: { ...selected.style, treatment: e.target.value } })}
+                  >
+                    {["none", "grayscale", "duotone", "soft", "high-contrast", "muted"].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="dst-field">
+                  <span>Fit</span>
+                  <select
+                    className="p-input"
+                    value={selected.style.objectFit ?? "cover"}
+                    onChange={(e) => patchSelected({ style: { ...selected.style, objectFit: e.target.value as "cover" | "contain" } })}
+                  >
+                    <option value="cover">Fill the frame (crops)</option>
+                    <option value="contain">Fit inside (no crop)</option>
+                  </select>
+                </label>
+              </>
+            )}
 
             <div className="dst-btn-row">
               <button onClick={() => patchSelected({ frame: { ...selected.frame, z: (selected.frame.z ?? 10) + 5 } })}>

@@ -69,6 +69,76 @@ def _images_by_tag(profile: dict) -> dict[str, list[str]]:
     return by_tag
 
 
+def build_deck_from_narrative(
+    profile: dict,
+    narrative,
+    repo_summaries: list[RepoSummary],
+) -> tuple[list[Slide], DeckTheme, list[str]]:
+    """
+    Builds a deck from written narrative copy rather than from raw profile
+    fields.
+
+    The older path put the founder's own paragraphs on slides more or less
+    unchanged, which is why decks read like filled-in forms. This takes
+    rewritten copy, keeps the source attributions so every claim stays
+    traceable, and surfaces the narrative engine's warnings to the caller
+    rather than hiding them.
+    """
+    images_by_tag = _images_by_tag(profile)
+    theme = DeckTheme(
+        primary_color=profile.get("brand_primary_color") or None,
+        secondary_color=profile.get("brand_secondary_color") or None,
+        font_style=profile.get("brand_font_style") or "serif",
+    )
+
+    company = (profile.get("company_name") or "Untitled").strip()
+    slides: list[Slide] = []
+
+    cover_image = (images_by_tag.get("cover") or [None])[0] or (profile.get("logo_data_url") or None)
+    slides.append(Slide(
+        id="cover", type="cover", title=company,
+        blocks=[SlideBlock(text=(profile.get("one_liner") or "").strip(), source="")]
+              if profile.get("one_liner") else [],
+        image_data_url=cover_image,
+    ))
+
+    # Images are matched to slides by tag, so a product screenshot lands on
+    # the solution slide rather than sitting unused in the library.
+    tag_for_kind = {
+        "solution": "product", "product": "product", "technology": "diagram",
+        "problem": "customer", "traction": "press", "market": "background",
+    }
+
+    for item in narrative.slides:
+        kind = item.kind
+        blocks = [SlideBlock(text=item.lead, source=", ".join(item.sources) or "Your profile")]
+        blocks += [SlideBlock(text=p, source="") for p in item.points]
+        tag = tag_for_kind.get(kind)
+        image = (images_by_tag.get(tag) or [None])[0] if tag else None
+        slides.append(Slide(
+            id=kind, type="text", title=item.title, blocks=blocks, image_data_url=image,
+        ))
+
+    team = profile.get("team_members") or []
+    if team:
+        slides.append(Slide(
+            id="team", type="team", title="Team", blocks=[],
+            team_members=team,
+        ))
+
+    MAX_SLIDES = 14
+    if len(slides) > MAX_SLIDES:
+        slides = slides[:MAX_SLIDES]
+
+    toc = Slide(
+        id="toc", type="toc", title="Contents", blocks=[],
+        toc_entries=[{"title": s.title} for s in slides[1:]],
+    )
+    slides.insert(1, toc)
+
+    return slides, theme, list(narrative.warnings)
+
+
 def build_deck(profile: dict, repo_summaries: list[RepoSummary]) -> tuple[list[Slide], DeckTheme]:
     slides: list[Slide] = []
     images_by_tag = _images_by_tag(profile)
