@@ -477,3 +477,96 @@ export async function importPitchDeck(file: File): Promise<DeckImportResult> {
   if (!res.ok) await throwWithDetail(res, "Could not import that deck.");
   return res.json();
 }
+
+/* ---------------------------------------------------------------- */
+/* Billing                                                           */
+/* ---------------------------------------------------------------- */
+
+export interface PlanDTO {
+  id: string;
+  name: string;
+  description: string;
+  price_usd: number;
+  interval: string | null;
+  deck_exports: number | null;
+  features: string[];
+}
+
+export interface EntitlementDTO {
+  plan: PlanDTO;
+  can_export: boolean;
+  reason: string;
+  is_paid: boolean;
+  exports_remaining: number | null;
+  period_end: string | null;
+  subscription_id: string | null;
+}
+
+/** Thrown when the backend returns 402, carrying the plans to offer. */
+export class PaymentRequiredError extends Error {
+  plans: PlanDTO[];
+  constructor(message: string, plans: PlanDTO[]) {
+    super(message);
+    this.name = "PaymentRequiredError";
+    this.plans = plans;
+  }
+}
+
+export async function getMyBilling(): Promise<{
+  entitlement: EntitlementDTO;
+  exports_used: number;
+  history: Record<string, unknown>[];
+}> {
+  const res = await fetch(`${API_BASE}/billing/me`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load your plan.");
+  return res.json();
+}
+
+export async function listPlans(): Promise<{ plans: PlanDTO[] }> {
+  const res = await fetch(`${API_BASE}/billing/plans`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load plans.");
+  return res.json();
+}
+
+export interface AdminUser {
+  user_id: string;
+  email: string | null;
+  display_name: string | null;
+  is_admin: boolean;
+  plan: string;
+  plan_name: string;
+  can_export: boolean;
+  period_end: string | null;
+  deck_count: number;
+  export_count: number;
+  joined: string | null;
+}
+
+export async function adminListUsers(): Promise<{
+  users: AdminUser[];
+  totals: { users: number; paying: number; decks: number; exports: number };
+}> {
+  const res = await fetch(`${API_BASE}/admin/users`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load users.");
+  return res.json();
+}
+
+export async function adminGrantPlan(target_user_id: string, plan_id: string, note: string) {
+  const res = await fetch(`${API_BASE}/admin/grant`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ target_user_id, plan_id, note }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't grant that plan.");
+  return res.json();
+}
+
+export async function adminRevoke(subscription_id: string, reason: string) {
+  const res = await fetch(`${API_BASE}/admin/revoke`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ subscription_id, reason }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't revoke.");
+  return res.json();
+}

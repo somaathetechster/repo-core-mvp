@@ -13,7 +13,8 @@ from app.core.db import AsyncSessionLocal
 from app.models.deck import DeckModel
 from app.models.company_profile import CompanyProfileModel
 from app.routers.company_profile import CompanyProfileIn
-from app.services.deck_builder import build_deck, slide_to_dict, theme_to_dict
+from app.services.deck_builder import build_deck, build_deck_from_narrative, slide_to_dict, theme_to_dict
+from app.services.narrative_engine import generate_narrative
 from app.services.github_extract import RepoSummary
 
 router = APIRouter(prefix="/decks", tags=["decks"])
@@ -74,7 +75,28 @@ async def list_decks(user_id: str = Depends(get_current_user_id)):
 async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_current_user_id)):
     async with AsyncSessionLocal() as session:
         profile = await _shared_profile_dict(session, user_id) if body.use_shared_profile else {}
-        slide_list, deck_theme = build_deck(profile, body.repo_summaries)
+
+        # The narrative engine rewrites the founder's input into deck copy
+        # rather than passing paragraphs through. If it fails (rate limit,
+        # unparseable output), fall back to the direct builder so a deck is
+        # still produced rather than the whole request erroring.
+        narrative_warnings: list[str] = []
+        diligence = None
+        for summary in body.repo_summaries:
+            if isinstance(summary, dict) and summary.get("diligence"):
+                diligence = summary["diligence"]
+                break
+        try:
+            narrative = generate_narrative(profile, diligence)
+            slide_list, deck_theme, narrative_warnings = build_deck_from_narrative(
+                profile, narrative, body.repo_summaries
+            )
+        except Exception as e:
+            slide_list, deck_theme = build_deck(profile, body.repo_summaries)
+            narrative_warnings = [
+                f"Slides were written directly from your profile because the narrative "
+                f"step didn't complete: {e}"
+            ]
 
         deck = DeckModel(
             user_id=user_id,
@@ -89,7 +111,10 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
         session.add(deck)
         await session.commit()
         await session.refresh(deck)
-        return _deck_full(deck)
+        # Warnings ride along on the create response: a founder needs to know
+        # which sections came out empty and whether any figure couldn't be
+        # traced to something they wrote.
+        return {**_deck_full(deck), "warnings": narrative_warnings}
 
 
 @router.get("/{deck_id}")

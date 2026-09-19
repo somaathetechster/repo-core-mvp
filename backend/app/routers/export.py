@@ -15,7 +15,10 @@ from app.models.deck import DeckModel
 from app.services.exporters import build_pptx, build_pdf
 from app.services.element_export import (
     build_pptx_from_elements, build_pdf_from_elements, deck_has_elements,
+    PAIRING_FAMILIES,
 )
+from app.services.font_embed import embed_fonts_in_pptx
+from app.routers.billing import require_export_entitlement, record_export
 
 router = APIRouter(prefix="/decks", tags=["decks"])
 
@@ -39,6 +42,9 @@ async def export_deck(
         if not deck or deck.user_id != user_id:
             raise HTTPException(status_code=404, detail="Deck not found.")
 
+        # The gate. Raises 402 with the plan list if they can't export yet.
+        entitlement = await require_export_entitlement(session, user_id, deck_id)
+
         safe_name = "".join(c for c in deck.name if c.isalnum() or c in " -_").strip() or "deck"
 
         # Decks that have been through the element editor export from their
@@ -52,6 +58,17 @@ async def export_deck(
                 if use_elements
                 else build_pptx(deck.name, deck.slides, deck.theme, body.chart_images)
             )
+            # Embed the deck's typefaces so it looks the same on a machine
+            # that has never had them installed. A licence-restricted or
+            # unreachable font is skipped rather than failing the export.
+            pairing = (deck.theme or {}).get("font_pairing") or "fraunces-inter"
+            families = sorted(set(
+                PAIRING_FAMILIES.get(pairing, PAIRING_FAMILIES["fraunces-inter"]).values()
+            ))
+            try:
+                content, _unembeddable = embed_fonts_in_pptx(content, families)
+            except Exception:
+                pass  # Export without embedded fonts beats no export.
             media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
             filename = f"{safe_name}.pptx"
         else:
@@ -62,6 +79,10 @@ async def export_deck(
             )
             media_type = "application/pdf"
             filename = f"{safe_name}.pdf"
+
+        # Recorded only after the file exists, so a failed export never
+        # burns a one-time purchase.
+        await record_export(session, user_id, deck_id, entitlement)
 
         return Response(
             content=content,

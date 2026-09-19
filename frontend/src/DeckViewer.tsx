@@ -431,6 +431,17 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
         },
         body: JSON.stringify({ format, chart_images: chartImages }),
       });
+      if (res.status === 402) {
+        // Payment required: hand the plans back so the caller can show the
+        // paywall rather than a generic failure message.
+        const body = await res.json().catch(() => ({}));
+        const detail = body?.detail ?? {};
+        const { PaymentRequiredError } = await import("./api");
+        throw new PaymentRequiredError(
+          detail.message ?? "Exporting requires a plan.",
+          detail.plans ?? [],
+        );
+      }
       if (!res.ok) throw new Error(`Export failed: ${res.status}`);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);

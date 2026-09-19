@@ -3,7 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.db import init_models
-from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import
+# Imported for the side effect of registering the tables on Base.metadata,
+# so create_all knows about them. Without this the billing tables are never
+# created and every entitlement check fails at runtime.
+from app.models import billing as _billing_models  # noqa: F401
+from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import, billing
 
 app = FastAPI(title="repo-core API")
 
@@ -43,6 +47,8 @@ app.include_router(data_records.router)
 app.include_router(export.router)
 app.include_router(data_studio.router)
 app.include_router(deck_import.router)
+app.include_router(billing.router)
+app.include_router(billing.admin)
 
 
 @app.on_event("startup")

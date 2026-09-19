@@ -63,6 +63,18 @@ def _mix(a: str, b: str, amount: float) -> str:
     )
 
 
+# Theme font-pairing id -> the family used for each role, and the fallback
+# for a machine where embedding failed.
+PAIRING_FAMILIES: dict[str, dict[str, str]] = {
+    "fraunces-inter": {"display": "Fraunces", "body": "Inter", "label": "Inter"},
+    "archivo-inter": {"display": "Archivo", "body": "Inter", "label": "JetBrains Mono"},
+    "source-serif": {"display": "Source Serif 4", "body": "Source Serif 4", "label": "Inter"},
+    "inter-only": {"display": "Inter", "body": "Inter", "label": "Inter"},
+    "playfair-inter": {"display": "Playfair Display", "body": "Inter", "label": "Inter"},
+    "space-inter": {"display": "Space Grotesk", "body": "Inter", "label": "Space Grotesk"},
+}
+
+
 class Theme:
     """Resolves the element model's named colour roles to actual values."""
 
@@ -74,6 +86,15 @@ class Theme:
         self.rule = _mix(self.ink, self.paper, 0.85)
         self.inverse = self.paper
         self.accent_soft = _mix(self.accent, self.paper, 0.88)
+        self.pairing = raw.get("font_pairing") or "fraunces-inter"
+        self._families = PAIRING_FAMILIES.get(self.pairing, PAIRING_FAMILIES["fraunces-inter"])
+
+    def font_name(self, role: str) -> str:
+        return self._families.get(role, self._families["body"])
+
+    @property
+    def families(self) -> list[str]:
+        return sorted(set(self._families.values()))
 
     def color(self, token: str | None, fallback: str = "ink") -> str:
         key = token or fallback
@@ -210,12 +231,11 @@ def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str
         color = theme.color(style.get("color"), "ink")
         if color:
             font.color.rgb = RGBColor.from_string(color[1:].upper())
-        # Map the element model's font roles onto families PowerPoint can
-        # resolve on a normal machine. The exact webfont won't be installed
-        # on the reviewer's computer, so a close, always-present fallback
-        # preserves the serif/sans distinction the design depends on.
-        family = style.get("fontFamily", "body")
-        font.name = {"display": "Georgia", "label": "Consolas"}.get(family, "Calibri")
+        # Use the deck's real families. They are embedded into the package
+        # after rendering, so the reviewer sees the actual typeface rather
+        # than a substitute.
+        role = style.get("fontFamily", "body")
+        font.name = theme.font_name(role)
         return
 
 
