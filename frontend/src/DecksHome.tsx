@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listDecks, createDeck, deleteDeck, type DeckSummary, type AnalyzeResult } from "./api";
-import DeckViewer, { DownloadMenu } from "./DeckViewer";
+import DeckEditor from "./DeckEditor";
+import { DownloadMenu } from "./DeckViewer";
 import "./theme.css";
 import "./decks-home.css";
 
@@ -26,6 +27,18 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
     loadDecks();
   }, []);
 
+  // The Data Studio dispatches this after stashing a chart, so the deck
+  // opens straight to the placement prompt instead of the founder having to
+  // navigate back and find it.
+  useEffect(() => {
+    function onOpenDeck(e: Event) {
+      const id = (e as CustomEvent).detail?.deckId;
+      if (id) setOpenDeckId(id);
+    }
+    window.addEventListener("provisio:open-deck", onOpenDeck);
+    return () => window.removeEventListener("provisio:open-deck", onOpenDeck);
+  }, []);
+
   async function handleDelete(id: string) {
     if (!window.confirm("Delete this deck? This can't be undone.")) return;
     try {
@@ -38,7 +51,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
 
   if (openDeckId) {
     return (
-      <DeckViewer
+      <DeckEditor
         deckId={openDeckId}
         analyzedRepos={analyzedRepos}
         onBack={() => {

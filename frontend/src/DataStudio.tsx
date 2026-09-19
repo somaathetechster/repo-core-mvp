@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import {
   ingestText, ingestFile, profileTable, transformTable,
-  saveDeckEditorState,
   type DetectedTable, type ProfileResponse, type ChartSpecDTO,
   type SuggestedTransform,
 } from "./api";
 import ChartRenderer, { type ColumnMeta } from "./viz/ChartRenderer";
 import PlacementPicker, { type Placement } from "./PlacementPicker";
+import { stashChartForDeck } from "./DeckEditor";
 import "./theme.css";
 import "./data-studio.css";
 
@@ -110,58 +110,26 @@ export default function DataStudio() {
     if (!table || !analysis) return;
     const spec = analysis.charts.recommendations[activeChart];
     setPlacing(false);
-    setBusy("Adding to deck");
     setError(null);
-    try {
-      const chart = {
-        chart_type: (["bar", "line", "pie"].includes(spec.chart_type)
-          ? spec.chart_type
-          : "table") as "bar" | "line" | "pie" | "table",
-        columns: table.columns,
-        rows: table.rows.map((r) => r.map((c) => (c === null ? "" : String(c)))),
-      };
 
-      const target = placement.deck;
-      let slides = [...target.slides];
+    const chart = {
+      chart_type: (["bar", "line", "pie"].includes(spec.chart_type)
+        ? spec.chart_type
+        : "table") as "bar" | "line" | "pie" | "table",
+      columns: table.columns,
+      rows: table.rows.map((r) => r.map((c) => (c === null ? "" : String(c)))),
+    };
 
-      if (placement.mode === "existing_slide" && placement.slideIndex !== null) {
-        // Attach the chart to a slide that already exists, so it supports
-        // the argument there rather than interrupting it with a new page.
-        const i = placement.slideIndex;
-        slides[i] = {
-          ...slides[i],
-          chart,
-          blocks: placement.note
-            ? [...slides[i].blocks, { text: placement.note, source: "Data Studio" }]
-            : slides[i].blocks,
-        };
-      } else {
-        const newSlide = {
-          id: `chart-${Date.now()}`,
-          type: "chart" as const,
-          title: spec.title,
-          blocks: placement.note ? [{ text: placement.note, source: "Data Studio" }] : [],
-          image_data_url: null,
-          team_members: null,
-          toc_entries: null,
-          chart,
-        };
-        const at = (placement.insertAfter ?? slides.length - 1) + 1;
-        slides = [...slides.slice(0, at), newSlide, ...slides.slice(at)];
-      }
-
-      await saveDeckEditorState(target.id, {
-        slides,
-        theme: target.theme,
-        layouts: target.layouts,
-        freeform_slide_ids: target.freeform_slide_ids,
-      });
-      flash(`Added to "${target.name}".`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not add this to your deck.");
-    } finally {
-      setBusy(null);
-    }
+    // Hand the chart to the deck editor rather than writing it straight
+    // into the deck. Position is a design decision, and the editor is where
+    // the founder can actually see the slide and drag it into place.
+    stashChartForDeck({ chart, title: spec.title, note: placement.note });
+    flash(`Ready to place in "${placement.deck.name}". Opening the deck…`);
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("provisio:open-deck", { detail: { deckId: placement.deck.id } }),
+      );
+    }, 500);
   }
 
   function reset() {

@@ -1,0 +1,151 @@
+/**
+ * Migration between the legacy document-shaped slide and the element model.
+ *
+ * Existing decks are stored as {title, blocks[], image, chart}. They have to
+ * keep opening, so this converts them into element slides on load by running
+ * them through the active template's composer, and converts back on save so
+ * the backend, the exporter, and the table of contents keep working while
+ * the rest of the system catches up.
+ *
+ * The round trip is deliberately lossy in one direction only: hand-positioned
+ * element slides carry their full layout in `elements`, and the legacy fields
+ * are kept alongside as a readable summary rather than the source of truth.
+ */
+import { compose, type SlideContentInput } from "./composers";
+import {
+  inferKind, elementId,
+  type ElementSlide, type LegacySlide, type SlideElement, type SlideKind,
+} from "./elements";
+
+export interface StoredSlide extends LegacySlide {
+  /** Present once a slide has been through the element system. */
+  elements?: SlideElement[];
+  kind?: SlideKind;
+  background?: "paper" | "ink" | "accent" | null;
+  customized?: boolean;
+}
+
+/**
+ * Turns a stored slide into an element slide.
+ *
+ * If the slide already carries elements and the user has hand-edited it, its
+ * layout is preserved exactly. Otherwise it is recomposed with the current
+ * template, which is what makes template switching actually restructure a
+ * deck rather than only restyling it.
+ */
+export function toElementSlide(
+  stored: StoredSlide,
+  templateId: string,
+  context: {
+    logo?: string | null;
+    companyName?: string;
+    pageNumber?: number;
+    totalPages?: number;
+  } = {},
+): ElementSlide {
+  if (stored.customized && stored.elements && stored.elements.length > 0) {
+    return {
+      id: stored.id,
+      kind: stored.kind ?? inferKind(stored),
+      title: stored.title,
+      elements: stored.elements,
+      background: stored.background ?? "paper",
+      customized: true,
+    };
+  }
+
+  const content: SlideContentInput = {
+    kind: stored.kind ?? inferKind(stored),
+    title: stored.title,
+    paragraphs: (stored.blocks ?? []).map((b) => ({ text: b.text, source: b.source })),
+    image: stored.image_data_url,
+    chart: stored.chart ?? null,
+    team: stored.team_members,
+    contents: stored.toc_entries,
+    logo: context.logo ?? null,
+    companyName: context.companyName,
+    pageNumber: context.pageNumber,
+    totalPages: context.totalPages,
+  };
+
+  const composed = compose(templateId, content);
+  // Keep the original id so slide ordering, selection, and deck references
+  // survive a recompose.
+  return { ...composed, id: stored.id };
+}
+
+export function toElementSlides(
+  stored: StoredSlide[],
+  templateId: string,
+  context: { logo?: string | null; companyName?: string } = {},
+): ElementSlide[] {
+  return stored.map((s, i) =>
+    toElementSlide(s, templateId, {
+      ...context,
+      pageNumber: i + 1,
+      totalPages: stored.length,
+    }),
+  );
+}
+
+/**
+ * Converts back for storage. The legacy fields are regenerated from the
+ * elements so anything still reading them (export, the contents page,
+ * regeneration) sees current content.
+ */
+export function toStoredSlide(slide: ElementSlide, previous?: StoredSlide): StoredSlide {
+  const textElements = slide.elements
+    .filter((e) => ["text", "statement", "quote", "list", "metric"].includes(e.type))
+    .filter((e) => (e.text ?? "").trim().length > 0);
+
+  const chartElement = slide.elements.find((e) => e.type === "chart" && e.chart);
+  const imageElement = slide.elements.find(
+    (e) => e.type === "image" && e.src && !e.locked,
+  );
+
+  return {
+    id: slide.id,
+    type: previous?.type ?? legacyTypeFor(slide.kind),
+    title: slide.title,
+    blocks: textElements.map((e) => ({ text: e.text ?? "", source: e.source ?? "" })),
+    image_data_url: imageElement?.src ?? previous?.image_data_url ?? null,
+    team_members: previous?.team_members ?? null,
+    toc_entries: previous?.toc_entries ?? null,
+    chart: chartElement?.chart
+      ? {
+          chart_type: chartElement.chart.chart_type,
+          columns: chartElement.chart.columns,
+          rows: chartElement.chart.rows,
+        }
+      : previous?.chart,
+    elements: slide.elements,
+    kind: slide.kind,
+    background: slide.background ?? "paper",
+    customized: slide.customized ?? false,
+  };
+}
+
+export function toStoredSlides(slides: ElementSlide[], previous: StoredSlide[]): StoredSlide[] {
+  const byId = new Map(previous.map((p) => [p.id, p]));
+  return slides.map((s) => toStoredSlide(s, byId.get(s.id)));
+}
+
+function legacyTypeFor(kind: SlideKind): string {
+  switch (kind) {
+    case "cover": return "cover";
+    case "contents": return "toc";
+    case "team": return "team";
+    case "data": return "chart";
+    default: return "text";
+  }
+}
+
+/** Builds an empty slide, used by "add slide" in the editor. */
+export function blankSlide(templateId: string, title = "New slide"): ElementSlide {
+  const composed = compose(templateId, {
+    kind: "custom",
+    title,
+    paragraphs: [{ text: "Add your text here." }],
+  });
+  return { ...composed, id: elementId("slide") };
+}

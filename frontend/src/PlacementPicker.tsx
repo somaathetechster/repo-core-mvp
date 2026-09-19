@@ -31,8 +31,6 @@ export default function PlacementPicker({
 }) {
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
   const [selectedDeck, setSelectedDeck] = useState<FullDeck | null>(null);
-  const [mode, setMode] = useState<"new_slide" | "existing_slide">("new_slide");
-  const [position, setPosition] = useState<number>(-1);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +48,6 @@ export default function PlacementPicker({
     try {
       const full = await getDeck(id);
       setSelectedDeck(full);
-      setPosition(full.slides.length - 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't open that deck.");
     } finally {
@@ -94,47 +91,9 @@ export default function PlacementPicker({
               &lt; Choose a different deck
             </button>
 
-            <p className="pp-step">Where in {selectedDeck.name}?</p>
-            <div className="pp-modes">
-              <label className={`pp-mode ${mode === "new_slide" ? "is-active" : ""}`}>
-                <input
-                  type="radio"
-                  checked={mode === "new_slide"}
-                  onChange={() => setMode("new_slide")}
-                />
-                <span>
-                  <strong>Its own slide</strong>
-                  <em>Best when the data is the point of the slide.</em>
-                </span>
-              </label>
-              <label className={`pp-mode ${mode === "existing_slide" ? "is-active" : ""}`}>
-                <input
-                  type="radio"
-                  checked={mode === "existing_slide"}
-                  onChange={() => setMode("existing_slide")}
-                />
-                <span>
-                  <strong>Onto an existing slide</strong>
-                  <em>Best when it supports an argument already there.</em>
-                </span>
-              </label>
-            </div>
-
-            <p className="pp-step">
-              {mode === "new_slide" ? "Insert after which slide?" : "Which slide?"}
+            <p className="pp-hint-inline">
+              You'll choose exactly where it sits by dragging it on the slide, once the deck opens.
             </p>
-            <div className="pp-slides">
-              {selectedDeck.slides.map((s, i) => (
-                <button
-                  key={s.id}
-                  className={`pp-slide ${position === i ? "is-active" : ""}`}
-                  onClick={() => setPosition(i)}
-                >
-                  <span className="pp-slide-num">{i + 1}</span>
-                  <span className="pp-slide-title">{s.title}</span>
-                </button>
-              ))}
-            </div>
 
             <label className="pp-note">
               <span>What does this show? (appears under the chart)</span>
@@ -154,9 +113,11 @@ export default function PlacementPicker({
                 onClick={() =>
                   onConfirm({
                     deck: selectedDeck,
-                    mode,
-                    slideIndex: mode === "existing_slide" ? position : null,
-                    insertAfter: mode === "new_slide" ? position : null,
+                    // Placement is now decided by dragging in the deck
+                    // editor, so only the deck and the note are chosen here.
+                    mode: "new_slide",
+                    slideIndex: null,
+                    insertAfter: null,
                     note: note.trim(),
                   })
                 }

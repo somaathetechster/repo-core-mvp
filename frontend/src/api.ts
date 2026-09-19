@@ -157,6 +157,8 @@ export interface DeckTheme {
   /** Compositional template and colour scheme, persisted with the deck. */
   template_id?: string | null;
   scheme_id?: string | null;
+  font_pairing?: string | null;
+  type_scale?: number | null;
 }
 
 export interface DeckSummary {

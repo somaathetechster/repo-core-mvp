@@ -331,3 +331,17 @@
   .deck-design-preview { position: static; }
   .deck-design-controls { max-height: none; }
 }
+
+/* Chart handoff prompt from the Data Studio */
+.deck-drop-prompt {
+  display: flex; justify-content: space-between; align-items: center; gap: 1.25rem;
+  background: rgba(242,183,5,0.07); border: 1px solid var(--gold-dim);
+  border-radius: 10px; padding: 0.9rem 1.1rem; margin-bottom: 1rem; flex-wrap: wrap;
+}
+.deck-drop-prompt > div:first-child { display: flex; flex-direction: column; gap: 0.2rem; }
+.deck-drop-prompt strong { font-size: 0.9rem; color: var(--text); font-weight: 500; }
+.deck-drop-prompt span { font-size: 0.78rem; color: var(--text-dim); }
+.deck-drop-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.deck-notice { color: #4ade80; font-size: 0.85rem; margin-bottom: 0.75rem; }
+.deck-toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.pp-hint-inline { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; margin: 0.5rem 0 0; font-style: italic; }
