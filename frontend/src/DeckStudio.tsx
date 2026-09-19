@@ -31,7 +31,7 @@ export interface DeckStudioProps {
   themeSettings: ThemeSettings;
   templateId: string;
   industry?: string | null;
-  onSlidesChange: (slides: ElementSlide[]) => void;
+  onSlidesChange: (slides: ElementSlide[], label?: string) => void;
   onThemeChange: (settings: ThemeSettings) => void;
   onTemplateChange: (templateId: string) => void;
   onCurrentChange: (index: number) => void;
@@ -61,12 +61,12 @@ export default function DeckStudio({
     if (selected) setPanel("element");
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function updateSlide(next: ElementSlide) {
-    onSlidesChange(slides.map((s, i) => (i === current ? next : s)));
+  function updateSlide(next: ElementSlide, label = "edit") {
+    onSlidesChange(slides.map((s, i) => (i === current ? next : s)), label);
   }
 
   function addElements(els: SlideElement[]) {
-    updateSlide({ ...slide, customized: true, elements: [...slide.elements, ...els] });
+    updateSlide({ ...slide, customized: true, elements: [...slide.elements, ...els] }, "add-element");
     if (els.length === 1) setSelectedId(els[0].id);
   }
 

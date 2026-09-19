@@ -28,7 +28,7 @@ type DragState =
 export interface CanvasProps {
   slide: ElementSlide;
   theme: DeckTheme;
-  onChange: (slide: ElementSlide) => void;
+  onChange: (slide: ElementSlide, label?: string) => void;
   renderChart?: (el: SlideElement) => ReactNode;
   /** Read-only mode is used for thumbnails and preview. */
   interactive?: boolean;
@@ -64,12 +64,12 @@ export default function SlideCanvas({
     return () => ro.disconnect();
   }, []);
 
-  const updateElement = useCallback((id: string, patch: Partial<SlideElement>) => {
+  const updateElement = useCallback((id: string, patch: Partial<SlideElement>, label = "edit") => {
     onChange({
       ...slide,
       customized: true,
       elements: slide.elements.map((e) => (e.id === id ? { ...e, ...patch } : e)),
-    });
+    }, label);
   }, [slide, onChange]);
 
   // Pointer maths runs in canvas space, so a drag feels 1:1 regardless of
@@ -86,7 +86,7 @@ export default function SlideCanvas({
         const moved = { ...drag!.origin, x: drag!.origin.x + dx, y: drag!.origin.y + dy };
         const snapped = snapFrame(clampFrame(moved), siblings, margin);
         setGuides(snapped.guides);
-        updateElement(drag!.id, { frame: snapped.frame });
+        updateElement(drag!.id, { frame: snapped.frame }, `move:${drag!.id}`);
       } else {
         const h = drag!.handle;
         let { x, y, w, hgt } = {
@@ -97,7 +97,7 @@ export default function SlideCanvas({
         if (h.includes("s")) hgt = drag!.origin.h + dy;
         if (h.includes("w")) { x = drag!.origin.x + dx; w = drag!.origin.w - dx; }
         if (h.includes("n")) { y = drag!.origin.y + dy; hgt = drag!.origin.h - dy; }
-        updateElement(drag!.id, { frame: clampFrame({ ...drag!.origin, x, y, w, h: hgt }) });
+        updateElement(drag!.id, { frame: clampFrame({ ...drag!.origin, x, y, w, h: hgt }) }, `resize:${drag!.id}`);
       }
     }
 
@@ -144,7 +144,7 @@ export default function SlideCanvas({
       }
       if (handled) {
         e.preventDefault();
-        updateElement(activeId, { frame: clampFrame(f) });
+        updateElement(activeId, { frame: clampFrame(f) }, `nudge:${activeId}`);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -199,7 +199,7 @@ export default function SlideCanvas({
                   theme={theme}
                   renderChart={renderChart}
                   editable={interactive && isSelected}
-                  onTextChange={(id, text) => updateElement(id, { text })}
+                  onTextChange={(id, text) => updateElement(id, { text }, `text:${id}`)}
                 />
               </div>
 

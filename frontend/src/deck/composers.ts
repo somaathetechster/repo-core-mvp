@@ -30,6 +30,8 @@ export interface SlideContentInput {
   companyName?: string;
   pageNumber?: number;
   totalPages?: number;
+  /** Draws the underlying grid as hairlines. Structure applies either way. */
+  showGrid?: boolean;
 }
 
 export type Composer = (c: SlideContentInput) => { elements: SlideElement[]; background?: "paper" | "ink" | "accent" };
@@ -748,16 +750,24 @@ const BP_HY = [0.046, 0.542, 0.870, 0.953];   // horizontal rules
 const bpx = (p: number) => Math.round(CANVAS_W * p);
 const bpy = (p: number) => Math.round(CANVAS_H * p);
 
-/** The hairline grid, drawn on every slide before any content. */
-function blueprintGrid(): SlideElement[] {
+/**
+ * The grid.
+ *
+ * It always governs where content sits, but it is not drawn by default.
+ * Visible rules are a strong stylistic statement that suits a technical
+ * document and works against a clean one, so the structure stays and the
+ * ink becomes a choice.
+ */
+function blueprintGrid(visible: boolean): SlideElement[] {
+  if (!visible) return [];
   const out: SlideElement[] = [];
   for (const p of BP_VX) {
     out.push(makeElement("rule", { x: bpx(p), y: -20, w: 1, h: CANVAS_H + 40, z: 2 },
-      { background: "ink", opacity: 0.32 }));
+      { background: "ink", opacity: 0.22 }));
   }
   for (const p of BP_HY) {
     out.push(makeElement("rule", { x: -20, y: bpy(p), w: CANVAS_W + 40, h: 1, z: 2 },
-      { background: "ink", opacity: 0.32 }));
+      { background: "ink", opacity: 0.22 }));
   }
   return out;
 }
@@ -775,7 +785,7 @@ function bpField(): SlideElement {
 }
 
 export const composeBlueprint: Composer = (c) => {
-  const els: SlideElement[] = [bpField(), ...blueprintGrid()];
+  const els: SlideElement[] = [bpField(), ...blueprintGrid(c.showGrid === true)];
 
   const chromeEls = chrome(c, {
     margin: BP_L, logoAt: "top-left", logoSize: 22,

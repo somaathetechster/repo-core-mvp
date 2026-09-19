@@ -7,10 +7,11 @@ import DeckStudio from "./DeckStudio";
 import CompanyProfileForm from "./CompanyProfileForm";
 import ChartRenderer, { type ColumnMeta } from "./viz/ChartRenderer";
 import {
-  toElementSlides, toStoredSlides, blankSlide, type StoredSlide,
+  toElementSlides, toStoredSlides, blankSlide, resetToTemplate, type StoredSlide,
 } from "./deck/migrate";
 import { compose } from "./deck/composers";
 import { type ThemeSettings } from "./deck/theme";
+import { useHistory } from "./deck/useHistory";
 import { chartWithCaption } from "./DeckStudio";
 import type { ElementSlide, SlideElement } from "./deck/elements";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
@@ -70,7 +71,9 @@ export default function DeckEditor({
   const [view, setView] = useState<View>("studio");
   const [deckName, setDeckName] = useState("");
   const [stored, setStored] = useState<StoredSlide[]>([]);
-  const [slides, setSlides] = useState<ElementSlide[]>([]);
+  const history = useHistory<ElementSlide[]>([]);
+  const slides = history.state;
+  const setSlides = history.set;
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(DEFAULT_THEME);
   const [deckTheme, setDeckTheme] = useState<DeckTheme | null>(null);
@@ -111,7 +114,7 @@ export default function DeckEditor({
         setTemplateId(tpl);
         setThemeSettings(settings);
         setStored(storedSlides);
-        setSlides(toElementSlides(storedSlides, tpl, { companyName: d.name }));
+        history.reset(toElementSlides(storedSlides, tpl, { companyName: d.name }));
         setDeckProfile(d.profile_snapshot as unknown as CompanyProfile);
         loadedRef.current = true;
 
@@ -163,6 +166,22 @@ export default function DeckEditor({
     return () => clearTimeout(t);
   }, [dirty, save]);
 
+  // Cmd/Ctrl-Z and Shift-Cmd/Ctrl-Z, skipped while typing so they don't
+  // fight the browser's own undo inside a text field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement;
+      if (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) history.redo();
+      else history.undo();
+      setDirty(true);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [history]);
+
   useEffect(() => {
     function warn(e: BeforeUnloadEvent) {
       if (dirty) { e.preventDefault(); e.returnValue = ""; }
@@ -180,7 +199,7 @@ export default function DeckEditor({
     // because toElementSlide honours the customized flag.
     const nextStored = toStoredSlides(slides, stored);
     setStored(nextStored);
-    setSlides(toElementSlides(nextStored, nextId, { companyName: deckName }));
+    history.reset(toElementSlides(nextStored, nextId, { companyName: deckName }));
     setDirty(true);
     flash(
       customized > 0
@@ -263,7 +282,7 @@ export default function DeckEditor({
       const d = await regenerateDeck(deckId, analyzedRepos as unknown as Record<string, unknown>[]);
       const storedSlides = d.slides as unknown as StoredSlide[];
       setStored(storedSlides);
-      setSlides(toElementSlides(storedSlides, templateId, { companyName: d.name }));
+      history.reset(toElementSlides(storedSlides, templateId, { companyName: d.name }));
       setCurrent(0);
       flash("Regenerated.");
     } catch (e) {
@@ -271,6 +290,20 @@ export default function DeckEditor({
     } finally {
       setBusy(null);
     }
+  }
+
+  function resetSlideToTemplate() {
+    const target = slides[current];
+    if (!target?.customized) return;
+    const storedMatch = stored.find((x) => x.id === target.id);
+    const fresh = resetToTemplate(target, storedMatch, templateId, {
+      companyName: deckName,
+      pageNumber: current + 1,
+      totalPages: slides.length,
+    });
+    setSlides((prev) => prev.map((s, i) => (i === current ? fresh : s)), "reset-template");
+    setDirty(true);
+    flash("Slide reset to the template. Undo if that wasn't what you wanted.");
   }
 
   function addSlide() {
@@ -330,6 +363,30 @@ export default function DeckEditor({
               Content
             </button>
           </div>
+          <button
+            className="p-btn p-btn-ghost"
+            onClick={() => { history.undo(); setDirty(true); }}
+            disabled={!history.canUndo}
+            title="Undo (Cmd/Ctrl+Z)"
+          >
+            Undo
+          </button>
+          <button
+            className="p-btn p-btn-ghost"
+            onClick={() => { history.redo(); setDirty(true); }}
+            disabled={!history.canRedo}
+            title="Redo (Shift+Cmd/Ctrl+Z)"
+          >
+            Redo
+          </button>
+          <button
+            className="p-btn p-btn-ghost"
+            onClick={resetSlideToTemplate}
+            disabled={!slides[current]?.customized}
+            title="Discard hand-positioning on this slide and re-apply the template"
+          >
+            Reset layout
+          </button>
           <button className="p-btn p-btn-ghost" onClick={addSlide}>+ Slide</button>
           <button className="p-btn p-btn-ghost" onClick={deleteSlide} disabled={slides.length <= 1}>
             Delete slide
@@ -372,7 +429,7 @@ export default function DeckEditor({
           templateId={templateId}
           industry={deckProfile?.industry ?? null}
           renderChart={renderChart}
-          onSlidesChange={(next) => { setSlides(next); setDirty(true); }}
+          onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); setDirty(true); }}
           onThemeChange={(next) => { setThemeSettings(next); setDirty(true); }}
           onTemplateChange={applyTemplate}
           onCurrentChange={setCurrent}

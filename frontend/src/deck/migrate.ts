@@ -94,8 +94,14 @@ export function toElementSlides(
  * regeneration) sees current content.
  */
 export function toStoredSlide(slide: ElementSlide, previous?: StoredSlide): StoredSlide {
+  // "caption" must be included: a chart's explanatory note is a caption
+  // element, and leaving it out meant the note was dropped from blocks on
+  // save and then lost entirely on any recompose. Chrome elements (page
+  // numbers, the company name in the footer) are excluded by their locked
+  // flag rather than by type, so they don't pollute the deck's content.
   const textElements = slide.elements
-    .filter((e) => ["text", "statement", "quote", "list", "metric"].includes(e.type))
+    .filter((e) => ["text", "statement", "quote", "list", "metric", "caption"].includes(e.type))
+    .filter((e) => !e.locked)
     .filter((e) => (e.text ?? "").trim().length > 0);
 
   const chartElement = slide.elements.find((e) => e.type === "chart" && e.chart);
@@ -138,6 +144,25 @@ function legacyTypeFor(kind: SlideKind): string {
     case "data": return "chart";
     default: return "text";
   }
+}
+
+/**
+ * Re-composes a slide from its content, discarding hand-positioning.
+ *
+ * Customization was previously a one-way door: once a slide was touched it
+ * never followed the template again, with no way back. That's wrong, so
+ * this is the reverse operation the editor's "reset to template" uses.
+ */
+export function resetToTemplate(
+  slide: ElementSlide,
+  stored: StoredSlide | undefined,
+  templateId: string,
+  context: { logo?: string | null; companyName?: string; pageNumber?: number; totalPages?: number } = {},
+): ElementSlide {
+  const base: StoredSlide = stored
+    ? { ...stored, customized: false, elements: undefined }
+    : { ...toStoredSlide(slide), customized: false, elements: undefined };
+  return toElementSlide(base, templateId, context);
 }
 
 /** Builds an empty slide, used by "add slide" in the editor. */
