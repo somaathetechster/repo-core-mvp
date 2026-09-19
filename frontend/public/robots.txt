@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# The app itself is behind login and has nothing useful for a crawler.
+Disallow: /app
+Disallow: /admin
+
+Sitemap: https://repo-core-mvp.vercel.app/sitemap.xml
