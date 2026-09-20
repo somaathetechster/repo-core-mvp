@@ -6,7 +6,8 @@ many decks, each with its own profile snapshot and repo selection.
 from typing import Any
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.core.deps import get_current_user_id
 from app.core.db import AsyncSessionLocal
@@ -64,11 +65,54 @@ class CreateDeckRequest(BaseModel):
 
 @router.get("")
 async def list_decks(user_id: str = Depends(get_current_user_id)):
+    """
+    Lists decks without loading their contents.
+
+    This previously selected whole rows, so listing ten decks pulled every
+    slide and every embedded image out of the database to do nothing but
+    count slides. Once decks carried real photography that was tens of
+    megabytes per request and the list stopped responding. Slide count comes
+    from a JSON length computed in the database instead.
+    """
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(DeckModel).where(DeckModel.user_id == user_id).order_by(DeckModel.updated_at.desc())
-        )
-        return [_deck_summary(d) for d in result.scalars().all()]
+        slide_count = func.coalesce(func.jsonb_array_length(
+            func.cast(DeckModel.slides, JSONB)
+        ), 0).label("slide_count")
+
+        try:
+            result = await session.execute(
+                select(
+                    DeckModel.id, DeckModel.name, slide_count,
+                    DeckModel.updated_at, DeckModel.created_at,
+                )
+                .where(DeckModel.user_id == user_id)
+                .order_by(DeckModel.updated_at.desc())
+            )
+            return [
+                {
+                    "id": r.id, "name": r.name, "slide_count": r.slide_count or 0,
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in result.all()
+            ]
+        except Exception:
+            # Older rows may store slides as plain JSON rather than JSONB, or
+            # the database may not support the cast. Fall back to loading the
+            # metadata columns only, which is still far lighter than whole rows.
+            result = await session.execute(
+                select(DeckModel.id, DeckModel.name, DeckModel.updated_at, DeckModel.created_at)
+                .where(DeckModel.user_id == user_id)
+                .order_by(DeckModel.updated_at.desc())
+            )
+            return [
+                {
+                    "id": r.id, "name": r.name, "slide_count": 0,
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in result.all()
+            ]
 
 
 @router.post("")

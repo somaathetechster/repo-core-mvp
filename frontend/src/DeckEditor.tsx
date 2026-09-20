@@ -15,6 +15,7 @@ import { useHistory } from "./deck/useHistory";
 import { chartWithCaption } from "./DeckStudio";
 import type { ElementSlide, SlideElement } from "./deck/elements";
 import type { BrandImage } from "./deck/images";
+import { extractImages, inlineImages, mapBytes, type ImageMap } from "./deck/imageStore";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
 import "./theme.css";
 import "./deck.css";
@@ -82,6 +83,8 @@ export default function DeckEditor({
   // The image library lives on the deck so it survives a reload. Adding an
   // image previously called an undefined handler and was silently discarded.
   const [images, setImages] = useState<BrandImage[]>([]);
+  // Every distinct image in the deck, stored once and referenced by hash.
+  const imageMapRef = useRef<ImageMap>({});
   const [current, setCurrent] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,7 +115,17 @@ export default function DeckEditor({
           fontPairing: d.theme?.font_pairing ?? DEFAULT_THEME.fontPairing,
           typeScale: d.theme?.type_scale ?? 1,
         };
-        const storedSlides = d.slides as unknown as StoredSlide[];
+        const themeRaw = (d.theme ?? {}) as unknown as Record<string, unknown>;
+        const imageMap = (themeRaw.images as ImageMap) ?? {};
+        imageMapRef.current = imageMap;
+
+        const savedLibrary = (themeRaw.library_images as BrandImage[]) ?? [];
+        const restored = inlineImages(
+          d.slides as unknown as never[],
+          savedLibrary as unknown as { data_url: string }[],
+          imageMap,
+        );
+        const storedSlides = restored.slides as unknown as StoredSlide[];
         setDeckName(d.name);
         setDeckTheme(d.theme);
         setTemplateId(tpl);
@@ -124,7 +137,7 @@ export default function DeckEditor({
         // Seed the library from images already saved on the deck, falling
         // back to whatever the company profile carries so a founder who
         // uploaded images there sees them here without re-adding them.
-        const saved = (d.theme as unknown as { library_images?: BrandImage[] })?.library_images;
+        const saved = restored.library as unknown as BrandImage[];
         if (saved?.length) {
           setImages(saved);
         } else {
@@ -162,8 +175,29 @@ export default function DeckEditor({
     setError(null);
     try {
       const nextStored = toStoredSlides(slides, stored);
+
+      // Pull every inline image out into the shared map before sending. A
+      // deck that keeps its photos inline grows past what the API will
+      // accept, which is how saving started failing silently.
+      const packed = extractImages(
+        nextStored as unknown as never[],
+        images as unknown as { data_url: string }[],
+        {},
+      );
+      imageMapRef.current = packed.images;
+
+      const bytes = mapBytes(packed.images) + JSON.stringify(packed.slides).length;
+      if (bytes > 8_000_000) {
+        setError(
+          `This deck is about ${(bytes / 1_000_000).toFixed(1)}MB, which is too large to save. ` +
+          `Remove a few images from the Images panel, or use smaller files.`,
+        );
+        setSaving(false);
+        return;
+      }
+
       await saveDeckEditorState(deckId, {
-        slides: nextStored as never,
+        slides: packed.slides as never,
         theme: {
           ...(deckTheme ?? {}),
           primary_color: themeSettings.accent,
@@ -172,7 +206,8 @@ export default function DeckEditor({
           template_id: templateId,
           font_pairing: themeSettings.fontPairing,
           type_scale: themeSettings.typeScale,
-          library_images: images,
+          library_images: packed.library,
+          images: packed.images,
         } as never,
         layouts: {},
         freeform_slide_ids: [],

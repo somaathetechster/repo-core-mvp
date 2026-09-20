@@ -125,3 +125,31 @@
 }
 .dst-asset:hover { border-color: var(--gold); background: rgba(242,183,5,0.06); }
 .dst-asset svg { width: 100%; height: 100%; display: block; }
+
+/* Deck review */
+.rv-score { display: flex; align-items: baseline; gap: 0.7rem; padding: 0.9rem 1rem; border-radius: 10px; border: 1px solid var(--ink-border); }
+.rv-score-n { font-family: var(--font-display); font-size: 2.3rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.rv-score-l { font-size: 0.75rem; color: var(--text-dim); line-height: 1.4; }
+.rv-good { border-color: rgba(74,222,128,.45); } .rv-good .rv-score-n { color: #4ade80; }
+.rv-mid  { border-color: var(--gold-dim); }      .rv-mid  .rv-score-n { color: var(--gold); }
+.rv-low  { border-color: rgba(239,68,68,.45); }  .rv-low  .rv-score-n { color: #ef4444; }
+
+.rv-strengths { display: flex; flex-direction: column; gap: 0.35rem; }
+.rv-strengths p { margin: 0; font-size: 0.75rem; color: #4ade80; line-height: 1.45; padding-left: 1rem; position: relative; }
+.rv-strengths p::before { content: "✓"; position: absolute; left: 0; }
+
+.rv-finding { display: flex; flex-direction: column; gap: 0.25rem; text-align: left; width: 100%;
+  background: var(--ink); border: 1px solid var(--ink-border); border-left-width: 3px;
+  border-radius: 7px; padding: 0.7rem 0.8rem; cursor: pointer; font-family: var(--font-body); }
+.rv-finding:hover { border-color: var(--gold-dim); }
+.rv-critical { border-left-color: #ef4444; } .rv-important { border-left-color: var(--gold); } .rv-polish { border-left-color: #5b7cfa; }
+.rv-head { display: flex; gap: 0.45rem; align-items: center; }
+.rv-sev { font-size: 0.6rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); }
+.rv-where { font-size: 0.6rem; color: var(--gold-dim); }
+.rv-finding strong { font-size: 0.82rem; color: var(--text); font-weight: 500; line-height: 1.35; }
+.rv-finding em { font-size: 0.73rem; color: var(--text-dim); font-style: normal; line-height: 1.5; }
+.rv-fix { font-size: 0.73rem; color: var(--gold-dim); line-height: 1.5; margin-top: 0.2rem; }
+
+.rv-questions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.rv-questions li { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; padding-left: 1rem; position: relative; }
+.rv-questions li::before { content: ""; position: absolute; left: 0; top: .6em; width: 4px; height: 4px; border-radius: 50%; background: var(--gold-dim); }

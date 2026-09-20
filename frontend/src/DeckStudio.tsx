@@ -10,6 +10,8 @@ import {
   type ElementSlide, type SlideElement,
 } from "./deck/elements";
 import { COMPOSERS } from "./deck/composers";
+import { reviewDeck, unansweredQuestions } from "./deck/review";
+import { planVariants } from "./deck/variants";
 import ImageLibrary from "./ImageLibrary";
 import { DEFAULT_CROP, type BrandImage } from "./deck/images";
 import { ASSET_CATEGORIES, searchAssets, assetToSvg, type AssetCategory } from "./deck/assets";
@@ -26,7 +28,7 @@ const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; ac
   { id: "signal", name: "Signal", ink: "#0d0d0d", paper: "#fafafa", accent: "#d64933" },
 ];
 
-type Panel = "template" | "theme" | "library" | "assets" | "images" | "element";
+type Panel = "review" | "template" | "theme" | "library" | "assets" | "images" | "element";
 
 export interface DeckStudioProps {
   slides: ElementSlide[];
@@ -57,6 +59,22 @@ export default function DeckStudio({
   const [filterIndustry, setFilterIndustry] = useState(true);
 
   const theme = useMemo(() => buildTheme(themeSettings), [themeSettings]);
+
+  // Recomputed locally as the founder edits, so the critique is live rather
+  // than something they wait on.
+  const review = useMemo(() => {
+    const variants = planVariants(
+      slides.map((sl) => ({
+        kind: sl.kind,
+        paragraphs: sl.elements
+          .filter((e) => !e.locked && ["text", "statement", "quote", "list"].includes(e.type))
+          .map((e) => ({ text: e.text ?? "" })),
+        image: sl.elements.find((e) => e.type === "image" && e.src)?.src ?? null,
+        chart: sl.elements.find((e) => e.type === "chart")?.chart ?? null,
+      })),
+    );
+    return { ...reviewDeck(slides, variants), questions: unansweredQuestions(slides) };
+  }, [slides]);
 
   useEffect(() => {
     loadFontPairing(themeSettings.fontPairing);
@@ -173,7 +191,7 @@ export default function DeckStudio({
 
       <aside className="dst-panel">
         <nav className="dst-tabs">
-          {(["template", "theme", "assets", "library", "images", "element"] as Panel[]).map((p) => (
+          {(["review", "template", "theme", "assets", "library", "images", "element"] as Panel[]).map((p) => (
             <button
               key={p}
               className={`dst-tab ${panel === p ? "is-active" : ""}`}
@@ -184,6 +202,58 @@ export default function DeckStudio({
             </button>
           ))}
         </nav>
+
+        {panel === "review" && (
+          <section className="dst-section">
+            <div className={`rv-score rv-${review.score >= 80 ? "good" : review.score >= 50 ? "mid" : "low"}`}>
+              <span className="rv-score-n">{review.score}</span>
+              <span className="rv-score-l">
+                {review.findings.length === 0
+                  ? "Nothing to fix"
+                  : `${review.findings.filter((f) => f.severity === "critical").length} critical · ` +
+                    `${review.findings.filter((f) => f.severity === "important").length} important`}
+              </span>
+            </div>
+            <p className="dst-hint">
+              {review.wordsTotal} words across {slides.length} slides, about {review.readingMinutes} minutes
+              spoken. This reads your argument, not your formatting.
+            </p>
+
+            {review.strengths.length > 0 && (
+              <div className="rv-strengths">
+                {review.strengths.map((st, i) => <p key={i}>{st}</p>)}
+              </div>
+            )}
+
+            {review.findings.map((f) => (
+              <button
+                key={f.id}
+                className={`rv-finding rv-${f.severity}`}
+                onClick={() => f.slideIndex !== null && onCurrentChange(f.slideIndex)}
+              >
+                <span className="rv-head">
+                  <span className="rv-sev">{f.severity}</span>
+                  {f.slideIndex !== null && <span className="rv-where">slide {f.slideIndex + 1}</span>}
+                </span>
+                <strong>{f.title}</strong>
+                <em>{f.detail}</em>
+                <span className="rv-fix">{f.fix}</span>
+              </button>
+            ))}
+
+            {review.questions.length > 0 && (
+              <>
+                <h4>Questions this deck doesn't answer</h4>
+                <p className="dst-hint">
+                  An investor will ask these. Better to answer them on a slide than in the room.
+                </p>
+                <ul className="rv-questions">
+                  {review.questions.map((q, i) => <li key={i}>{q}</li>)}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
 
         {panel === "template" && (
           <section className="dst-section">

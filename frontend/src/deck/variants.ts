@@ -83,7 +83,10 @@ export function analyseContent(input: {
   image?: string | null;
   chart?: unknown;
 }): ContentShape {
-  const texts = input.paragraphs.map((p) => p.text).filter(Boolean);
+  // Defensive: a slide kind that carries no prose (team, contents) may
+  // arrive without paragraphs at all, and crashing the editor over it is a
+  // far worse outcome than treating it as empty.
+  const texts = (input.paragraphs ?? []).map((p) => p?.text).filter(Boolean) as string[];
   const perBlock = texts.map((t) => textStats(t).words);
   const words = perBlock.reduce((a, b) => a + b, 0);
   const lead = texts[0] ?? "";
