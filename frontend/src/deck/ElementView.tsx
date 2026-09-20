@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { SlideElement, ElementStyle } from "./elements";
 import type { DeckTheme } from "./theme";
 import { treatmentFilter, objectPosition, type ImageTreatment } from "./images";
+import { ASSETS, assetToSvg } from "./assets";
 
 /**
  * Renders a single element.
@@ -103,6 +104,23 @@ export default function ElementView({
   const s = element.style ?? {};
 
   switch (element.type) {
+    case "asset": {
+      // Assets are SVG coloured from the theme at render time, so a shape
+      // dropped on a slide recolours with the deck instead of staying
+      // whatever colour it was drawn in.
+      const asset = ASSETS.find((a) => a.id === s.assetId);
+      if (!asset) return null;
+      const colour = resolveColor(s.color ?? "accent", theme, "accent");
+      return (
+        <div
+          style={{ ...css, display: "flex", alignItems: "center", justifyContent: "center" }}
+          dangerouslySetInnerHTML={{
+            __html: assetToSvg(asset, colour, s.assetStyle ?? asset.defaultStyle ?? "solid"),
+          }}
+        />
+      );
+    }
+
     case "shape":
     case "rule":
       return (

@@ -32,7 +32,11 @@ export interface SlideContentInput {
   totalPages?: number;
   /** Draws the underlying grid as hairlines. Structure applies either way. */
   showGrid?: boolean;
+  /** Several images, for templates whose composition is an image grid. */
+  galleryImages?: (string | null)[];
 }
+
+export type { Composer as ComposerFn };
 
 export type Composer = (c: SlideContentInput) => { elements: SlideElement[]; background?: "paper" | "ink" | "accent" };
 
@@ -129,10 +133,28 @@ function sourcesElement(c: SlideContentInput, margin: number, y: number, inverse
  * shrinks the portrait as the count grows so eight people still fit on one
  * slide legibly.
  */
-function teamGrid(count: number, available: number, gutter: number) {
+function teamGrid(
+  count: number,
+  available: number,
+  gutter: number,
+  opts: { top?: number; textBelow?: number; aspect?: number } = {},
+) {
   const perRow = count <= 4 ? Math.max(count, 1) : count <= 6 ? 3 : 4;
   const rows = Math.ceil(count / perRow);
-  const cellW = (available - gutter * (perRow - 1)) / perRow;
+
+  // Width alone is not enough: with two rows, a cell sized only by width
+  // pushes the second row off the canvas. The portrait has to be the
+  // smaller of what fits horizontally and what fits in the vertical band
+  // that remains once the name, role and bio are accounted for.
+  const byWidth = Math.min((available - gutter * (perRow - 1)) / perRow, 260);
+
+  const top = opts.top ?? 190;
+  const textBelow = opts.textBelow ?? 168;
+  const aspect = opts.aspect ?? 1;
+  const bandH = CANVAS_H - top - 70;
+  const byHeight = (bandH / rows - textBelow) / aspect;
+
+  const cellW = Math.max(96, Math.min(byWidth, byHeight));
   return { perRow, rows, cellW };
 }
 
@@ -389,7 +411,7 @@ export const composeStatement: Composer = (c) => {
     els.push(makeElement("caption", { x: m, y: 86, w: 500, h: 24, z: 10 },
       { color: "accent", fontFamily: "label", fontSize: 15, fontWeight: 700, letterSpacing: "0.06em" },
       { text: c.title.toUpperCase() }));
-    const { perRow, cellW: cw } = teamGrid(c.team.length, CANVAS_W - m * 2, 40);
+    const { perRow, cellW: cw } = teamGrid(c.team.length, CANVAS_W - m * 2, 40, { top: 170, textBelow: 96, aspect: 1.1 });
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = m + col * (cw + 40);
@@ -503,14 +525,14 @@ export const composeInstitutional: Composer = (c) => {
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = cx - totalW / 2 + col * (cw + 36);
-      const rowOffset = row * 250;
+      const rowOffset = row * 232;
       els.push(makeElement("portrait", { x: x + (cw - 140) / 2, y: rowOffset + 206, w: 140, h: 140, z: 10 },
         { objectFit: "cover", borderRadius: 70 }, { src: p.photo_data_url || null, text: p.name }));
       els.push(makeElement("text", { x, y: rowOffset + 364, w: cw, h: 26, z: 10 },
         { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600, align: "center" }, { text: p.name }));
       els.push(makeElement("caption", { x, y: rowOffset + 390, w: cw, h: 20, z: 10 },
         { color: "muted", fontFamily: "label", fontSize: 13, align: "center" }, { text: p.role }));
-      els.push(makeElement("text", { x, y: rowOffset + 416, w: cw, h: 90, z: 10 },
+      els.push(makeElement("text", { x, y: rowOffset + 416, w: cw, h: c.team!.length > 4 ? 52 : 90, z: 10 },
         { color: "muted", fontFamily: "body", fontSize: 13.5, lineHeight: 1.55, align: "center" }, { text: p.bio }));
     });
     return { elements: els };
@@ -590,20 +612,23 @@ export const composeModernist: Composer = (c) => {
   }
 
   if (c.kind === "team" && c.team) {
-    const { perRow } = teamGrid(c.team.length, CANVAS_W - MOD_M * 2, 20);
+    const { perRow, cellW } = teamGrid(c.team.length, CANVAS_W - MOD_M * 2, 20, { top: 194, textBelow: 176 });
     const span = Math.max(2, Math.floor(12 / perRow));
+    // Portrait size comes from the vertical band, not the column span, so a
+    // second row still fits on the canvas.
+    const portraitSize = Math.min(modW(span), cellW);
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = modX(col * span);
-      const rowOffset = row * (modW(span) + 190);
-      els.push(makeElement("portrait", { x, y: rowOffset + 194, w: modW(span), h: modW(span), z: 10 },
+      const rowOffset = row * (portraitSize + 176);
+      els.push(makeElement("portrait", { x, y: rowOffset + 194, w: portraitSize, h: portraitSize, z: 10 },
         { objectFit: "cover" }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("shape", { x, y: rowOffset + 194 + modW(span), w: modW(span), h: 6, z: 10 }, { background: "accent", shape: "rect" }));
-      els.push(makeElement("text", { x, y: rowOffset + 194 + modW(span) + 20, w: modW(span), h: 26, z: 10 },
+      els.push(makeElement("shape", { x, y: rowOffset + 194 + portraitSize, w: portraitSize, h: 6, z: 10 }, { background: "accent", shape: "rect" }));
+      els.push(makeElement("text", { x, y: rowOffset + 194 + portraitSize + 20, w: modW(span), h: 26, z: 10 },
         { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 700 }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: rowOffset + 194 + modW(span) + 46, w: modW(span), h: 20, z: 10 },
+      els.push(makeElement("caption", { x, y: rowOffset + 194 + portraitSize + 46, w: modW(span), h: 20, z: 10 },
         { color: "muted", fontFamily: "label", fontSize: 13 }, { text: p.role }));
-      els.push(makeElement("text", { x, y: rowOffset + 194 + modW(span) + 70, w: modW(span), h: 80, z: 10 },
+      els.push(makeElement("text", { x, y: rowOffset + 194 + portraitSize + 70, w: modW(span), h: 80, z: 10 },
         { color: "muted", fontFamily: "body", fontSize: 13.5, lineHeight: 1.5 }, { text: p.bio }));
     });
     return { elements: els };
@@ -679,7 +704,7 @@ export const composeNarrative: Composer = (c) => {
   if (c.kind === "team" && c.team) {
     els.push(makeElement("heading", { x: NAR_M, y: 82, w: 600, h: 52, z: 10 },
       { color: "ink", fontFamily: "display", fontSize: 40, fontWeight: 700 }, { text: c.title }));
-    const { perRow, cellW: cw } = teamGrid(c.team.length, CANVAS_W - NAR_M * 2, 24);
+    const { perRow, cellW: cw } = teamGrid(c.team.length, CANVAS_W - NAR_M * 2, 24, { top: 170, textBelow: 40, aspect: 1.33 });
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = NAR_M + col * (cw + 24);
@@ -815,11 +840,20 @@ export const composeBlueprint: Composer = (c) => {
 
   if (c.kind === "contents") {
     // Title set as stacked words at display size, list in the right column.
-    c.title.split(" ").forEach((word, i) => {
-      els.push(makeElement("heading", { x: BP_L + 130, y: 150 + i * 104, w: 620, h: 104, z: 10 },
-        { color: "inverse", fontFamily: "display", fontSize: 88, fontWeight: 600, lineHeight: 1.0, letterSpacing: "-0.03em" },
-        { text: word }));
-    });
+    // Stack at most three words: a longer title is set as one block
+    // instead, because stacked words run off the canvas past three lines.
+    const words = c.title.split(" ");
+    if (words.length <= 3) {
+      words.forEach((word, i) => {
+        els.push(makeElement("heading", { x: BP_L + 130, y: 150 + i * 104, w: 620, h: 104, z: 10 },
+          { color: "inverse", fontFamily: "display", fontSize: 88, fontWeight: 600, lineHeight: 1.0, letterSpacing: "-0.03em" },
+          { text: word }));
+      });
+    } else {
+      els.push(makeElement("heading", { x: BP_L + 130, y: 170, w: 620, h: 320, z: 10 },
+        { color: "inverse", fontFamily: "display", fontSize: 62, fontWeight: 600, lineHeight: 1.08, letterSpacing: "-0.03em" },
+        { text: c.title }));
+    }
     (c.contents ?? []).forEach((e, i) => {
       const y = 70 + i * 45;
       els.push(makeElement("caption", { x: BP_MID + 8, y, w: 56, h: 26, z: 10 },
@@ -835,7 +869,7 @@ export const composeBlueprint: Composer = (c) => {
     els.push(makeElement("heading", { x: BP_L + 20, y: 62, w: 900, h: 92, z: 10 },
       { color: "inverse", fontFamily: "display", fontSize: 76, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.03em" },
       { text: c.title }));
-    const { perRow, cellW } = teamGrid(c.team.length, CANVAS_W - BP_L * 2, 28);
+    const { perRow, cellW } = teamGrid(c.team.length, CANVAS_W - BP_L * 2, 28, { top: 210, textBelow: 152 });
     const portrait = Math.min(cellW, c.team.length > 4 ? 132 : 186);
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
@@ -902,6 +936,10 @@ export const composeBlueprint: Composer = (c) => {
 
 /* ------------------------------------------------------------------ */
 
+import {
+  composeGallery, composeDossier, composeEdition, composeSignal,
+} from "./templates-v2";
+
 export const COMPOSERS: Record<string, Composer> = {
   editorial: composeEditorial,
   technical: composeTechnical,
@@ -910,11 +948,67 @@ export const COMPOSERS: Record<string, Composer> = {
   modernist: composeModernist,
   narrative: composeNarrative,
   blueprint: composeBlueprint,
+  gallery: composeGallery,
+  dossier: composeDossier,
+  edition: composeEdition,
+  signal: composeSignal,
 };
+
+/**
+ * Chrome that every slide must carry, applied after composition.
+ *
+ * Composers call chrome() per branch, and any branch that returned early
+ * silently produced a slide with no logo. Five did. Rather than trust every
+ * future branch to remember, this checks the finished slide and adds what is
+ * missing, so the guarantee holds structurally instead of by discipline.
+ */
+function ensureChrome(
+  elements: SlideElement[],
+  c: SlideContentInput,
+  background: "paper" | "ink" | "accent" | undefined,
+): SlideElement[] {
+  const out = [...elements];
+  const inverse = background === "ink" || background === "accent";
+
+  if (c.logo && !out.some((e) => e.type === "logo")) {
+    out.push(makeElement(
+      "logo",
+      { x: CANVAS_W - 96 - 66, y: 58, w: 66, h: 22, z: 45 },
+      { objectFit: "contain", opacity: inverse ? 0.85 : 0.7 },
+      { src: c.logo, locked: true },
+    ));
+  }
+
+  // Case-insensitive: a template that sets the company name in caps would
+  // otherwise fail this check and get a second, duplicate one.
+  const nameLower = (c.companyName ?? "").trim().toLowerCase();
+  const hasName = out.some((e) => (e.text ?? "").trim().toLowerCase() === nameLower && nameLower.length > 0);
+  if (c.companyName && !hasName) {
+    out.push(makeElement(
+      "caption",
+      { x: 96, y: CANVAS_H - 52, w: 300, h: 16, z: 45 },
+      { color: inverse ? "inverse" : "muted", fontFamily: "label", fontSize: 11, opacity: 0.75 },
+      { text: c.companyName, locked: true },
+    ));
+  }
+
+  if (c.pageNumber && c.kind !== "cover" && !out.some((e) => e.type === "pageNumber")) {
+    out.push(makeElement(
+      "pageNumber",
+      { x: CANVAS_W - 96 - 80, y: CANVAS_H - 52, w: 80, h: 16, z: 45 },
+      { color: inverse ? "inverse" : "muted", fontFamily: "label", fontSize: 11, align: "right", opacity: 0.75 },
+      { text: String(c.pageNumber), locked: true },
+    ));
+  }
+
+  return out;
+}
 
 export function compose(templateId: string, content: SlideContentInput): ElementSlide {
   const composer = COMPOSERS[templateId] ?? composeEditorial;
-  const { elements, background } = composer(content);
+  const composed = composer(content);
+  const background = composed.background;
+  const elements = ensureChrome(composed.elements, content, background);
   return {
     id: elementId("slide"),
     kind: content.kind,

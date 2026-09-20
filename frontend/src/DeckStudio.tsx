@@ -12,6 +12,7 @@ import {
 import { COMPOSERS } from "./deck/composers";
 import ImageLibrary from "./ImageLibrary";
 import { DEFAULT_CROP, type BrandImage } from "./deck/images";
+import { ASSET_CATEGORIES, searchAssets, assetToSvg, type AssetCategory } from "./deck/assets";
 import "./deck-studio.css";
 
 const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; accent: string }[] = [
@@ -25,7 +26,7 @@ const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; ac
   { id: "signal", name: "Signal", ink: "#0d0d0d", paper: "#fafafa", accent: "#d64933" },
 ];
 
-type Panel = "template" | "theme" | "library" | "images" | "element";
+type Panel = "template" | "theme" | "library" | "assets" | "images" | "element";
 
 export interface DeckStudioProps {
   slides: ElementSlide[];
@@ -51,6 +52,8 @@ export default function DeckStudio({
   const [panel, setPanel] = useState<Panel>("template");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [assetQuery, setAssetQuery] = useState("");
+  const [assetCat, setAssetCat] = useState<AssetCategory | "all">("all");
   const [filterIndustry, setFilterIndustry] = useState(true);
 
   const theme = useMemo(() => buildTheme(themeSettings), [themeSettings]);
@@ -170,7 +173,7 @@ export default function DeckStudio({
 
       <aside className="dst-panel">
         <nav className="dst-tabs">
-          {(["template", "theme", "library", "images", "element"] as Panel[]).map((p) => (
+          {(["template", "theme", "assets", "library", "images", "element"] as Panel[]).map((p) => (
             <button
               key={p}
               className={`dst-tab ${panel === p ? "is-active" : ""}`}
@@ -308,6 +311,53 @@ export default function DeckStudio({
           </section>
         )}
 
+        {panel === "assets" && (
+          <section className="dst-section">
+            <input
+              className="p-input dst-search"
+              placeholder="Search shapes, icons, arrows…"
+              value={assetQuery}
+              onChange={(e) => setAssetQuery(e.target.value)}
+            />
+            <div className="dst-asset-cats">
+              {ASSET_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  className={assetCat === cat.id ? "is-active" : ""}
+                  onClick={() => setAssetCat(cat.id)}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+            <div className="dst-assets">
+              {searchAssets(assetQuery, assetCat).map((a) => (
+                <button
+                  key={a.id}
+                  className="dst-asset"
+                  title={a.name}
+                  onClick={() => addElements([
+                    makeElement(
+                      "asset",
+                      {
+                        x: Math.round((CANVAS_W - a.size.w) / 2),
+                        y: Math.round((CANVAS_H - a.size.h) / 2),
+                        w: a.size.w, h: a.size.h, z: 22,
+                      },
+                      { color: "accent", assetId: a.id, assetStyle: a.defaultStyle ?? "solid" },
+                    ),
+                  ])}
+                  dangerouslySetInnerHTML={{ __html: assetToSvg(a, "#b8860b", a.defaultStyle ?? "solid") }}
+                />
+              ))}
+            </div>
+            <p className="dst-hint">
+              Assets are vector, so they scale cleanly and recolour with your theme. Select one on
+              the slide to change its colour or switch between solid and outline.
+            </p>
+          </section>
+        )}
+
         {panel === "images" && (
           <section className="dst-section">
             <p className="dst-hint">
@@ -407,6 +457,35 @@ export default function DeckStudio({
                 </label>
               ))}
             </div>
+
+            {selected.type === "asset" && (
+              <>
+                <label className="dst-field">
+                  <span>Colour</span>
+                  <select
+                    className="p-input"
+                    value={selected.style.color ?? "accent"}
+                    onChange={(e) => patchSelected({ style: { ...selected.style, color: e.target.value as never } })}
+                  >
+                    {["accent", "ink", "muted", "inverse", "paper"].map((cc) => <option key={cc} value={cc}>{cc}</option>)}
+                  </select>
+                </label>
+                <label className="dst-field">
+                  <span>Style</span>
+                  <div className="dst-btn-row">
+                    {(["solid", "outline"] as const).map((v) => (
+                      <button
+                        key={v}
+                        className={(selected.style.assetStyle ?? "solid") === v ? "is-active" : ""}
+                        onClick={() => patchSelected({ style: { ...selected.style, assetStyle: v } })}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+              </>
+            )}
 
             {(selected.type === "image" || selected.type === "portrait" || selected.type === "logo") && (
               <>

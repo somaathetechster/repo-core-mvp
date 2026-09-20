@@ -108,3 +108,20 @@
   .dst { grid-template-columns: 1fr; }
   .dst-panel { position: static; max-height: none; }
 }
+
+/* Asset library */
+.dst-asset-cats { display: flex; flex-wrap: wrap; gap: 0.28rem; }
+.dst-asset-cats button {
+  background: var(--ink); border: 1px solid var(--ink-border); color: var(--text-dim);
+  border-radius: 5px; padding: 0.24rem 0.5rem; font-size: 0.69rem; cursor: pointer;
+  font-family: var(--font-body);
+}
+.dst-asset-cats button.is-active { border-color: var(--gold); color: var(--gold); }
+.dst-assets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; }
+.dst-asset {
+  aspect-ratio: 1; background: var(--ink); border: 1px solid var(--ink-border);
+  border-radius: 6px; cursor: pointer; padding: 0.55rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.dst-asset:hover { border-color: var(--gold); background: rgba(242,183,5,0.06); }
+.dst-asset svg { width: 100%; height: 100%; display: block; }

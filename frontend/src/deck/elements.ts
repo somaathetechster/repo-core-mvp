@@ -39,6 +39,7 @@ export type ElementType =
   | "list"
   | "quote"
   | "logo"
+  | "asset"
   | "pageNumber";
 
 export interface Frame {
@@ -81,6 +82,9 @@ export interface ElementStyle {
   treatment?: string;
   /** Shape-specific */
   shape?: "rect" | "circle" | "line";
+  /** Asset-specific: which library asset, and whether it draws solid or outline. */
+  assetId?: string;
+  assetStyle?: "solid" | "outline";
 }
 
 export interface SlideElement {
