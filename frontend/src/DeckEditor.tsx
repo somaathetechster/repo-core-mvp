@@ -14,6 +14,7 @@ import { type ThemeSettings } from "./deck/theme";
 import { useHistory } from "./deck/useHistory";
 import { chartWithCaption } from "./DeckStudio";
 import type { ElementSlide, SlideElement } from "./deck/elements";
+import type { BrandImage } from "./deck/images";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
 import "./theme.css";
 import "./deck.css";
@@ -78,6 +79,9 @@ export default function DeckEditor({
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(DEFAULT_THEME);
   const [deckTheme, setDeckTheme] = useState<DeckTheme | null>(null);
   const [deckProfile, setDeckProfile] = useState<CompanyProfile | null>(null);
+  // The image library lives on the deck so it survives a reload. Adding an
+  // image previously called an undefined handler and was silently discarded.
+  const [images, setImages] = useState<BrandImage[]>([]);
   const [current, setCurrent] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,6 +120,29 @@ export default function DeckEditor({
         setStored(storedSlides);
         history.reset(toElementSlides(storedSlides, tpl, { companyName: d.name }));
         setDeckProfile(d.profile_snapshot as unknown as CompanyProfile);
+
+        // Seed the library from images already saved on the deck, falling
+        // back to whatever the company profile carries so a founder who
+        // uploaded images there sees them here without re-adding them.
+        const saved = (d.theme as unknown as { library_images?: BrandImage[] })?.library_images;
+        if (saved?.length) {
+          setImages(saved);
+        } else {
+          const profileImages =
+            ((d.profile_snapshot as unknown as Record<string, unknown>)?.company_image_data_urls as
+              { data_url: string; tag?: string }[] | undefined) ?? [];
+          const logo = (d.profile_snapshot as unknown as Record<string, unknown>)?.logo_data_url as string | undefined;
+          const seeded: BrandImage[] = [
+            ...(logo ? [{ id: "logo", data_url: logo, tag: "logo" as const, label: "Logo" }] : []),
+            ...profileImages.map((im, i) => ({
+              id: `profile-${i}`,
+              data_url: im.data_url,
+              tag: (im.tag as BrandImage["tag"]) ?? "other",
+              label: im.tag ?? `Image ${i + 1}`,
+            })),
+          ];
+          setImages(seeded);
+        }
         loadedRef.current = true;
 
         // A chart waiting from the Data Studio is offered as soon as the
@@ -145,6 +172,7 @@ export default function DeckEditor({
           template_id: templateId,
           font_pairing: themeSettings.fontPairing,
           type_scale: themeSettings.typeScale,
+          library_images: images,
         } as never,
         layouts: {},
         freeform_slide_ids: [],
@@ -156,7 +184,7 @@ export default function DeckEditor({
     } finally {
       setSaving(false);
     }
-  }, [slides, stored, deckId, deckTheme, themeSettings, templateId]);
+  }, [slides, stored, deckId, deckTheme, themeSettings, templateId, images]);
 
   // Autosave on a delay: losing hand-positioned layout work to a closed tab
   // would be worse than an occasional redundant write.
@@ -428,6 +456,8 @@ export default function DeckEditor({
           themeSettings={themeSettings}
           templateId={templateId}
           industry={deckProfile?.industry ?? null}
+          images={images}
+          onImagesChange={(next) => { setImages(next); setDirty(true); }}
           renderChart={renderChart}
           onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); setDirty(true); }}
           onThemeChange={(next) => { setThemeSettings(next); setDirty(true); }}

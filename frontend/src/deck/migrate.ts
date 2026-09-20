@@ -94,27 +94,29 @@ export function toElementSlides(
  * regeneration) sees current content.
  */
 export function toStoredSlide(slide: ElementSlide, previous?: StoredSlide): StoredSlide {
-  // "caption" must be included: a chart's explanatory note is a caption
-  // element, and leaving it out meant the note was dropped from blocks on
-  // save and then lost entirely on any recompose. Chrome elements (page
-  // numbers, the company name in the footer) are excluded by their locked
-  // flag rather than by type, so they don't pollute the deck's content.
-  const textElements = slide.elements
-    .filter((e) => ["text", "statement", "quote", "list", "metric", "caption"].includes(e.type))
-    .filter((e) => !e.locked)
-    .filter((e) => (e.text ?? "").trim().length > 0);
-
+  // Content is the source of truth, not the rendered elements.
+  //
+  // This previously rebuilt `blocks` by collecting every text element on the
+  // slide, which destroyed the deck on every template switch: a team slide's
+  // member names became paragraphs, and a Dossier then rendered them as
+  // findings rows. Worse, it compounded, absorbing the template's own labels
+  // ("VERDICT", "#") as the founder's content after two or three switches.
+  //
+  // A slide that has not been hand-edited carries its original content
+  // through untouched. Only a slide the user actually edited derives its
+  // blocks from elements, and even then template chrome is excluded.
   const chartElement = slide.elements.find((e) => e.type === "chart" && e.chart);
-  const imageElement = slide.elements.find(
-    (e) => e.type === "image" && e.src && !e.locked,
-  );
+  const imageElement = slide.elements.find((e) => e.type === "image" && e.src && !e.locked);
 
-  return {
+  const base: StoredSlide = {
     id: slide.id,
     type: previous?.type ?? legacyTypeFor(slide.kind),
     title: slide.title,
-    blocks: textElements.map((e) => ({ text: e.text ?? "", source: e.source ?? "" })),
+    blocks: previous?.blocks ?? [],
     image_data_url: imageElement?.src ?? previous?.image_data_url ?? null,
+    // Structured content belongs to the slide, never to the rendering. It is
+    // carried through every switch so a template that displays it differently
+    // cannot consume it.
     team_members: previous?.team_members ?? null,
     toc_entries: previous?.toc_entries ?? null,
     chart: chartElement?.chart
@@ -129,6 +131,29 @@ export function toStoredSlide(slide: ElementSlide, previous?: StoredSlide): Stor
     background: slide.background ?? "paper",
     customized: slide.customized ?? false,
   };
+
+  if (!slide.customized) return base;
+
+  // Hand-edited: the elements now hold the truth, so derive blocks from the
+  // ones that carry content. Locked chrome, labels, and anything that merely
+  // repeats the slide title are excluded so they cannot become paragraphs.
+  const CONTENT_TYPES = ["text", "statement", "quote", "list", "metric", "caption"];
+  const titleLower = (slide.title ?? "").trim().toLowerCase();
+
+  const derived = slide.elements
+    .filter((e) => CONTENT_TYPES.includes(e.type))
+    .filter((e) => !e.locked)
+    .filter((e) => {
+      const t = (e.text ?? "").trim();
+      if (!t) return false;
+      if (t.toLowerCase() === titleLower) return false;
+      // An all-caps short run is a template label, not prose.
+      if (t.length < 28 && t === t.toUpperCase() && /[A-Z]/.test(t)) return false;
+      return true;
+    })
+    .map((e) => ({ text: e.text ?? "", source: e.source ?? "" }));
+
+  return { ...base, blocks: derived.length > 0 ? derived : base.blocks };
 }
 
 export function toStoredSlides(slides: ElementSlide[], previous: StoredSlide[]): StoredSlide[] {

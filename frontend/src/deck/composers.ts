@@ -16,6 +16,7 @@ import {
   CANVAS_W, CANVAS_H, makeElement, elementId,
   type SlideElement, type ElementSlide, type SlideKind,
 } from "./elements";
+import { measureHeight } from "./measure";
 
 /** Normalised content handed to every composer. */
 export interface SlideContentInput {
@@ -142,20 +143,34 @@ function teamGrid(
   const perRow = count <= 4 ? Math.max(count, 1) : count <= 6 ? 3 : 4;
   const rows = Math.ceil(count / perRow);
 
-  // Width alone is not enough: with two rows, a cell sized only by width
-  // pushes the second row off the canvas. The portrait has to be the
-  // smaller of what fits horizontally and what fits in the vertical band
-  // that remains once the name, role and bio are accounted for.
   const byWidth = Math.min((available - gutter * (perRow - 1)) / perRow, 260);
 
+  // The portrait must also fit the vertical band once the name, role and
+  // bio beneath it are accounted for, or a second row runs off the canvas.
   const top = opts.top ?? 190;
-  const textBelow = opts.textBelow ?? 168;
+  const textBelow = opts.textBelow ?? 128;
   const aspect = opts.aspect ?? 1;
   const bandH = CANVAS_H - top - 70;
   const byHeight = (bandH / rows - textBelow) / aspect;
 
-  const cellW = Math.max(96, Math.min(byWidth, byHeight));
+  // A floor of 150px matters: below that, a two-word name wraps inside its
+  // column and collides with the role beneath it. Narrower cells are worse
+  // than fewer columns, so the floor wins and the bio is what gets trimmed.
+  const cellW = Math.max(150, Math.min(byWidth, byHeight));
   return { perRow, rows, cellW };
+}
+
+/**
+ * Height a name needs in a given column, measured rather than assumed.
+ *
+ * Fixed 26px name frames were why "Emmanuel Akoma" in a narrow column
+ * overlapped the role printed beneath it: the name wrapped to two lines and
+ * the frame never grew.
+ */
+function nameHeight(name: string, width: number, fontSize: number): number {
+  return Math.ceil(
+    measureHeight(name, width, { family: '"Inter", sans-serif', size: fontSize, weight: 600 }, 1.2),
+  );
 }
 
 /* ================================================================== */
@@ -209,16 +224,19 @@ export const composeEditorial: Composer = (c) => {
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = m + col * (cellW + 28);
-      const y = 190 + row * (portrait + 170);
+      const y = 190 + row * (portrait + (c.team!.length > 4 ? 82 : 170));
       els.push(makeElement("portrait", { x, y, w: portrait, h: portrait, z: 10 },
         { objectFit: "cover", filter: "grayscale(0.25)" }, { src: p.photo_data_url || null, text: p.name }));
       els.push(makeElement("rule", { x, y: y + portrait + 14, w: 26, h: 2, z: 10 }, { background: "accent" }));
-      els.push(makeElement("text", { x, y: y + portrait + 26, w: cellW, h: 26, z: 10 },
-        { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600 }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: y + portrait + 50, w: cellW, h: 20, z: 10 },
+      const nh = nameHeight(p.name, cellW, 19);
+      els.push(makeElement("text", { x, y: y + portrait + 26, w: cellW, h: nh, z: 10 },
+        { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600, lineHeight: 1.2 }, { text: p.name }));
+      els.push(makeElement("caption", { x, y: y + portrait + 30 + nh, w: cellW, h: 20, z: 10 },
         { color: "accent", fontFamily: "label", fontSize: 13 }, { text: p.role }));
-      els.push(makeElement("text", { x, y: y + portrait + 72, w: cellW, h: 80, z: 10 },
-        { color: "muted", fontFamily: "body", fontSize: 13.5, lineHeight: 1.45 }, { text: p.bio }));
+      if (p.bio) {
+        els.push(makeElement("text", { x, y: y + portrait + 54 + nh, w: cellW, h: 62, z: 10 },
+          { color: "muted", fontFamily: "body", fontSize: 13, lineHeight: 1.45 }, { text: p.bio }));
+      }
     });
     return { elements: els };
   }
@@ -418,9 +436,10 @@ export const composeStatement: Composer = (c) => {
       const rowOffset = row * (cw * 1.1 + 110);
       els.push(makeElement("portrait", { x, y: rowOffset + 170, w: cw, h: cw * 1.1, z: 10 },
         { objectFit: "cover", filter: "grayscale(1) contrast(1.2)" }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("text", { x, y: rowOffset + 170 + cw * 1.1 + 18, w: cw, h: 34, z: 10 },
-        { color: "ink", fontFamily: "display", fontSize: 26, fontWeight: 700, lineHeight: 1.1 }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: rowOffset + 170 + cw * 1.1 + 54, w: cw, h: 22, z: 10 },
+      const nh = nameHeight(p.name, cw, 24);
+      els.push(makeElement("text", { x, y: rowOffset + 170 + cw * 1.1 + 18, w: cw, h: nh, z: 10 },
+        { color: "ink", fontFamily: "display", fontSize: 24, fontWeight: 700, lineHeight: 1.15 }, { text: p.name }));
+      els.push(makeElement("caption", { x, y: rowOffset + 170 + cw * 1.1 + 24 + nh, w: cw, h: 22, z: 10 },
         { color: "accent", fontFamily: "label", fontSize: 14, fontWeight: 600 }, { text: p.role }));
     });
     return { elements: els };
@@ -528,9 +547,10 @@ export const composeInstitutional: Composer = (c) => {
       const rowOffset = row * 232;
       els.push(makeElement("portrait", { x: x + (cw - 140) / 2, y: rowOffset + 206, w: 140, h: 140, z: 10 },
         { objectFit: "cover", borderRadius: 70 }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("text", { x, y: rowOffset + 364, w: cw, h: 26, z: 10 },
-        { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600, align: "center" }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: rowOffset + 390, w: cw, h: 20, z: 10 },
+      const nh = nameHeight(p.name, cw, 19);
+      els.push(makeElement("text", { x, y: rowOffset + 364, w: cw, h: nh, z: 10 },
+        { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600, align: "center", lineHeight: 1.2 }, { text: p.name }));
+      els.push(makeElement("caption", { x, y: rowOffset + 368 + nh, w: cw, h: 20, z: 10 },
         { color: "muted", fontFamily: "label", fontSize: 13, align: "center" }, { text: p.role }));
       els.push(makeElement("text", { x, y: rowOffset + 416, w: cw, h: c.team!.length > 4 ? 52 : 90, z: 10 },
         { color: "muted", fontFamily: "body", fontSize: 13.5, lineHeight: 1.55, align: "center" }, { text: p.bio }));
@@ -620,7 +640,7 @@ export const composeModernist: Composer = (c) => {
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = modX(col * span);
-      const rowOffset = row * (portraitSize + 176);
+      const rowOffset = row * (portraitSize + (c.team!.length > 4 ? 78 : 176));
       els.push(makeElement("portrait", { x, y: rowOffset + 194, w: portraitSize, h: portraitSize, z: 10 },
         { objectFit: "cover" }, { src: p.photo_data_url || null, text: p.name }));
       els.push(makeElement("shape", { x, y: rowOffset + 194 + portraitSize, w: portraitSize, h: 6, z: 10 }, { background: "accent", shape: "rect" }));
@@ -713,10 +733,11 @@ export const composeNarrative: Composer = (c) => {
         { objectFit: "cover" }, { src: p.photo_data_url || null, text: p.name }));
       els.push(makeElement("shape", { x, y: rowOffset + 170 + cw * 1.33 - 92, w: cw, h: 92, z: 11 },
         { background: "ink", opacity: 0.75, shape: "rect" }));
-      els.push(makeElement("text", { x: x + 16, y: rowOffset + 170 + cw * 1.33 - 74, w: cw - 32, h: 26, z: 12 },
-        { color: "inverse", fontFamily: "display", fontSize: 19, fontWeight: 700 }, { text: p.name }));
-      els.push(makeElement("caption", { x: x + 16, y: rowOffset + 170 + cw * 1.33 - 46, w: cw - 32, h: 20, z: 12 },
-        { color: "inverse", fontFamily: "label", fontSize: 13, opacity: 0.8 }, { text: p.role }));
+      const nh = nameHeight(p.name, cw - 32, 18);
+      els.push(makeElement("text", { x: x + 16, y: rowOffset + 170 + cw * 1.33 - 30 - nh - 22, w: cw - 32, h: nh, z: 12 },
+        { color: "inverse", fontFamily: "display", fontSize: 18, fontWeight: 700, lineHeight: 1.2 }, { text: p.name }));
+      els.push(makeElement("caption", { x: x + 16, y: rowOffset + 170 + cw * 1.33 - 28 - 22, w: cw - 32, h: 20, z: 12 },
+        { color: "inverse", fontFamily: "label", fontSize: 12.5, opacity: 0.8 }, { text: p.role }));
     });
     return { elements: els };
   }
@@ -874,17 +895,22 @@ export const composeBlueprint: Composer = (c) => {
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = BP_L + 20 + col * (cellW + 28);
-      const y = 210 + row * (portrait + 152);
+      const y = 210 + row * (portrait + (c.team!.length > 4 ? 76 : 152));
       els.push(makeElement("portrait", { x, y, w: portrait, h: portrait, z: 10 },
         { objectFit: "cover", filter: "grayscale(0.5) contrast(1.05)" },
         { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("text", { x, y: y + portrait + 16, w: cellW, h: 26, z: 10 },
-        { color: "inverse", fontFamily: "display", fontSize: 21, fontWeight: 700 }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: y + portrait + 42, w: cellW, h: 20, z: 10 },
+      const nh = nameHeight(p.name, cellW, 21);
+      els.push(makeElement("text", { x, y: y + portrait + 16, w: cellW, h: nh, z: 10 },
+        { color: "inverse", fontFamily: "display", fontSize: 21, fontWeight: 700, lineHeight: 1.2 }, { text: p.name }));
+      els.push(makeElement("caption", { x, y: y + portrait + 20 + nh, w: cellW, h: 20, z: 10 },
         { color: "inverse", fontFamily: "label", fontSize: 14, opacity: 0.72 }, { text: p.role }));
-      els.push(makeElement("text", { x, y: y + portrait + 66, w: cellW, h: 76, z: 10 },
-        { color: "inverse", fontFamily: "body", fontSize: 13.5, lineHeight: 1.45, opacity: 0.82 },
-        { text: p.bio }));
+      // A wrapped team has no vertical room for bios; showing the name and
+      // role for everyone beats showing bios for half of them.
+      if (p.bio && c.team!.length <= 4) {
+        els.push(makeElement("text", { x, y: y + portrait + 46 + nh, w: cellW, h: 76, z: 10 },
+          { color: "inverse", fontFamily: "body", fontSize: 13.5, lineHeight: 1.45, opacity: 0.82 },
+          { text: p.bio }));
+      }
     });
     return { elements: els, background: "accent" };
   }
@@ -908,8 +934,9 @@ export const composeBlueprint: Composer = (c) => {
   // 6:1 type ratio between title and body is what carries the page.
   const words = c.title.split(" ");
   const titleLines = words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [c.title];
+  const titleW = BP_MID - (BP_L + 20) - 44;   // stop short of the right column
   titleLines.forEach((line, i) => {
-    els.push(makeElement("heading", { x: BP_L + 20, y: 48 + i * 92, w: BP_COL + 60, h: 92, z: 10 },
+    els.push(makeElement("heading", { x: BP_L + 20, y: 48 + i * 92, w: titleW, h: 92, z: 10 },
       { color: "inverse", fontFamily: "display", fontSize: 84, fontWeight: 600, lineHeight: 1.0, letterSpacing: "-0.035em" },
       { text: line }));
   });
