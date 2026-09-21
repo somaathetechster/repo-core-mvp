@@ -401,7 +401,7 @@ export default function DeckEditor({
 
   return (
     <div className="deck-editor">
-      <header className="deck-toolbar">
+      <div className="deck-editor-toolbar-wrap"><header className="deck-toolbar">
         <div className="deck-toolbar-left">
           <button className="p-btn p-btn-ghost" onClick={onBack}>&lt; Decks</button>
           <input
@@ -509,6 +509,7 @@ export default function DeckEditor({
           />
         )
       )}
+      </div>
     </div>
   );
 }

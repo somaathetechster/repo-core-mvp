@@ -11,7 +11,7 @@
  * sends to investors should not carry someone else's licensed artwork.
  */
 
-export type AssetCategory = "shape" | "icon" | "illustration" | "pattern" | "arrow" | "device";
+export type AssetCategory = "shape" | "icon" | "illustration" | "pattern" | "arrow" | "device" | "effects";
 
 export interface AssetDef {
   id: string;
@@ -300,7 +300,78 @@ const EXTRAS: AssetDef[] = [
   },
 ];
 
-export const ASSETS: AssetDef[] = [...SHAPES, ...ARROWS, ...ICONS, ...ILLUSTRATIONS, ...EXTRAS];
+
+/* ------------------------------------------------------------------ */
+/* Special effects elements                                             */
+/* ------------------------------------------------------------------ */
+
+const EFFECTS: AssetDef[] = [
+  {
+    id: "fx-holo-card", name: "Holographic card", category: "shape",
+    tags: ["holographic", "holo", "rainbow", "iridescent", "card", "special", "effect", "premium"],
+    viewBox: "0 0 200 130", size: { w: 320, h: 208 },
+    paths: [
+      { d: "M12 0 H188 A12 12 0 0 1 200 12 V118 A12 12 0 0 1 188 130 H12 A12 12 0 0 1 0 118 V12 A12 12 0 0 1 12 0 Z", mode: "fill", opacity: 0.15 },
+      { d: "M12 0 H188 A12 12 0 0 1 200 12 V118 A12 12 0 0 1 188 130 H12 A12 12 0 0 1 0 118 V12 A12 12 0 0 1 12 0 Z", mode: "stroke", width: 1.5, opacity: 0.8 },
+      { d: "M0 40 Q50 20 100 45 Q150 70 200 40", mode: "stroke", width: 0.8, opacity: 0.6 },
+      { d: "M0 65 Q50 45 100 70 Q150 95 200 65", mode: "stroke", width: 0.8, opacity: 0.5 },
+      { d: "M0 90 Q50 70 100 95 Q150 120 200 90", mode: "stroke", width: 0.8, opacity: 0.4 },
+    ],
+    defaultStyle: "outline",
+  },
+  {
+    id: "fx-glass-panel", name: "Glass panel", category: "shape",
+    tags: ["glass", "glassmorphism", "frosted", "blur", "transparent", "panel", "card", "ui"],
+    viewBox: "0 0 200 140", size: { w: 320, h: 224 },
+    paths: [
+      { d: "M14 0 H186 A14 14 0 0 1 200 14 V126 A14 14 0 0 1 186 140 H14 A14 14 0 0 1 0 126 V14 A14 14 0 0 1 14 0 Z", mode: "fill", opacity: 0.12 },
+      { d: "M14 0 H186 A14 14 0 0 1 200 14 V126 A14 14 0 0 1 186 140 H14 A14 14 0 0 1 0 126 V14 A14 14 0 0 1 14 0 Z", mode: "stroke", width: 1, opacity: 0.5 },
+      { d: "M2 14 Q100 6 198 14", mode: "stroke", width: 6, opacity: 0.18 },
+    ],
+    defaultStyle: "outline",
+  },
+  {
+    id: "fx-glow-circle", name: "Glow orb", category: "shape",
+    tags: ["glow", "orb", "radial", "light", "gradient", "soft", "spotlight"],
+    viewBox: "0 0 200 200", size: { w: 280, h: 280 },
+    paths: [
+      { d: "M100 100 m-80 0 a80 80 0 1 0 160 0 a80 80 0 1 0 -160 0", mode: "fill", opacity: 0.08 },
+      { d: "M100 100 m-56 0 a56 56 0 1 0 112 0 a56 56 0 1 0 -112 0", mode: "fill", opacity: 0.12 },
+      { d: "M100 100 m-32 0 a32 32 0 1 0 64 0 a32 32 0 1 0 -64 0", mode: "fill", opacity: 0.22 },
+      { d: "M100 100 m-14 0 a14 14 0 1 0 28 0 a14 14 0 1 0 -28 0", mode: "fill", opacity: 0.9 },
+    ],
+  },
+  {
+    id: "fx-noise-rect", name: "Noise texture", category: "pattern",
+    tags: ["noise", "grain", "texture", "film", "organic", "rough"],
+    viewBox: "0 0 100 100", size: { w: 300, h: 300 },
+    paths: Array.from({length: 80}, (_, i) => {
+      const x = ((i * 37 + 11) % 97) + 1;
+      const y = ((i * 61 + 23) % 97) + 1;
+      const r = 0.6 + (i % 4) * 0.3;
+      return { d: `M${x} ${y} m-${r} 0 a${r} ${r} 0 1 0 ${r*2} 0 a${r} ${r} 0 1 0 -${r*2} 0`, mode: "fill" as const, opacity: 0.25 + (i % 5) * 0.06 };
+    }),
+  },
+  {
+    id: "fx-scan-lines", name: "Scan lines", category: "pattern",
+    tags: ["scanlines", "scan", "lines", "retro", "screen", "crt", "texture"],
+    viewBox: "0 0 100 100", size: { w: 300, h: 300 },
+    paths: Array.from({length: 20}, (_, i) => ({
+      d: `M0 ${i * 5 + 2} H100`, mode: "stroke" as const, width: 1, opacity: 0.3,
+    })),
+  },
+  {
+    id: "fx-gradient-mesh", name: "Gradient mesh", category: "shape",
+    tags: ["gradient", "mesh", "soft", "background", "colour", "abstract"],
+    viewBox: "0 0 200 200", size: { w: 360, h: 360 },
+    paths: [
+      { d: "M0 0 Q80 40 160 0 Q200 20 200 80 Q160 120 200 200 Q120 160 40 200 Q0 180 0 120 Q40 80 0 0 Z", mode: "fill", opacity: 0.4 },
+      { d: "M40 40 Q100 0 160 40 Q200 80 160 140 Q120 180 60 160 Q0 140 40 80 Q20 60 40 40 Z", mode: "fill", opacity: 0.3 },
+    ],
+  },
+];
+
+export const ASSETS: AssetDef[] = [...SHAPES, ...ARROWS, ...ICONS, ...ILLUSTRATIONS, ...EXTRAS, ...EFFECTS];
 
 export const ASSET_CATEGORIES: { id: AssetCategory | "all"; name: string }[] = [
   { id: "all", name: "All" },
@@ -310,6 +381,7 @@ export const ASSET_CATEGORIES: { id: AssetCategory | "all"; name: string }[] = [
   { id: "arrow", name: "Arrows" },
   { id: "device", name: "Frames" },
   { id: "pattern", name: "Patterns" },
+  { id: "effects", name: "Effects" },
 ];
 
 export function searchAssets(query: string, category: AssetCategory | "all" = "all"): AssetDef[] {

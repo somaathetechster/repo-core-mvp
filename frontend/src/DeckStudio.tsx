@@ -140,7 +140,7 @@ export default function DeckStudio({
   return (
     <div className="dst">
       <div className="dst-stage">
-        <div
+        <div className="dst-canvas-area"><div
           className="dst-canvas-hold"
           onDragOver={(e) => {
             if (e.dataTransfer.types.includes("application/x-provisio-image")) {
@@ -174,6 +174,7 @@ export default function DeckStudio({
           />
         </div>
 
+        </div>
         <div className="dst-filmstrip">
           {slides.map((s, i) => (
             <button
@@ -338,6 +339,35 @@ export default function DeckStudio({
             ))}
 
             <h4>Scale</h4>
+            {/* Page background colour */}
+            <div className="dst-field">
+              <span style={{fontSize:'0.76rem',color:'var(--text-dim)'}}>Page background</span>
+              <div className="dst-bg-swatches">
+                {[
+                  { label:'Cream', value:'#F8F5EE' },
+                  { label:'White', value:'#FFFFFF' },
+                  { label:'Near-black', value:'#12100E' },
+                  { label:'Slate', value:'#1C2533' },
+                  { label:'Forest', value:'#1B2E22' },
+                  { label:'Burgundy', value:'#2A1218' },
+                  { label:'Custom', value:'custom' },
+                ].map(({label,value}) => (
+                  <button key={value}
+                    className={`dst-bg-swatch ${(themeSettings as any).pageBackground === value ? 'is-active' : ''}`}
+                    style={{background: value === 'custom' ? 'linear-gradient(135deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f)' : value}}
+                    title={label}
+                    onClick={() => onThemeChange({...themeSettings, pageBackground: value} as any)}
+                  />
+                ))}
+              </div>
+              {(themeSettings as any).pageBackground === 'custom' && (
+                <input type="color" className="p-input"
+                  value={(themeSettings as any).pageBackgroundCustom ?? '#F8F5EE'}
+                  onChange={e => onThemeChange({...themeSettings, pageBackground:'custom', pageBackgroundCustom: e.target.value} as any)}
+                />
+              )}
+            </div>
+
             <label className="dst-slider">
               <input
                 type="range" min={0.85} max={1.25} step={0.05}

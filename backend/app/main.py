@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,18 +22,21 @@ _dev_origins = [f"http://localhost:{p}" for p in range(5173, 5180)]
 # has a trailing slash), causing every single request to fail CORS silently.
 _frontend_url = settings.frontend_url.rstrip("/")
 
-_configured_origins = list({_frontend_url, *_dev_origins})
-print(f"[CORS] Allowed exact origins: {_configured_origins}")
-print("[CORS] Also allowing any *.vercel.app origin via regex, for preview deployments.")
+# EXTRA_ORIGINS lets you add more allowed origins without changing code:
+# set it in Render to a comma-separated list, e.g.:
+#   https://www.provisio.site,https://app.provisio.site
+_extra = [
+    o.strip().rstrip("/")
+    for o in os.environ.get("EXTRA_ORIGINS", "").split(",")
+    if o.strip()
+]
+_configured_origins = list({_frontend_url, *_dev_origins, *_extra})
+print(f"[CORS] Allowed origins: {_configured_origins}")
+print("[CORS] Also allowing any *.vercel.app origin via regex.")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_configured_origins,
-    # Vercel gives every deployment (production + every preview/PR build) its
-    # own unique subdomain. Rather than updating FRONTEND_URL by hand every
-    # time a new preview URL shows up, trust the whole *.vercel.app pattern.
-    # This is safe: it only widens which origins can CALL the API, it does
-    # not grant those origins any elevated access, normal auth still applies.
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],

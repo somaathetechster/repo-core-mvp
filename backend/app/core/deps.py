@@ -110,3 +110,13 @@ async def get_current_user_id_from_query(access_token: str = Query(...)) -> str:
     Referer headers) than one in a header, so this path should stay a narrow exception.
     """
     return await _verify(access_token)
+
+
+async def get_current_user_id_optional(authorization: str = Header(default="")) -> str | None:
+    """Like get_current_user_id but returns None instead of raising if missing."""
+    if not authorization:
+        return None
+    try:
+        return await get_current_user_id(authorization)
+    except Exception:
+        return None

@@ -8,11 +8,11 @@ Splitting that decision across call sites is how paywalls end up leaking.
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func, desc
 
-from app.core.deps import get_current_user_id
+from app.core.deps import get_current_user_id, get_current_user_id_optional
 from app.core.db import AsyncSessionLocal
 from app.models.billing import (
     PLANS, PlanId, SubscriptionStatus, SubscriptionModel, UsageModel, UserFlagsModel,
@@ -267,3 +267,152 @@ async def recent_usage(limit: int = 100, user_id: str = Depends(get_current_user
                 for r in rows
             ]
         }
+
+import os as _os
+_ADMIN_KEY = _os.environ.get("ADMIN_CONTROLLER_KEY", "")
+
+def _check_admin_key(request: Request) -> bool:
+    """Allows the controller app to call admin endpoints without a user JWT."""
+    return bool(_ADMIN_KEY and request.headers.get("X-Admin-Key") == _ADMIN_KEY)
+
+async def require_admin_or_key(
+    request: Request,
+    session,
+    user_id: str | None,
+) -> None:
+    if _check_admin_key(request):
+        return
+    if not user_id:
+        raise HTTPException(status_code=404)
+    await require_admin(session, user_id)
+
+
+@admin.get("/stats")
+async def admin_stats(
+    request: Request,
+    user_id: str = Depends(get_current_user_id_optional),
+):
+    async with AsyncSessionLocal() as session:
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
+        from sqlalchemy import func as sqlfunc, text
+        from app.models.deck import DeckModel
+        from app.models.billing import SubscriptionModel, UsageModel
+
+        total_users_row = await session.execute(
+            text("SELECT count(*) FROM auth.users")
+        )
+        total_users = total_users_row.scalar() or 0
+
+        deck_count = (await session.execute(sqlfunc.count(DeckModel.id).select())).scalar() or 0
+        export_count = (await session.execute(sqlfunc.count(UsageModel.id).select())).scalar() or 0
+        paying = (await session.execute(
+            select(sqlfunc.count(SubscriptionModel.id)).where(
+                SubscriptionModel.status == "active",
+                SubscriptionModel.plan_id != "free",
+            )
+        )).scalar() or 0
+
+        mrr = 0
+        subs = (await session.execute(
+            select(SubscriptionModel).where(SubscriptionModel.status == "active")
+        )).scalars().all()
+        for sub in subs:
+            if sub.plan_id == "monthly": mrr += 30
+            elif sub.plan_id == "yearly": mrr += round(99.99 / 12, 2)
+
+        # Active 7d: users who created or updated a deck in the last 7 days
+        active_row = await session.execute(
+            text("SELECT count(distinct user_id) FROM decks WHERE updated_at > now() - interval '7 days'")
+        )
+        active_7d = active_row.scalar() or 0
+
+        return {
+            "total_users": total_users, "active_7d": active_7d,
+            "total_decks": deck_count, "total_exports": export_count,
+            "paying_users": paying, "mrr_usd": mrr,
+        }
+
+
+@admin.post("/grant-admin")
+async def grant_admin_role(
+    body: dict,
+    request: Request,
+    user_id: str = Depends(get_current_user_id_optional),
+):
+    async with AsyncSessionLocal() as session:
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
+        target = body.get("user_id")
+        if not target:
+            raise HTTPException(400, "user_id required")
+        flags = await session.get(UserFlagsModel, target)
+        if flags:
+            flags.is_admin = True
+        else:
+            session.add(UserFlagsModel(user_id=target, is_admin=True))
+        await session.commit()
+
+
+@admin.post("/revoke-admin")
+async def revoke_admin_role(
+    body: dict,
+    request: Request,
+    user_id: str = Depends(get_current_user_id_optional),
+):
+    async with AsyncSessionLocal() as session:
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
+        target = body.get("user_id")
+        flags = await session.get(UserFlagsModel, target)
+        if flags:
+            flags.is_admin = False
+            await session.commit()
+
+
+@admin.post("/revoke-plan")
+async def revoke_user_plan(
+    body: dict,
+    request: Request,
+    user_id: str = Depends(get_current_user_id_optional),
+):
+    async with AsyncSessionLocal() as session:
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
+        target = body.get("user_id")
+        from sqlalchemy import update
+        await session.execute(
+            update(SubscriptionModel)
+            .where(SubscriptionModel.user_id == target, SubscriptionModel.status == "active")
+            .values(status="revoked")
+        )
+        await session.commit()
+
+
+@admin.post("/create-admin")
+async def create_admin_user(
+    body: dict,
+    request: Request,
+    user_id: str = Depends(get_current_user_id_optional),
+):
+    """Creates a new Supabase user and immediately grants them admin."""
+    if not _check_admin_key(request):
+        async with AsyncSessionLocal() as session:
+            await require_admin(session, user_id)
+    email = body.get("email"); pw = body.get("password")
+    if not email or not pw:
+        raise HTTPException(400, "email and password required")
+    from app.core.config import settings
+    from supabase._async.client import AsyncClient
+    sb: AsyncClient = _sc(settings.supabase_url, settings.supabase_service_role_key)
+    res = await sb.auth.admin.create_user({"email": email, "password": pw, "email_confirm": True})
+    new_uid = res.user.id
+    async with AsyncSessionLocal() as session:
+        existing = await session.get(UserFlagsModel, new_uid)
+        if existing:
+            existing.is_admin = True
+        else:
+            session.add(UserFlagsModel(user_id=new_uid, is_admin=True, email=email))
+        await session.commit()
+    return {"user_id": new_uid, "email": email}
+
