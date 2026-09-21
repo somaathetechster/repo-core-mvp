@@ -7,6 +7,7 @@ import MfaChallenge from "./MfaChallenge";
 import Landing from "./marketing/Landing";
 import MfaSettings from "./MfaSettings";
 import HomeDashboard from "./HomeDashboard";
+import NotificationBanner from "./NotificationBanner";
 import "./theme.css";
 import "./dashboard.css";
 
@@ -119,13 +120,14 @@ export default function App() {
     <Dashboard
       userEmail={session.user.email ?? ""}
       userName={(session.user.user_metadata?.full_name as string | undefined) ?? ""}
+      accessToken={session.access_token}
     />
   );
 }
 
 type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "data";
 
-function Dashboard({ userEmail, userName }: { userEmail: string; userName: string }) {
+function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
   const [tab, setTab] = useState<DashTab>("home");
   const [analyzedRepos, setAnalyzedRepos] = useState<AnalyzeResult[]>([]);
 
@@ -174,6 +176,8 @@ function Dashboard({ userEmail, userName }: { userEmail: string; userName: strin
         </div>
       </div>
 
+      <NotificationBanner accessToken={accessToken} />
+
       {tab === "profile" && (
         <Suspense fallback={<TabLoading />}>
           <CompanyProfileForm />
@@ -200,7 +204,15 @@ function Dashboard({ userEmail, userName }: { userEmail: string; userName: strin
 
       {tab === "home" && (
         <div className="dash-body">
-          <HomeDashboard userName={userName} onNavigate={(t) => setTab(t)} />
+          <HomeDashboard
+            userName={userName}
+            onNavigate={(t) => setTab(t)}
+            onOpenDeck={(id) => {
+              setTab("deck");
+              // Dispatch a custom event so DecksHome can open this deck directly
+              window.dispatchEvent(new CustomEvent("provisio:open-deck", { detail: { deckId: id } }));
+            }}
+          />
         </div>
       )}
 

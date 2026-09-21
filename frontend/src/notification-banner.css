@@ -1,0 +1,70 @@
+/* Notification banners — shown at the top of the app when admin sends them */
+.notif-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+.notif {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  padding: .7rem 1.25rem;
+  font-size: .84rem;
+  line-height: 1.45;
+  animation: notif-in .25s ease;
+}
+
+@keyframes notif-in {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.notif-success {
+  background: linear-gradient(135deg, #14321a, #0f2814);
+  border-bottom: 1px solid rgba(74, 222, 128, .2);
+  color: #86efac;
+}
+
+.notif-info {
+  background: linear-gradient(135deg, #1a1e2e, #141629);
+  border-bottom: 1px solid rgba(91, 124, 250, .2);
+  color: #a5b4fc;
+}
+
+.notif-warning {
+  background: linear-gradient(135deg, #2a2014, #22190f);
+  border-bottom: 1px solid rgba(196, 154, 40, .25);
+  color: #fde68a;
+}
+
+.notif-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  opacity: .85;
+}
+
+.notif-message {
+  flex: 1;
+  font-weight: 500;
+}
+
+.notif-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: .55;
+  cursor: pointer;
+  font-size: .9rem;
+  padding: .25rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: opacity .15s;
+}
+
+.notif-dismiss:hover { opacity: 1; }
+.notif-dismiss:disabled { opacity: .25; cursor: default; }

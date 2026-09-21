@@ -22,8 +22,6 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-/* ---- types ---- */
-
 export interface AdminUser {
   user_id: string;
   email: string;
@@ -55,18 +53,18 @@ export interface AdminUsageRow {
   plan: string;
 }
 
-/* ---- endpoints ---- */
-
 export const api = {
   stats: () => req<AdminStats>("/admin/stats"),
-  users: (q?: string) => req<AdminUser[]>(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`).then((r:any) => Array.isArray(r) ? r : (r.users ?? [])),
-  grantAdmin: (userId: string) => req<void>(`/admin/grant-admin`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
-  revokeAdmin: (userId: string) => req<void>(`/admin/revoke-admin`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
-  grantPlan: (userId: string, plan: string, months?: number) =>
-    req<void>(`/admin/grant`, { method: "POST", body: JSON.stringify({ target_user_id: userId, plan_id: plan, note: "admin grant" }) }),
-  revokePlan: (userId: string) =>
-    req<void>(`/admin/revoke-plan`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
+  users: (q?: string) => req<AdminUser[]>(
+    `/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`
+  ).then((r: any) => Array.isArray(r) ? r : (r.users ?? [])),
+  grantAdmin:  (userId: string) => req<void>("/admin/grant-admin",  { method:"POST", body:JSON.stringify({ user_id: userId }) }),
+  revokeAdmin: (userId: string) => req<void>("/admin/revoke-admin", { method:"POST", body:JSON.stringify({ user_id: userId }) }),
+  grantPlan:   (userId: string, plan: string) =>
+    req<void>("/admin/grant", { method:"POST", body:JSON.stringify({ target_user_id: userId, plan_id: plan, note: "admin grant" }) }),
+  revokePlan:  (userId: string) =>
+    req<void>("/admin/revoke-plan", { method:"POST", body:JSON.stringify({ user_id: userId }) }),
   usage: () => req<AdminUsageRow[]>("/admin/usage"),
   createAdminUser: (email: string, password: string) =>
-    req<{ user_id: string }>("/admin/create-admin", { method: "POST", body: JSON.stringify({ email, password }) }),
+    req<{ user_id: string }>("/admin/create-admin", { method:"POST", body:JSON.stringify({ email, password }) }),
 };

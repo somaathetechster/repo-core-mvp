@@ -412,3 +412,32 @@ async def create_admin_user(
         await session.commit()
     return {"user_id": new_uid, "email": email}
 
+# ── User notification endpoints ─────────────────────────────────────────
+
+@router.get("/notifications")
+async def get_notifications(user_id: str = Depends(get_current_user_id)):
+    """Returns unread notifications for the current user."""
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select as _select
+        result = await session.execute(
+            _select(UserNotificationModel)
+            .where(UserNotificationModel.user_id == user_id, UserNotificationModel.read == False)
+            .order_by(UserNotificationModel.created_at.desc())
+            .limit(10)
+        )
+        notifs = result.scalars().all()
+        return [
+            {"id": n.id, "message": n.message, "category": n.category, "created_at": n.created_at.isoformat()}
+            for n in notifs
+        ]
+
+
+@router.post("/notifications/{notif_id}/dismiss")
+async def dismiss_notification(notif_id: int, user_id: str = Depends(get_current_user_id)):
+    """Marks a notification as read (dismissed by the user)."""
+    async with AsyncSessionLocal() as session:
+        notif = await session.get(UserNotificationModel, notif_id)
+        if notif and notif.user_id == user_id:
+            notif.read = True
+            await session.commit()
+    return {"ok": True}

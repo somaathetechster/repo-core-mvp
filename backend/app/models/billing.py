@@ -294,3 +294,18 @@ def entitlement_to_dict(e: Entitlement) -> dict:
         "period_end": e.period_end.isoformat() if e.period_end else None,
         "subscription_id": e.subscription_id,
     }
+
+
+class UserNotificationModel(Base):
+    """
+    A banner notification for a specific user — shown in the app header until
+    the user dismisses it. Admin-assigned plan notifications land here so the
+    user sees them without needing a separate email system.
+    """
+    __tablename__ = "user_notifications"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String, default="info")  # info|success|warning
+    read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
