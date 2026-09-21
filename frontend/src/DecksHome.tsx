@@ -65,41 +65,72 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
   return (
     <div className="decks-home">
       <div className="decks-home-header">
-        <div>
-          <h1 className="dash-title">Your decks</h1>
-          <p className="dash-subtitle">Every deck you've built. Each can pull from a different set of repos and its own profile.</p>
+        <div className="decks-home-title">
+          Your decks{decks && <span>({decks.length})</span>}
         </div>
-        <button className="p-btn p-btn-primary" onClick={() => setShowWizard(true)}>
-          + New deck
+        <button className="decks-home-new" onClick={() => setShowWizard(true)}>
+          ＋ New deck
         </button>
       </div>
 
       {error && <p className="p-error">{error}</p>}
 
       {decks === null ? (
-        <p className="decks-home-loading">Loading...</p>
+        <div className="decks-home-loading">
+          <div className="decks-spinner" /><span>Loading your decks…</span>
+        </div>
       ) : decks.length === 0 ? (
-        <p className="decks-home-empty">No decks yet. Create your first one.</p>
+        <div className="decks-home-empty-state">
+          <div className="decks-empty-icon">✦</div>
+          <div className="decks-empty-title">No decks yet</div>
+          <div className="decks-empty-sub">Generate your first pitch deck from your GitHub evidence and company profile.</div>
+          <button className="decks-home-new" onClick={() => setShowWizard(true)}>Generate first deck →</button>
+        </div>
       ) : (
         <div className="decks-home-grid">
-          {decks.map((d) => (
-            <div className="deck-card" key={d.id}>
-              <h3>{d.name}</h3>
-              <p className="deck-card-meta">
-                {d.slide_count} slide{d.slide_count === 1 ? "" : "s"}
-                {d.updated_at && ` \u00b7 Updated ${new Date(d.updated_at).toLocaleDateString()}`}
-              </p>
-              <div className="deck-card-actions">
-                <button className="p-btn p-btn-primary" onClick={() => setOpenDeckId(d.id)}>
-                  Edit
-                </button>
-                <DownloadMenu deckId={d.id} />
-                <button className="p-btn p-btn-ghost deck-card-delete" onClick={() => handleDelete(d.id)}>
-                  Delete
-                </button>
+          {decks.map((d) => {
+            const ago = d.updated_at ? Math.floor((Date.now()-new Date(d.updated_at).getTime())/86400000) : null;
+            const relAgo = ago===null?"":ago===0?"today":ago===1?"yesterday":`${ago}d ago`;
+            const initials = d.name.split(" ").map((w: string)=>w[0]).join("").toUpperCase().slice(0,2);
+            return (
+              <div className="deck-card" key={d.id} onClick={() => setOpenDeckId(d.id)}>
+                {/* Preview thumbnail */}
+                <div className="deck-card-preview">
+                  <div className="deck-card-preview-inner">
+                    <div className="deck-card-preview-title">{d.name}</div>
+                  </div>
+                  <div className="deck-card-preview-badge">{d.slide_count} slides</div>
+                </div>
+                {/* Card body */}
+                <div className="deck-card-body">
+                  <div className="deck-card-header-row">
+                    <div className="deck-card-icon">{initials}</div>
+                    <div>
+                      <div className="deck-card-name">{d.name}</div>
+                      <div className="deck-card-eyebrow">{relAgo ? `Edited ${relAgo}` : "—"}</div>
+                    </div>
+                  </div>
+                  <div className="deck-card-review-hint">
+                    <span className="deck-card-review-dot" />
+                    Open deck → Review tab for pitch score
+                  </div>
+                  <div className="deck-card-actions" onClick={e => e.stopPropagation()}>
+                    <button className="deck-card-btn primary" onClick={() => setOpenDeckId(d.id)}>Open</button>
+                    <DownloadMenu deckId={d.id} />
+                    <button className="deck-card-btn danger" onClick={() => handleDelete(d.id)}>Delete</button>
+                  </div>
+                </div>
               </div>
+            );
+          })}
+          {/* New deck card */}
+          <div className="deck-card deck-card-new" onClick={() => setShowWizard(true)}>
+            <div className="deck-card-new-inner">
+              <div className="deck-card-new-plus">+</div>
+              <div className="deck-card-new-label">New deck</div>
+              <div className="deck-card-new-sub">Generate from your profile and code evidence</div>
             </div>
-          ))}
+          </div>
         </div>
       )}
 
@@ -181,7 +212,7 @@ function NewDeckWizard({
         </label>
 
         <div className="wizard-section">
-          <span className="profile-field-label">Company profile</span>
+          <span className="wizard-section-label">Company profile</span>
           <label className="wizard-radio">
             <input type="radio" checked={useSharedProfile} onChange={() => setUseSharedProfile(true)} />
             Start from my saved company profile, then edit independently for this deck
@@ -193,7 +224,7 @@ function NewDeckWizard({
         </div>
 
         <div className="wizard-section">
-          <span className="profile-field-label">Repos to include</span>
+          <span className="wizard-section-label">Repos to include</span>
           {analyzedRepos.length === 0 ? (
             <p className="wizard-note">
               No repos analyzed yet this session. You can still create the deck and add repo evidence later from

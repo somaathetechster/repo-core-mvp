@@ -1,119 +1,85 @@
-.ev { max-width: 1000px; margin: 0 auto; padding: 3rem 2rem 5rem; }
-.ev-head { margin-bottom: 2rem; }
-.ev-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+/* Evidence page — redesigned */
+.evidence { display: flex; flex-direction: column; }
+.evidence-header { padding: 1.5rem 2.5rem; border-bottom: 1px solid var(--ink-border); display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.evidence-title { font: 600 1.5rem var(--font-display); letter-spacing: -0.02em; }
+.evidence-connect-btn { background: var(--gold); color: #0d0c0a; font: 600 0.82rem var(--font-body); padding: 0.5rem 1rem; border-radius: 7px; border: none; cursor: pointer; }
+.evidence-connect-btn:hover { background: var(--gold-hover); }
 
-/* Repository list ---------------------------------------------------- */
-.ev-repos { display: flex; flex-direction: column; gap: 0.6rem; }
-.ev-repo {
-  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
-  background: var(--ink-raised); border: 1px solid var(--ink-border);
-  border-radius: 10px; padding: 1rem 1.25rem;
-}
-.ev-repo-info { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
-.ev-repo-name { display: flex; align-items: center; gap: 0.5rem; color: var(--text); font-weight: 500; }
-.ev-private {
-  font-size: 0.68rem; background: rgba(242, 183, 5, 0.15); color: var(--gold);
-  padding: 0.1rem 0.4rem; border-radius: 3px;
-}
-.ev-repo-desc { font-size: 0.83rem; color: var(--text-dim); line-height: 1.5; }
+.evidence-body { display: grid; grid-template-columns: 240px 1fr; min-height: 400px; }
 
-.ev-progress { padding: 2rem 0; }
-.ev-progress p { color: var(--text); margin: 0 0 0.4rem; }
-.ev-progress-note { color: var(--text-dim); font-size: 0.85rem; }
+/* Sidebar */
+.evidence-nav { border-right: 1px solid var(--ink-border); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.ev-section-label { font: 0.65rem var(--font-mono); letter-spacing: 0.12em; color: var(--text-muted); text-transform: uppercase; margin: 0.5rem 0 0.6rem 0.5rem; }
+.ev-repo-item { display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.75rem; border-radius: 8px; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; border: none; background: none; color: var(--text-dim); font-family: var(--font-body); text-align: left; width: 100%; }
+.ev-repo-item:hover { background: var(--ink-raised-2); color: var(--text); }
+.ev-repo-item.active { background: var(--gold-soft); color: var(--gold); }
+.ev-repo-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.ev-connection-info { padding: 0.6rem 0.75rem; font-size: 0.77rem; color: var(--text-dim); line-height: 1.6; }
+.ev-connection-status { color: var(--success); font-size: 0.72rem; }
 
-/* Report ------------------------------------------------------------- */
-.ev-report-head {
-  display: flex; align-items: center; gap: 1rem;
-  padding-bottom: 1.25rem; margin-bottom: 2rem;
-  border-bottom: 1px solid var(--ink-border);
-}
-.ev-repo-label { font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; color: var(--text-dim); }
+/* Content */
+.evidence-content { padding: 2rem 2.5rem; }
 
-/* The headline is the one thing an investor should remember, so it gets
-   real weight rather than sitting inside the body flow. */
-.ev-headline {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  line-height: 1.35;
-  color: var(--text);
-  margin: 0 0 2.5rem;
-  padding-left: 1.25rem;
-  border-left: 3px solid var(--gold);
-}
+/* Stats */
+.ev-stats { display: flex; gap: 2.5rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--ink-border); flex-wrap: wrap; }
+.ev-stat { }
+.ev-stat-n { font: 600 1.8rem/1 var(--font-display); color: var(--gold); letter-spacing: -0.03em; }
+.ev-stat-l { font-size: 0.71rem; color: var(--text-muted); margin-top: 0.3rem; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
 
-.ev-section { margin-bottom: 2.5rem; }
-.ev-section h2 {
-  font-size: 0.78rem; font-family: var(--font-body); font-weight: 600;
-  color: var(--text-dim); margin: 0 0 0.9rem;
-}
-.ev-section > p { color: var(--text); line-height: 1.65; margin: 0; }
-.ev-lead { font-size: 1.02rem; line-height: 1.6; }
+/* Findings */
+.ev-section-title { font: 0.67rem var(--font-mono); letter-spacing: 0.12em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.85rem; }
+.ev-finding { margin-bottom: 0.75rem; padding: 1rem 1.2rem; background: var(--ink-raised-2); border: 1px solid var(--ink-border); border-left: 3px solid var(--gold); border-radius: 8px; }
+.ev-finding.hard { border-left-color: var(--success); }
+.ev-finding.risk { border-left-color: var(--danger); }
+.ev-finding-title { font-size: 0.84rem; font-weight: 600; color: var(--text); margin-bottom: 0.35rem; line-height: 1.35; }
+.ev-finding.hard .ev-finding-title { color: var(--success); }
+.ev-finding-detail { font-size: 0.77rem; color: var(--text-dim); line-height: 1.6; }
+.ev-finding-files { font: 0.68rem var(--font-mono); color: var(--text-muted); margin-top: 0.4rem; }
 
-.ev-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+/* Integration badges */
+.ev-integrations { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.5rem; }
+.ev-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.28rem 0.65rem; background: var(--ink-raised-3); border: 1px solid var(--ink-border); border-radius: 5px; font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono); }
+.ev-badge-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); }
 
-.ev-list { margin: 0; padding: 0; list-style: none; }
-.ev-list li {
-  position: relative; padding-left: 1.1rem; margin-bottom: 0.75rem;
-  line-height: 1.6; color: var(--text); font-size: 0.94rem;
-}
-.ev-list li::before {
-  content: ""; position: absolute; left: 0; top: 0.62em;
-  width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim);
-}
-.ev-list-strong li::before { background: var(--gold); }
-.ev-list-muted li { color: var(--text-dim); }
-.ev-list-check li::before { background: #4ade80; }
-.ev-list-risk li::before { background: var(--danger); }
+/* Empty/connect state */
+.ev-connect { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; text-align: center; gap: 1rem; padding: 3rem; }
+.ev-connect-title { font: 600 1.25rem var(--font-display); }
+.ev-connect-sub { font-size: 0.84rem; color: var(--text-dim); max-width: 340px; line-height: 1.6; }
 
-.ev-integrations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
-.ev-integration {
-  background: var(--ink-raised); border: 1px solid var(--ink-border);
-  border-radius: 8px; padding: 1rem;
-}
-.ev-integration-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem; }
-.ev-integration-name { font-weight: 600; color: var(--text); font-size: 0.92rem; }
-.ev-integration-count { font-size: 0.72rem; color: var(--gold); }
-.ev-integration p { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.55; }
-
-.ev-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 1rem; }
-.ev-chip {
-  font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem;
-  background: var(--ink-raised); border: 1px solid var(--ink-border);
-  color: var(--text-dim); padding: 0.2rem 0.5rem; border-radius: 4px;
-}
-
-.ev-slide-preview { padding: 1.5rem; background: var(--paper); border-radius: 12px; }
-.ev-slide-preview h2 { color: #8a8272; }
-.ev-slide-text {
-  font-family: var(--font-display); font-size: 1.1rem; line-height: 1.6;
-  color: #201c10; margin: 0;
-}
-
-.ev-toggle {
-  background: none; border: none; color: var(--gold);
-  font-size: 0.85rem; cursor: pointer; padding: 0; text-decoration: underline;
-}
-.ev-evidence { margin-top: 1.5rem; }
-.ev-evidence h4 {
-  font-size: 0.75rem; color: var(--text-dim); font-weight: 600;
-  margin: 1.5rem 0 0.6rem;
-}
-.ev-stat-row { display: flex; flex-wrap: wrap; gap: 2rem; }
-.ev-stat { display: flex; flex-direction: column; }
-.ev-stat-value {
-  font-family: var(--font-display); font-size: 1.6rem; color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.ev-stat-label { font-size: 0.72rem; color: var(--text-dim); }
-.ev-files { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.ev-files code {
-  font-size: 0.7rem; background: var(--ink-raised); color: var(--text-dim);
-  padding: 0.18rem 0.42rem; border-radius: 3px;
-}
+/* Repo list */
+.ev-repo-list { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.5rem; }
+.ev-repo-card { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; background: var(--ink-raised-2); border: 1px solid var(--ink-border); border-radius: 10px; cursor: pointer; transition: border-color 0.15s; }
+.ev-repo-card:hover { border-color: var(--border-strong); }
+.ev-repo-card-name { flex: 1; font-size: 0.88rem; font-weight: 500; }
+.ev-repo-card-meta { font-size: 0.74rem; color: var(--text-muted); }
+.ev-repo-card-action { font-size: 0.76rem; color: var(--gold); font-weight: 500; border: none; background: none; cursor: pointer; font-family: var(--font-body); }
 
 @media (max-width: 800px) {
-  .ev-columns { grid-template-columns: 1fr; gap: 0; }
-  .ev { padding: 2rem 1.25rem 4rem; }
-  .ev-headline { font-size: 1.3rem; }
-  .ev-repo { flex-direction: column; align-items: stretch; }
+  .evidence-body { grid-template-columns: 1fr; }
+  .evidence-nav { border-right: none; border-bottom: 1px solid var(--ink-border); flex-direction: row; flex-wrap: wrap; padding: 0.75rem 1.25rem; }
 }
+
+/* Evidence upgrades */
+.ev-headline-block { margin-bottom:2rem; padding:1.25rem 1.5rem; background:rgba(196,154,40,.04); border:1px solid rgba(196,154,40,.12); border-radius:10px; border-left:3px solid var(--gold); }
+.ev-headline-text { font:400 1.1rem/1.5 var(--font-display); color:var(--text); letter-spacing:-.01em; }
+.ev-headline-label { font:.62rem var(--font-mono); letter-spacing:.1em; color:var(--gold-dim); text-transform:uppercase; margin-bottom:.5rem; }
+
+.ev-two-col { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem; }
+@media(max-width:700px){.ev-two-col{grid-template-columns:1fr}}
+
+.ev-tag-cloud { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:1.5rem; }
+.ev-tag { display:inline-flex; align-items:center; padding:.22rem .6rem; background:var(--ink-raised-3); border:1px solid var(--ink-border); border-radius:5px; font:.69rem var(--font-mono); color:var(--text-dim); }
+.ev-tag.primary { border-color:rgba(196,154,40,.25); color:var(--gold-dim); background:rgba(196,154,40,.06); }
+
+.ev-maturity { display:flex; flex-wrap:wrap; gap:.35rem; }
+.ev-maturity-tag { padding:.22rem .65rem; background:rgba(74,222,128,.06); border:1px solid rgba(74,222,128,.18); border-radius:5px; font:.69rem var(--font-mono); color:var(--success); }
+
+.ev-risk-item { padding:.85rem 1rem; background:var(--ink-raised-2); border:1px solid rgba(248,113,113,.15); border-left:3px solid var(--danger); border-radius:8px; margin-bottom:.5rem; }
+.ev-risk-item .ev-finding-title { color:var(--danger); }
+
+.ev-analyze-btn { display:flex; align-items:center; gap:.5rem; background:var(--gold); color:#0d0c0a; font:600 .82rem var(--font-body); padding:.5rem 1rem; border-radius:7px; border:none; cursor:pointer; }
+.ev-analyze-btn:hover { background:var(--gold-hover); }
+.ev-analyze-btn:disabled { opacity:.5; cursor:default; transform:none; }
+
+.ev-spinner { width:14px; height:14px; border:2px solid rgba(0,0,0,.2); border-top-color:#0d0c0a; border-radius:50%; animation:evspin .6s linear infinite; }
+@keyframes evspin{to{transform:rotate(360deg)}}

@@ -82,58 +82,88 @@ export default function Evidence({
   }
 
   return (
-    <div className="ev">
-      <header className="ev-head">
-        <h1 className="dash-title">Technical evidence</h1>
-        <p className="dash-subtitle">
-          Provisio reads your repository's actual source, not just its metadata, and writes the
-          technical assessment an investor's engineer would produce in diligence.
-        </p>
-        <div className="ev-actions">
-          <button className="p-btn p-btn-primary" onClick={() => startGithubConnect()}>
-            Connect GitHub
-          </button>
-          <button className="p-btn p-btn-secondary" onClick={loadRepos} disabled={loading}>
-            {loading ? "Loading…" : "Load my repositories"}
-          </button>
+    <div className="evidence">
+      <div className="evidence-header">
+        <div className="evidence-title">Evidence</div>
+        <button className="evidence-connect-btn" onClick={() => startGithubConnect()}>
+          ＋ Connect GitHub
+        </button>
+      </div>
+
+      <div className="evidence-body">
+        {/* Sidebar */}
+        <div className="evidence-nav">
+          {repos && repos.length > 0 ? (
+            <>
+              <div className="ev-section-label">Analysed repos</div>
+              {repos.map((r) => (
+                <button
+                  key={r.full_name}
+                  className={`ev-repo-item ${result?.summary.full_name === r.full_name ? "active" : ""}`}
+                  onClick={() => analyze(r.full_name)}
+                  disabled={!!analyzing}
+                >
+                  <div className="ev-repo-dot" />
+                  {r.full_name.split("/")[1]}
+                </button>
+              ))}
+            </>
+          ) : null}
+          <div className="ev-section-label" style={{ marginTop: "1.25rem" }}>Connection</div>
+          <div className="ev-connection-info">
+            {repos
+              ? <>GitHub connected<br /><span className="ev-connection-status">● Active</span></>
+              : <button className="ev-repo-item" style={{ color: "var(--gold-dim)" }} onClick={loadRepos} disabled={loading}>
+                  {loading ? "Loading…" : "Load repositories"}
+                </button>}
+          </div>
         </div>
-      </header>
 
-      {error && <p className="p-error">{error}</p>}
+        {/* Main content */}
+        <div className="evidence-content">
+          {error && <p style={{ color: "var(--danger)", fontSize: "0.82rem", marginBottom: "1rem" }}>{error}</p>}
 
-      {repos && !result && (
-        <div className="ev-repos">
-          {repos.map((r) => (
-            <div className="ev-repo" key={r.full_name}>
-              <div className="ev-repo-info">
-                <span className="ev-repo-name">
-                  {r.full_name}
-                  {r.private && <span className="ev-private">private</span>}
-                </span>
-                {r.description && <span className="ev-repo-desc">{r.description}</span>}
+          {!repos && !loading && (
+            <div className="ev-connect">
+              <div className="ev-connect-title">Connect your GitHub</div>
+              <div className="ev-connect-sub">
+                Provisio reads your source files — not just metadata — and writes the technical
+                assessment an investor's engineer would produce in diligence.
               </div>
-              <button
-                className="p-btn p-btn-secondary"
-                onClick={() => analyze(r.full_name)}
-                disabled={!!analyzing}
-              >
-                {analyzing === r.full_name ? "Reading the code…" : "Analyse"}
+              <button className="evidence-connect-btn" onClick={() => startGithubConnect()}>
+                Connect GitHub →
               </button>
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {analyzing && (
-        <div className="ev-progress">
-          <p>Reading source files from {analyzing}, then assessing architecture.</p>
-          <p className="ev-progress-note">
-            This takes longer than a metadata lookup because it fetches and reads real files.
-          </p>
-        </div>
-      )}
+          {repos && !result && !analyzing && (
+            <>
+              <div className="ev-section-title">Your repositories</div>
+              <div className="ev-repo-list">
+                {repos.map((r) => (
+                  <div className="ev-repo-card" key={r.full_name} onClick={() => analyze(r.full_name)}>
+                    <div className="ev-repo-dot" />
+                    <div className="ev-repo-card-name">{r.full_name}</div>
+                    {r.description && <div className="ev-repo-card-meta">{r.description}</div>}
+                    <button className="ev-repo-card-action" disabled={!!analyzing}>
+                      {analyzing === r.full_name ? "Reading…" : "Analyse →"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
-      {result && <Report result={result} showEvidence={showEvidence} setShowEvidence={setShowEvidence} onBack={() => setResult(null)} />}
+          {analyzing && (
+            <div style={{ padding: "2rem 0", color: "var(--text-dim)", fontSize: "0.85rem", lineHeight: 1.6 }}>
+              <p style={{ marginBottom: "0.5rem", color: "var(--text)" }}>Reading {analyzing}…</p>
+              <p>Fetching and reading source files. This takes longer than a metadata lookup because it actually reads your code.</p>
+            </div>
+          )}
+
+          {result && <Report result={result} showEvidence={showEvidence} setShowEvidence={setShowEvidence} onBack={() => setResult(null)} />}
+        </div>
+      </div>
     </div>
   );
 }
@@ -149,40 +179,58 @@ function Report({
   const { summary, diligence, technology_slide_content } = result;
 
   return (
-    <article className="ev-report">
+    <div className="ev-report">
       <div className="ev-report-head">
         <button className="p-btn p-btn-ghost" onClick={onBack}>&lt; All repositories</button>
         <span className="ev-repo-label">{summary.full_name}</span>
       </div>
 
       {diligence.investor_headline && (
-        <p className="ev-headline">{diligence.investor_headline}</p>
+        <div className="ev-headline-block">
+          <div className="ev-headline-label">Investor headline</div>
+          <div className="ev-headline-text">{diligence.investor_headline}</div>
+        </div>
       )}
 
-      <section className="ev-section">
-        <h2>What this system is</h2>
-        <p className="ev-lead">{diligence.system_summary}</p>
+      <section style={{ marginBottom: "1.5rem" }}>
+        <div className="ev-stats" style={{ marginBottom: "1.25rem" }}>
+          <div className="ev-stat"><div className="ev-stat-n">{summary.api_endpoint_count}</div><div className="ev-stat-l">API endpoints</div></div>
+          <div className="ev-stat"><div className="ev-stat-n">{summary.commit_count_last_90_days}</div><div className="ev-stat-l">commits / 90d</div></div>
+          <div className="ev-stat"><div className="ev-stat-n">{summary.contributor_count}</div><div className="ev-stat-l">contributors</div></div>
+          <div className="ev-stat"><div className="ev-stat-n">{summary.detected_integrations.length}</div><div className="ev-stat-l">integrations</div></div>
+          <div className="ev-stat"><div className="ev-stat-n">{summary.data_model_names.length}</div><div className="ev-stat-l">data models</div></div>
+        </div>
+        <div className="ev-section-title">What this system is</div>
+        <p style={{ fontSize: "0.88rem", color: "var(--text-dim)", lineHeight: 1.6 }}>{diligence.system_summary}</p>
       </section>
 
       <div className="ev-columns">
-        <section className="ev-section">
-          <h2>What's genuinely hard here</h2>
-          <ul className="ev-list ev-list-strong">
-            {diligence.what_is_hard.map((item, i) => <li key={i}>{item}</li>)}
-          </ul>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">What's genuinely hard here</div>
+          <div className="ev-list-cards">
+            {diligence.what_is_hard.map((item, i) => (
+              <div className="ev-finding hard" key={i}>
+                <div className="ev-finding-title">{item}</div>
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section className="ev-section">
-          <h2>What's commodity</h2>
-          <ul className="ev-list ev-list-muted">
-            {diligence.what_is_commodity.map((item, i) => <li key={i}>{item}</li>)}
-          </ul>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">What's commodity</div>
+          <div className="ev-list-cards">
+            {diligence.what_is_commodity.map((item, i) => (
+              <div className="ev-finding" key={i}>
+                <div className="ev-finding-title" style={{color:"var(--text-dim)"}}>{item}</div>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
 
       {diligence.architecture_notes.length > 0 && (
-        <section className="ev-section">
-          <h2>Architecture</h2>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">Architecture</div>
           <ul className="ev-list">
             {diligence.architecture_notes.map((item, i) => <li key={i}>{item}</li>)}
           </ul>
@@ -190,8 +238,8 @@ function Report({
       )}
 
       {diligence.integration_depth.length > 0 && (
-        <section className="ev-section">
-          <h2>Integration depth</h2>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">Integration depth</div>
           <div className="ev-integrations">
             {diligence.integration_depth.map((integ, i) => {
               const detected = summary.detected_integrations.find(
@@ -216,9 +264,9 @@ function Report({
       )}
 
       {diligence.data_model_insight && (
-        <section className="ev-section">
-          <h2>What the data model says about the business</h2>
-          <p className="ev-lead">{diligence.data_model_insight}</p>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">What the data model says about the business</div>
+          <p style={{ fontSize: "0.88rem", color: "var(--text-dim)", lineHeight: 1.6 }}>{diligence.data_model_insight}</p>
           {summary.data_model_names.length > 0 && (
             <div className="ev-chips">
               {summary.data_model_names.slice(0, 24).map((n) => (
@@ -230,36 +278,40 @@ function Report({
       )}
 
       <div className="ev-columns">
-        <section className="ev-section">
-          <h2>Production readiness</h2>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">Production readiness</div>
           <p>{diligence.production_readiness}</p>
           {summary.maturity_signals.length > 0 && (
-            <ul className="ev-list ev-list-check">
-              {summary.maturity_signals.map((s, i) => <li key={i}>{s}</li>)}
-            </ul>
+            <div className="ev-maturity" style={{marginTop:"0.75rem"}}>
+              {summary.maturity_signals.map((sig, i) => <span className="ev-maturity-tag" key={i}>{sig}</span>)}
+            </div>
           )}
         </section>
 
-        <section className="ev-section">
-          <h2>Risks an investor will probe</h2>
-          <ul className="ev-list ev-list-risk">
-            {diligence.technical_risks.map((item, i) => <li key={i}>{item}</li>)}
-          </ul>
+        <section style={{ marginBottom: "1.5rem" }}>
+          <div className="ev-section-title">Risks an investor will probe</div>
+          <div className="ev-list-cards">
+            {diligence.technical_risks.map((item, i) => (
+              <div className="ev-finding risk" key={i}>
+                <div className="ev-finding-title">{item}</div>
+              </div>
+            ))}
+          </div>
         </section>
       </div>
 
       <section className="ev-section ev-slide-preview">
-        <h2>The Technology slide this produces</h2>
+        <div className="ev-section-title">The Technology slide this produces</div>
         <p className="ev-slide-text">{technology_slide_content}</p>
       </section>
 
-      <section className="ev-section">
+      <section style={{ marginBottom: "1.5rem" }}>
         <button className="ev-toggle" onClick={() => setShowEvidence(!showEvidence)}>
           {showEvidence ? "Hide" : "Show"} the underlying evidence
         </button>
         {showEvidence && (
           <div className="ev-evidence">
-            <div className="ev-stat-row">
+            <div className="ev-stats">
               <Stat label="Files read" value={String(summary.files_read.length)} />
               <Stat label="API endpoints" value={String(summary.api_endpoint_count)} />
               <Stat label="Data entities" value={String(summary.data_model_names.length)} />
@@ -279,7 +331,7 @@ function Report({
           </div>
         )}
       </section>
-    </article>
+    </div>
   );
 }
 
