@@ -27,12 +27,14 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
 export interface AdminUser {
   user_id: string;
   email: string;
+  display_name: string | null;
   is_admin: boolean;
   plan: string;
-  decks: number;
-  exports: number;
-  created_at: string;
-  last_active: string | null;
+  plan_name: string;
+  can_export: boolean;
+  deck_count: number;
+  export_count: number;
+  joined: string | null;
 }
 
 export interface AdminStats {
@@ -57,11 +59,11 @@ export interface AdminUsageRow {
 
 export const api = {
   stats: () => req<AdminStats>("/admin/stats"),
-  users: (q?: string) => req<AdminUser[]>(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
-  grantAdmin: (userId: string) => req<void>(`/admin/grant`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
-  revokeAdmin: (userId: string) => req<void>(`/admin/revoke`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
+  users: (q?: string) => req<AdminUser[]>(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`).then((r:any) => Array.isArray(r) ? r : (r.users ?? [])),
+  grantAdmin: (userId: string) => req<void>(`/admin/grant-admin`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
+  revokeAdmin: (userId: string) => req<void>(`/admin/revoke-admin`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
   grantPlan: (userId: string, plan: string, months?: number) =>
-    req<void>(`/admin/grant-plan`, { method: "POST", body: JSON.stringify({ user_id: userId, plan, months }) }),
+    req<void>(`/admin/grant`, { method: "POST", body: JSON.stringify({ target_user_id: userId, plan_id: plan, note: "admin grant" }) }),
   revokePlan: (userId: string) =>
     req<void>(`/admin/revoke-plan`, { method: "POST", body: JSON.stringify({ user_id: userId }) }),
   usage: () => req<AdminUsageRow[]>("/admin/usage"),

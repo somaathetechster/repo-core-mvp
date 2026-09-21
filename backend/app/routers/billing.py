@@ -123,16 +123,19 @@ async def require_admin(session, user_id: str) -> UserFlagsModel:
 
 @admin.get("/users")
 async def list_users(
+    request: Request,
     limit: int = 100,
-    user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_current_user_id_optional),
 ):
     """
-    Everyone who has used the product, with what they've built and what
-    they're paying. Built from the tables that already exist rather than a
-    separate users table, so it can't drift out of sync with reality.
+    Everyone who has used the product. Accepts either a Supabase JWT from an
+    admin user, or the X-Admin-Key header from the controller app.
     """
     async with AsyncSessionLocal() as session:
-        await require_admin(session, user_id)
+        if not _check_admin_key(request):
+            if not user_id:
+                raise HTTPException(status_code=403, detail="Not authorised")
+            await require_admin(session, user_id)
 
         deck_counts = dict((await session.execute(
             select(DeckModel.user_id, func.count(DeckModel.id)).group_by(DeckModel.user_id)
@@ -175,15 +178,8 @@ async def list_users(
 
         users.sort(key=lambda u: (-u["deck_count"], u["user_id"]))
 
-        return {
-            "users": users[:limit],
-            "totals": {
-                "users": len(users),
-                "paying": sum(1 for u in users if u["plan"] != "free"),
-                "decks": sum(deck_counts.values()),
-                "exports": sum(export_counts.values()),
-            },
-        }
+        # Return flat list - the controller app expects an array
+        return users[:limit]
 
 
 class GrantRequest(BaseModel):
@@ -193,7 +189,7 @@ class GrantRequest(BaseModel):
 
 
 @admin.post("/grant")
-async def grant_plan(body: GrantRequest, user_id: str = Depends(get_current_user_id)):
+async def grant_plan(request: Request, body: GrantRequest, user_id: str = Depends(get_current_user_id_optional)):
     """
     Gives a user a plan without payment, for campaigns and comps.
 
@@ -237,7 +233,7 @@ class RevokeRequest(BaseModel):
 
 
 @admin.post("/revoke")
-async def revoke(body: RevokeRequest, user_id: str = Depends(get_current_user_id)):
+async def revoke(request: Request, body: RevokeRequest, user_id: str = Depends(get_current_user_id_optional)):
     async with AsyncSessionLocal() as session:
         await require_admin(session, user_id)
         sub = await session.get(SubscriptionModel, body.subscription_id)
@@ -251,7 +247,7 @@ async def revoke(body: RevokeRequest, user_id: str = Depends(get_current_user_id
 
 
 @admin.get("/usage")
-async def recent_usage(limit: int = 100, user_id: str = Depends(get_current_user_id)):
+async def recent_usage(request: Request, limit: int = 100, user_id: str = Depends(get_current_user_id_optional)):
     async with AsyncSessionLocal() as session:
         await require_admin(session, user_id)
         rows = (await session.execute(

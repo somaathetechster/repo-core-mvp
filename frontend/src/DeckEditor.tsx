@@ -401,9 +401,10 @@ export default function DeckEditor({
 
   return (
     <div className="deck-editor">
-      <div className="deck-editor-toolbar-wrap"><header className="deck-toolbar">
-        <div className="deck-toolbar-left">
-          <button className="p-btn p-btn-ghost" onClick={onBack}>&lt; Decks</button>
+      <div className="deck-editor-toolbar-wrap">
+        <header className="deck-toolbar">
+          <div className="deck-toolbar-left">
+            <button className="p-btn p-btn-ghost" onClick={onBack}>&lt; Decks</button>
           <input
             className="p-input deck-name-input"
             value={deckName}
@@ -461,7 +462,9 @@ export default function DeckEditor({
             {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
         </div>
-      </header>
+        </header>
+      </div>
+      <div className="deck-editor-content">
 
       {error && <p className="p-error">{error}</p>}
       {notice && <p className="deck-notice">{notice}</p>}
@@ -509,7 +512,7 @@ export default function DeckEditor({
           />
         )
       )}
-      </div>
+      </div>{/* deck-editor-content */}
     </div>
   );
 }

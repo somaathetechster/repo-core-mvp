@@ -142,10 +142,10 @@ function Users({ onGrant, onRevoke, onGrantPlan, onRevokePlan }:
                   <div className="mono" style={{color:"var(--text3)",fontSize:"0.7rem"}}>{u.user_id.slice(0,12)}…</div>
                 </td>
                 <td>{planBadge(u.plan)}</td>
-                <td>{u.decks}</td>
-                <td>{u.exports}</td>
-                <td>{relTime(u.created_at)}</td>
-                <td>{relTime(u.last_active)}</td>
+                <td>{u.deck_count}</td>
+                <td>{u.export_count}</td>
+                <td>{relTime(u.joined)}</td>
+                <td>{relTime(u.joined)}</td>
                 <td>
                   {u.is_admin
                     ? <span className="badge badge-gold">Admin</span>
