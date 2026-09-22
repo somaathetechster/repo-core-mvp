@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "./supabaseClient";
 import "./theme.css";
 import "./auth.css";
+import { PasswordRules, passwordError, MIN_PASSWORD_LENGTH } from "./passwordPolicy";
 
 interface LoginProps {
   onGoHome: () => void;
@@ -49,6 +50,9 @@ export default function Login({ onGoHome }: LoginProps) {
       }
 
       else if (mode === "signup") {
+        const weak = passwordError(password);
+        if (weak) { setError(weak); return; }
+
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -76,6 +80,9 @@ export default function Login({ onGoHome }: LoginProps) {
       }
 
       else if (mode === "reset") {
+        const weak = passwordError(password);
+        if (weak) { setError(weak); return; }
+
         // Verifying the recovery code signs the founder in, which is what
         // authorises the password change that follows.
         const { error: otpError } = await supabase.auth.verifyOtp({
@@ -161,9 +168,9 @@ export default function Login({ onGoHome }: LoginProps) {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              placeholder="6-digit code"
+              placeholder="Code from your email"
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
               required
               autoFocus
             />
@@ -177,9 +184,11 @@ export default function Login({ onGoHome }: LoginProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={mode === "login" ? undefined : MIN_PASSWORD_LENGTH}
             />
           )}
+
+          {(mode === "signup" || mode === "reset") && <PasswordRules value={password} />}
 
           {error && <p className="p-error">{error}</p>}
           {notice && <p className="auth-notice">{notice}</p>}

@@ -36,3 +36,10 @@
 .auth-link:hover { color: var(--gold); }
 .auth-link:disabled { opacity: 0.5; cursor: default; }
 .auth-secondary { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.25rem; }
+
+/* Password requirements checklist */
+.pw-rules { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem 0.75rem; }
+.pw-rule { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; transition: color .15s; }
+.pw-rule-mark { font-size: 0.7rem; width: 0.8rem; flex-shrink: 0; }
+.pw-rule.is-met { color: var(--success); }
+@media (max-width: 420px) { .pw-rules { grid-template-columns: 1fr; } }

@@ -39,3 +39,9 @@
 .pw-form { display: flex; flex-direction: column; gap: 0.85rem; max-width: 360px; margin-top: 1rem; }
 .pw-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: var(--text-dim); }
 .pw-done { font-size: 0.8rem; color: var(--success); margin: 0; }
+
+/* Password requirements checklist (Security page) */
+.pw-rules { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.22rem; }
+.pw-rule { display: flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; }
+.pw-rule-mark { font-size: 0.7rem; width: 0.8rem; flex-shrink: 0; }
+.pw-rule.is-met { color: var(--success); }

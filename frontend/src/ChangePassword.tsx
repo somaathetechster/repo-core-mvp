@@ -9,6 +9,7 @@
  */
 import { useState } from "react";
 import { supabase } from "./supabaseClient";
+import { PasswordRules, passwordError, MIN_PASSWORD_LENGTH } from "./passwordPolicy";
 
 export default function ChangePassword({ email }: { email: string }) {
   const [current, setCurrent] = useState("");
@@ -23,7 +24,8 @@ export default function ChangePassword({ email }: { email: string }) {
     setError(null);
     setDone(false);
 
-    if (next.length < 6) { setError("Use at least 6 characters."); return; }
+    const weak = passwordError(next);
+    if (weak) { setError(weak); return; }
     if (next !== confirm) { setError("The two new passwords don't match."); return; }
     if (next === current) { setError("That's the password you already have."); return; }
 
@@ -63,14 +65,15 @@ export default function ChangePassword({ email }: { email: string }) {
         <label className="pw-field">
           <span>New password</span>
           <input
-            className="p-input" type="password" autoComplete="new-password" minLength={6}
+            className="p-input" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH}
             value={next} onChange={(e) => setNext(e.target.value)} required
           />
+          <PasswordRules value={next} />
         </label>
         <label className="pw-field">
           <span>Confirm new password</span>
           <input
-            className="p-input" type="password" autoComplete="new-password" minLength={6}
+            className="p-input" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH}
             value={confirm} onChange={(e) => setConfirm(e.target.value)} required
           />
         </label>
