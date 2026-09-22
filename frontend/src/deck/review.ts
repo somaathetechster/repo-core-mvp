@@ -75,9 +75,18 @@ const NUMBER_RE = /\d[\d,.]*\s*(?:%|k|m|bn?|x|million|billion)?/i;
 /** Vague claims that sound like evidence but contain none. */
 const HEDGE_RE = /\b(significant|substantial|numerous|various|many|several|rapidly|massive|huge|tremendous|leading|innovative|cutting[- ]edge|revolutionary|world[- ]class|seamless|robust|game[- ]chang\w+|best[- ]in[- ]class|state[- ]of[- ]the[- ]art|synerg\w+|disrupt\w+)\b/gi;
 
+export interface ProgramBrief {
+  audience_label: string;
+  programme: string;
+  required_sections: string[];
+  selection_criteria: string[];
+  question_map: { question: string; section: string | null }[];
+}
+
 export function reviewDeck(
   slides: ElementSlide[],
   variants: LayoutVariant[] = [],
+  brief?: ProgramBrief | null,
 ): DeckReview {
   const findings: Finding[] = [];
   const strengths: string[] = [];
@@ -85,7 +94,37 @@ export function reviewDeck(
 
   /* --- 1. Is the argument complete? ------------------------------- */
 
+  // When the deck is aimed at a named programme, that programme's own
+  // requirements decide what "complete" means. A grant panel asking for a
+  // workplan is not satisfied by a deck with a great competition slide.
+  if (brief?.required_sections?.length) {
+    for (const section of brief.required_sections) {
+      if (kinds.includes(section as SlideKind)) continue;
+      const label = section.replace(/_/g, " ");
+      findings.push({
+        id: `prog-missing-${section}`,
+        severity: "critical",
+        slideIndex: null,
+        title: `No ${label} slide, and ${brief.programme} asks for one`,
+        detail: `This is a requirement of the programme you're applying to, not a general suggestion.`,
+        fix: `Add a ${label} slide, or fill that section of your company profile and regenerate.`,
+      });
+    }
+    for (const q of brief.question_map ?? []) {
+      if (q.section) continue;
+      findings.push({
+        id: `prog-q-${q.question.slice(0, 24)}`,
+        severity: "important",
+        slideIndex: null,
+        title: "An application question has no slide answering it",
+        detail: `"${q.question}"`,
+        fix: "Add the answer to the closest slide, or add a slide for it.",
+      });
+    }
+  }
+
   for (const expected of EXPECTED) {
+    if (brief?.required_sections?.length && !brief.required_sections.includes(expected.kind)) continue;
     if (!kinds.includes(expected.kind)) {
       findings.push({
         id: `missing-${expected.kind}`,

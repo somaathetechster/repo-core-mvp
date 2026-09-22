@@ -170,24 +170,28 @@ function HowItWorks() {
       title: "Connect your repository",
       body: "Sign in with GitHub and pick exactly which repositories Provisio may read. It never sees anything you don't choose, and you can disconnect whenever you like.",
       video: "",
+      image: "/marketing/step-1.png",
     },
     {
       n: "02",
       title: "Tell it about your company",
       body: "Fill in what you know: the problem, your customers, traction, what you're raising. Already have a deck? Import it and Provisio pulls the content out for you.",
       video: "",
+      image: "/marketing/step-2.png",
     },
     {
       n: "03",
       title: "It reads the code and writes the deck",
       body: "Provisio opens your real source files, works out what the system does and which parts are hard, then writes every slide around evidence instead of adjectives.",
       video: "",
+      image: "/marketing/step-3.png",
     },
     {
       n: "04",
       title: "Make it yours, then download",
       body: "Switch templates, change colours and type, drag anything anywhere, drop in your own screenshots and charts. Export to PowerPoint or PDF when it's right.",
       video: "",
+      image: "",
     },
   ];
 
@@ -206,7 +210,7 @@ function HowItWorks() {
                 <h3>{s.title}</h3>
                 <p>{s.body}</p>
               </div>
-              <VideoSlot src={s.video} label={s.title} />
+              <VideoSlot src={s.video} image={s.image} label={s.title} />
             </article>
           ))}
         </div>
@@ -223,10 +227,20 @@ function HowItWorks() {
  * lot of third-party tracking to a page most visitors only scroll through.
  * To publish a video, paste its embed URL into the matching step above.
  */
-function VideoSlot({ src, label }: { src: string; label: string }) {
+function VideoSlot({ src, image, label }: { src: string; image?: string; label: string }) {
   const [playing, setPlaying] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
+  // A real screenshot of the product is better than a promise of a video.
+  // Falls through to the placeholder only if neither exists.
   if (!src) {
+    if (image && !imageFailed) {
+      return (
+        <figure className="mk-shot">
+          <img src={image} alt={label} loading="lazy" onError={() => setImageFailed(true)} />
+        </figure>
+      );
+    }
     return (
       <div className="mk-video mk-video-empty" aria-hidden="true">
         <span>Walkthrough coming soon</span>
@@ -481,7 +495,10 @@ function Footer() {
           <a href="#pricing">Pricing</a>
           <a href="#faq">Questions</a>
         </nav>
-        <p className="mk-copyright">© {new Date().getFullYear()} Provisio, by Domani.</p>
+        <p className="mk-copyright">
+          © {new Date().getFullYear()} Provisio · Powered by{" "}
+          <a className="mk-domani" href="https://www.domanimedia.com" target="_blank" rel="noopener noreferrer">Domani</a>
+        </p>
       </div>
     </footer>
   );

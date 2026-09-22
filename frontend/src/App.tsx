@@ -181,6 +181,9 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           </button>
         </nav>
         <div className="dash-user">
+          <a className="dash-domani" href="https://www.domanimedia.com" target="_blank" rel="noopener noreferrer">
+            Powered by Domani
+          </a>
           <span className="dash-email">{userName || userEmail}</span>
           <button className="p-btn p-btn-ghost" onClick={() => supabase.auth.signOut()}>
             Log out

@@ -117,3 +117,6 @@
   .dash-email { display: none; }
   .dash-body { padding: 2rem 1.25rem; }
 }
+
+.dash-domani { font-size: 0.72rem; color: var(--text-muted); text-decoration: none; white-space: nowrap; margin-right: 0.85rem; }
+.dash-domani:hover { color: var(--gold); }

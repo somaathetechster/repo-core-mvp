@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import SlideCanvas from "./deck/SlideCanvas";
-import { searchLibrary, instantiate, type LibraryItem } from "./deck/library";
+import { searchLibrary, instantiate, LIBRARY_INDUSTRIES, normaliseIndustry, type LibraryItem } from "./deck/library";
 import {
   buildTheme, loadFontPairing, contrastRatio, FONT_PAIRINGS,
   type ThemeSettings,
@@ -53,8 +53,8 @@ export default function DeckStudio({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [assetQuery, setAssetQuery] = useState("");
+  const [industryFilter, setIndustryFilter] = useState<string | null>(() => normaliseIndustry(industry));
   const [assetCat, setAssetCat] = useState<AssetCategory | "all">("all");
-  const [filterIndustry, setFilterIndustry] = useState(true);
 
   const theme = useMemo(() => buildTheme(themeSettings), [themeSettings]);
 
@@ -319,14 +319,25 @@ export default function DeckStudio({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            {industry && (
-              <label className="dst-check">
-                <input type="checkbox" checked={filterIndustry} onChange={(e) => setFilterIndustry(e.target.checked)} />
-                Show items suited to {industry}
-              </label>
-            )}
+            <div className="dst-ind-chips">
+              <button
+                className={industryFilter === null ? "is-active" : ""}
+                onClick={() => setIndustryFilter(null)}
+              >
+                All
+              </button>
+              {LIBRARY_INDUSTRIES.map((ind) => (
+                <button
+                  key={ind.id}
+                  className={industryFilter === ind.id ? "is-active" : ""}
+                  onClick={() => setIndustryFilter(industryFilter === ind.id ? null : ind.id)}
+                >
+                  {ind.label}
+                </button>
+              ))}
+            </div>
             <div className="dst-library">
-              {searchLibrary(query, filterIndustry ? industry : null).map((item: LibraryItem) => (
+              {searchLibrary(query, industryFilter).map((item: LibraryItem) => (
                 <button
                   key={item.id}
                   className="dst-lib-item"
@@ -336,7 +347,7 @@ export default function DeckStudio({
                   <em>{item.description}</em>
                 </button>
               ))}
-              {searchLibrary(query, filterIndustry ? industry : null).length === 0 && (
+              {searchLibrary(query, industryFilter).length === 0 && (
                 <p className="dst-hint">Nothing matches that. Try a broader word.</p>
               )}
             </div>

@@ -76,6 +76,13 @@ class CompanyProfileIn(BaseModel):
     program_url: str = ""
     program_requirements: str = ""
     program_deadline: str = ""
+    program_questions: str = ""
+    why_this_program: str = ""
+    why_now: str = ""
+    customer_segment: str = ""
+    unit_economics: str = ""
+    milestones_next_12m: str = ""
+    impact_outcomes: str = ""
 
 
 @router.get("")

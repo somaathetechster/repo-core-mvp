@@ -190,6 +190,17 @@ def generate_narrative(
 ) -> DeckNarrative:
     source_text, empty_sections = _build_input(profile, diligence)
 
+    # The same facts must be written differently for different readers. The
+    # brief says who is reading, what they select on, and what the programme
+    # explicitly asked for, so the copy is aimed rather than generic.
+    try:
+        from app.services.program_intelligence import build_brief, brief_for_prompt
+        brief_block = brief_for_prompt(build_brief(profile))
+        source_text = f"{brief_block}\n\n---\n\nCOMPANY MATERIAL:\n\n{source_text}"
+    except Exception:
+        # Never let audience tailoring break generation outright.
+        pass
+
     raw = generate(GenerateRequest(
         task="deck_narrative",
         system=NARRATIVE_SYSTEM,

@@ -173,3 +173,13 @@
 }
 .dst-bg-swatch:hover { border-color: var(--text-dim); }
 .dst-bg-swatch.is-active { border-color: var(--gold); }
+
+/* Library industry chips */
+.dst-ind-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.2rem; }
+.dst-ind-chips button {
+  background: var(--ink); border: 1px solid var(--ink-border); color: var(--text-dim);
+  border-radius: 999px; padding: 0.22rem 0.55rem; font-size: 0.68rem; cursor: pointer;
+  font-family: var(--font-body);
+}
+.dst-ind-chips button:hover { border-color: var(--border-strong); color: var(--text); }
+.dst-ind-chips button.is-active { border-color: var(--gold); color: var(--gold); background: var(--gold-faint); }

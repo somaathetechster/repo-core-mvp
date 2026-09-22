@@ -98,6 +98,19 @@ class CompanyProfileModel(Base):
     program_url: Mapped[str] = mapped_column(String, default="")
     program_requirements: Mapped[str] = mapped_column(Text, default="")  # what THEY ask for, pasted or summarized
     program_deadline: Mapped[str] = mapped_column(String, default="")
+    #: The application's own questions, pasted. Each is routed to the slide
+    #: that answers it, so the deck visibly answers the form.
+    program_questions: Mapped[str] = mapped_column(Text, default="")
+    #: Why this company fits this programme. Becomes the "fit" slide, which
+    #: accelerators and corporate programmes weight heavily.
+    why_this_program: Mapped[str] = mapped_column(Text, default="")
+
+    # Sections that previously had nowhere to live, each feeding one slide.
+    why_now: Mapped[str] = mapped_column(Text, default="")                 # -> why_now slide
+    customer_segment: Mapped[str] = mapped_column(Text, default="")        # -> market slide
+    unit_economics: Mapped[str] = mapped_column(Text, default="")          # -> business model slide
+    milestones_next_12m: Mapped[str] = mapped_column(Text, default="")     # -> milestones slide
+    impact_outcomes: Mapped[str] = mapped_column(Text, default="")         # -> impact slide (grants)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

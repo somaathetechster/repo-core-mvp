@@ -64,3 +64,9 @@
   .rvp-body { grid-template-columns: 1fr; }
   .rvp-summary { position: static; }
 }
+
+.rvp-aimed { margin-top: .85rem; font-size: .8rem; color: var(--text-dim); background: var(--gold-faint); border: 1px solid rgba(196,154,40,.18); border-radius: 8px; padding: .5rem .75rem; display: inline-block; }
+.rvp-aimed strong { color: var(--gold); font-weight: 600; }
+.rvp-criteria { border-top: 1px solid var(--ink-border); padding-top: 1rem; }
+.rvp-criteria p { margin: 0 0 .5rem; font-size: .78rem; line-height: 1.45; color: var(--text-dim); padding-left: 1.1rem; position: relative; }
+.rvp-criteria p::before { content: "→"; position: absolute; left: 0; color: var(--gold-dim); }

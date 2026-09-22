@@ -46,6 +46,13 @@ const EMPTY_PROFILE: CompanyProfile = {
   valuation_expectation: "",
   risks_and_mitigations: "",
   program_name: "",
+  program_questions: "",
+  why_this_program: "",
+  why_now: "",
+  customer_segment: "",
+  unit_economics: "",
+  milestones_next_12m: "",
+  impact_outcomes: "",
   program_type: "",
   program_url: "",
   program_requirements: "",
@@ -104,6 +111,7 @@ const SECTIONS: Section[] = [
     fields: [
       { key: "market_research", label: "Market research", placeholder: "What research supports the size and timing of this opportunity?", multiline: true },
       { key: "market_opportunity", label: "Market opportunity narrative", placeholder: "The story behind the numbers below", multiline: true },
+      { key: "customer_segment", label: "Who exactly is the customer", placeholder: "The specific person or business who pays. 'SMEs' is not a segment; 'Lagos import traders paying suppliers in USD' is.", multiline: true },
       { key: "tam", label: "TAM (Total addressable market)", placeholder: "e.g. $12B globally, source: [report name]" },
       { key: "sam", label: "SAM (Serviceable addressable market)", placeholder: "e.g. $2.1B in your initial target segment" },
       { key: "som", label: "SOM (Serviceable obtainable market)", placeholder: "e.g. $40M realistically reachable in 3 years" },
@@ -119,6 +127,7 @@ const SECTIONS: Section[] = [
       { key: "key_metrics", label: "Key metrics", placeholder: "The 2-4 numbers that best show momentum", multiline: true },
       { key: "business_model", label: "Business model", placeholder: "How do you charge, and what does the unit economics look like?", multiline: true },
       { key: "pricing_model", label: "Pricing model", placeholder: "e.g. $49/mo per seat, usage-based, one-time license", multiline: true },
+      { key: "unit_economics", label: "Unit economics", placeholder: "What it costs to serve one customer, and what they're worth. Gross margin, CAC, payback if you have them.", multiline: true },
     ],
   },
   {
@@ -127,8 +136,17 @@ const SECTIONS: Section[] = [
     fields: [
       { key: "funding_ask", label: "Funding ask", placeholder: "How much are you raising, and on what terms if known?", multiline: true },
       { key: "use_of_funds", label: "Use of funds", placeholder: "What will this money actually go toward in the next 12-18 months?", multiline: true },
+      { key: "milestones_next_12m", label: "Milestones this funding reaches", placeholder: "What will be true in 12 months that isn't true now. Dated where possible.", multiline: true },
       { key: "previous_funding", label: "Previous funding", placeholder: "Any prior rounds, amounts, and investors, if applicable", multiline: true },
       { key: "valuation_expectation", label: "Valuation expectation", placeholder: "If you have one and want it included" },
+    ],
+  },
+  {
+    title: "Timing and impact",
+    description: "Why now, and who is better off. Grant and impact programs read this first.",
+    fields: [
+      { key: "why_now", label: "Why now", placeholder: "What changed recently that makes this possible or urgent — regulation, cost curve, behaviour shift. Becomes a 'Why now' slide.", multiline: true },
+      { key: "impact_outcomes", label: "Impact and outcomes", placeholder: "Who benefits and by how much, in numbers: people reached, cost saved, emissions avoided. Becomes an 'Impact' slide for grant applications.", multiline: true },
     ],
   },
   {
@@ -572,6 +590,28 @@ export default function CompanyProfileForm({ load, save, heading, description }:
               value={profile.program_deadline}
               onChange={(e) => update("program_deadline", e.target.value)}
             />
+          </label>
+          <label className="profile-field">
+            <span>The application's own questions</span>
+            <textarea
+              className="p-input"
+              rows={5}
+              placeholder={"Paste the questions the application asks, one per line.\nProvisio routes each one to the slide that answers it, and tells you which are unanswered."}
+              value={profile.program_questions}
+              onChange={(e) => update("program_questions", e.target.value)}
+            />
+            <small className="profile-hint">Becomes a checklist: every question gets matched to a slide.</small>
+          </label>
+          <label className="profile-field">
+            <span>Why you fit this program</span>
+            <textarea
+              className="p-input"
+              rows={3}
+              placeholder="What about this program matches what you're building — their focus areas, portfolio, or thesis"
+              value={profile.why_this_program}
+              onChange={(e) => update("why_this_program", e.target.value)}
+            />
+            <small className="profile-hint">Becomes a dedicated "Why {profile.program_name || "this program"}" slide.</small>
           </label>
           <label className="profile-field">
             <span>What this program asks for</span>

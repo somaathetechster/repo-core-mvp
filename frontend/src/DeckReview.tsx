@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listDecks, getDeck, type DeckSummary } from "./api";
 import { toElementSlides, type StoredSlide } from "./deck/migrate";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
-import { reviewDeck, unansweredQuestions, type Finding } from "./deck/review";
+import { reviewDeck, unansweredQuestions, type Finding, type ProgramBrief } from "./deck/review";
 import { planVariants } from "./deck/variants";
 import type { ElementSlide } from "./deck/elements";
 import "./deck-review.css";
@@ -21,6 +21,7 @@ export default function DeckReview({ onOpenDeck }: Props) {
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
   const [deckId, setDeckId] = useState<string | null>(null);
   const [slides, setSlides] = useState<ElementSlide[] | null>(null);
+  const [brief, setBrief] = useState<ProgramBrief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Finding["severity"]>("all");
@@ -38,7 +39,9 @@ export default function DeckReview({ onOpenDeck }: Props) {
     getDeck(deckId)
       .then((d) => {
         if (cancelled) return;
-        const tpl = (d.theme as { template_id?: string } | null)?.template_id ?? DEFAULT_TEMPLATE_ID;
+        const theme = d.theme as { template_id?: string; program_brief?: ProgramBrief } | null;
+        const tpl = theme?.template_id ?? DEFAULT_TEMPLATE_ID;
+        setBrief(theme?.program_brief ?? null);
         setSlides(toElementSlides(d.slides as unknown as StoredSlide[], tpl, { companyName: d.name }));
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "Couldn't load deck"))
@@ -56,8 +59,8 @@ export default function DeckReview({ onOpenDeck }: Props) {
       image: sl.elements.find((e) => e.type === "image" && e.src)?.src ?? null,
       chart: sl.elements.find((e) => e.type === "chart")?.chart ?? null,
     })));
-    return { ...reviewDeck(slides, variants), questions: unansweredQuestions(slides) };
-  }, [slides]);
+    return { ...reviewDeck(slides, variants, brief), questions: unansweredQuestions(slides) };
+  }, [slides, brief]);
 
   const deck = decks?.find((d) => d.id === deckId);
   const shown = review?.findings.filter((f) => filter === "all" || f.severity === filter) ?? [];
@@ -72,6 +75,11 @@ export default function DeckReview({ onOpenDeck }: Props) {
           <div className="rvp-eyebrow">Deck review</div>
           <h1 className="rvp-title">How your pitch reads to an investor</h1>
           <p className="rvp-sub">This reads your argument, not your formatting — evidence, completeness, density and the questions you'll be asked.</p>
+          {brief && (
+            <div className="rvp-aimed">
+              Judged as a submission to <strong>{brief.programme}</strong> ({brief.audience_label}), against what they select on.
+            </div>
+          )}
         </div>
         {decks && decks.length > 0 && (
           <div className="rvp-picker">
@@ -110,6 +118,13 @@ export default function DeckReview({ onOpenDeck }: Props) {
             {deck && onOpenDeck && (
               <button className="rvp-open" onClick={() => onOpenDeck(deck.id)}>Open {deck.name} in editor →</button>
             )}
+            {brief?.selection_criteria?.length ? (
+              <div className="rvp-criteria">
+                <div className="rvp-label">What {brief.programme} selects on</div>
+                {brief.selection_criteria.map((c, i) => <p key={i}>{c}</p>)}
+              </div>
+            ) : null}
+
             {review.strengths.length > 0 && (
               <div className="rvp-strengths">
                 <div className="rvp-label">What's working</div>

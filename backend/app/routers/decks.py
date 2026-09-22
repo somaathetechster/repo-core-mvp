@@ -14,6 +14,7 @@ from app.core.db import AsyncSessionLocal
 from app.models.deck import DeckModel
 from app.models.company_profile import CompanyProfileModel
 from app.routers.company_profile import CompanyProfileIn
+from app.services.program_intelligence import build_brief
 from app.services.deck_builder import build_deck, build_deck_from_narrative, slide_to_dict, theme_to_dict
 from app.services.narrative_engine import generate_narrative
 from app.services.github_extract import RepoSummary
@@ -136,7 +137,8 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
                 profile, narrative, body.repo_summaries
             )
         except Exception as e:
-            slide_list, deck_theme = build_deck(profile, body.repo_summaries)
+            brief = build_brief(profile)
+            slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief)
             narrative_warnings = [
                 f"Slides were written directly from your profile because the narrative "
                 f"step didn't complete: {e}"
@@ -148,7 +150,7 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
             profile_snapshot=profile,
             repo_full_names=[s.full_name for s in body.repo_summaries],
             slides=[slide_to_dict(s) for s in slide_list],
-            theme=theme_to_dict(deck_theme),
+            theme={**theme_to_dict(deck_theme), "program_brief": brief.to_dict()},
             layouts={},
             freeform_slide_ids=[],
         )
@@ -216,14 +218,15 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
         if not deck or deck.user_id != user_id:
             raise HTTPException(status_code=404, detail="Deck not found.")
 
-        slide_list, deck_theme = build_deck(deck.profile_snapshot or {}, body.repo_summaries)
+        brief = build_brief(deck.profile_snapshot or {})
+        slide_list, deck_theme = build_deck(deck.profile_snapshot or {}, body.repo_summaries, brief)
         deck.slides = [slide_to_dict(s) for s in slide_list]
         # Regenerating rewrites the slides, but the founder's chosen template
         # and colour scheme are design decisions about this deck, not content.
         # Carrying them across means "regenerate" doesn't silently undo the
         # styling work they just did.
         previous_theme = deck.theme or {}
-        new_theme = theme_to_dict(deck_theme)
+        new_theme = {**theme_to_dict(deck_theme), "program_brief": brief.to_dict()}
         for key in ("template_id", "scheme_id"):
             if previous_theme.get(key):
                 new_theme[key] = previous_theme[key]

@@ -17,6 +17,7 @@ are dropped rather than shown as blank sections.
 from dataclasses import dataclass, field
 from app.services.narrative import build_technology_slide_content
 from app.services.github_extract import RepoSummary
+from app.services.program_intelligence import DeckBrief, build_brief
 
 
 @dataclass
@@ -126,7 +127,7 @@ def build_deck_from_narrative(
             team_members=team,
         ))
 
-    MAX_SLIDES = 14
+    MAX_SLIDES = 13   # +1 for the contents page inserted below
     if len(slides) > MAX_SLIDES:
         slides = slides[:MAX_SLIDES]
 
@@ -139,8 +140,25 @@ def build_deck_from_narrative(
     return slides, theme, list(narrative.warnings)
 
 
-def build_deck(profile: dict, repo_summaries: list[RepoSummary]) -> tuple[list[Slide], DeckTheme]:
-    slides: list[Slide] = []
+def build_deck(
+    profile: dict,
+    repo_summaries: list[RepoSummary],
+    brief: DeckBrief | None = None,
+) -> tuple[list[Slide], DeckTheme]:
+    """
+    Assembles the deck for a specific reader.
+
+    Slides are built as a pool of candidates keyed by section, then ordered,
+    filtered and trimmed according to the brief. That matters because the
+    right slides in the wrong order is still the wrong deck: a grant committee
+    reading market sizing before impact has already formed a view.
+
+    The old version had a fixed order and trimmed by slicing the end, which
+    silently dropped the ask — the one slide every deck needs.
+    """
+    if brief is None:
+        brief = build_brief(profile)
+
     images_by_tag = _images_by_tag(profile)
 
     theme = DeckTheme(
@@ -149,113 +167,99 @@ def build_deck(profile: dict, repo_summaries: list[RepoSummary]) -> tuple[list[S
         font_style=profile.get("brand_font_style") or "serif",
     )
 
-    # Cover, uses a "cover"-tagged image as a background/accent if provided,
-    # otherwise falls back to the logo.
+    def blocks_from(*keys: str) -> list[SlideBlock]:
+        out: list[SlideBlock] = []
+        for k in keys:
+            out += _block_if_present(profile.get(k, ""))
+        return out
+
+    # ── Candidate slides, one per section. A section with no content is
+    # simply absent, so nothing is ever invented to fill an outline. ──
+    candidates: dict[str, Slide] = {}
+
     cover_image = (images_by_tag.get("cover") or [None])[0] or (profile.get("logo_data_url") or None)
-    slides.append(Slide(
-        id="cover",
-        type="cover",
+    candidates["cover"] = Slide(
+        id="cover", type="cover",
         title=profile.get("company_name") or "Untitled company",
         blocks=_block_if_present(profile.get("one_liner", "")),
         image_data_url=cover_image,
-    ))
+    )
 
-    # Problem
-    if profile.get("problem"):
-        slides.append(Slide(id="problem", type="text", title="Problem", blocks=_block_if_present(profile["problem"])))
+    def add(section: str, title: str, blocks: list[SlideBlock], **kw) -> None:
+        if blocks or kw.get("team_members"):
+            candidates[section] = Slide(id=section, type=kw.pop("type", "text"),
+                                        title=title, blocks=blocks, **kw)
 
-    # Solution
-    if profile.get("solution"):
-        slides.append(Slide(id="solution", type="text", title="Solution", blocks=_block_if_present(profile["solution"])))
+    add("problem", "Problem", blocks_from("problem"))
+    add("solution", "Solution", blocks_from("solution"))
+    add("why_now", "Why now", blocks_from("why_now"))
+    add("technology", "Why this is defensible",
+        blocks_from("evidence_of_innovation", "differentiation", "patents_or_ip"))
 
-    # Evidence of innovation / differentiation, combined if both present
-    innovation_blocks = _block_if_present(profile.get("evidence_of_innovation", ""))
-    differentiation_blocks = _block_if_present(profile.get("differentiation", ""))
-    if innovation_blocks or differentiation_blocks:
-        slides.append(Slide(
-            id="innovation",
-            type="text",
-            title="Why this is defensible",
-            blocks=innovation_blocks + differentiation_blocks,
-        ))
-
-    # Technology, the one AI-generated slide, one per analyzed repo
-    for summary in repo_summaries:
-        content = build_technology_slide_content(summary)
-        slides.append(Slide(
-            id=f"technology-{summary.full_name}",
-            type="text",
-            title=f"Technology: {summary.full_name}",
-            blocks=[SlideBlock(text=content, source=f"GitHub: {summary.full_name}")],
-        ))
-
-    # Market
-    market_blocks = []
-    if profile.get("market_opportunity"):
-        market_blocks += _block_if_present(profile["market_opportunity"])
+    market_blocks = blocks_from("market_opportunity", "customer_segment")
     for label, key in [("TAM", "tam"), ("SAM", "sam"), ("SOM", "som")]:
         if profile.get(key):
             market_blocks.append(SlideBlock(text=f"{label}: {profile[key]}", source=PROFILE_SOURCE))
-    if profile.get("competitive_landscape"):
-        market_blocks += _block_if_present(profile["competitive_landscape"])
-    if market_blocks:
-        slides.append(Slide(
-            id="market",
-            type="text",
-            title="Market",
-            blocks=market_blocks,
-            image_data_url=(images_by_tag.get("market") or [None])[0],
-        ))
+    add("market", "Market", market_blocks,
+        image_data_url=(images_by_tag.get("market") or [None])[0])
 
-    # Traction and business model
-    traction_blocks = _block_if_present(profile.get("traction", "")) + _block_if_present(profile.get("key_metrics", ""))
-    if traction_blocks:
-        slides.append(Slide(
-            id="traction",
-            type="text",
-            title="Traction",
-            blocks=traction_blocks,
-            image_data_url=(images_by_tag.get("traction") or [None])[0],
-        ))
+    add("competition", "Competition", blocks_from("competitive_landscape"))
+    add("traction", "Traction", blocks_from("traction", "key_metrics"),
+        image_data_url=(images_by_tag.get("traction") or [None])[0])
+    add("business_model", "Business model", blocks_from("business_model", "pricing_model", "unit_economics"))
+    add("impact", "Impact", blocks_from("impact_outcomes"))
+    add("milestones", "Milestones", blocks_from("milestones_next_12m", "go_to_market"))
+    add("use_of_funds", "Use of funds", blocks_from("use_of_funds"))
+    add("risks", "Risks and mitigations", blocks_from("risks_and_mitigations"))
+    add("fit", f"Why {brief.programme}", blocks_from("why_this_program"))
+    add("ask", "The ask", blocks_from("funding_ask")
+        or blocks_from("use_of_funds"))
 
-    business_blocks = _block_if_present(profile.get("business_model", "")) + _block_if_present(profile.get("pricing_model", ""))
-    if business_blocks:
-        slides.append(Slide(id="business-model", type="text", title="Business model", blocks=business_blocks))
+    if team_members := (profile.get("team_members") or []):
+        candidates["team"] = Slide(id="team", type="team", title="Team", team_members=team_members)
 
-    # Team
-    team_members = profile.get("team_members") or []
-    if team_members:
-        slides.append(Slide(id="team", type="team", title="Team", team_members=team_members))
+    # One technology slide per analysed repository, appended to the section
+    # rather than replacing the founder's own differentiation copy.
+    for i, summary in enumerate(repo_summaries):
+        key = "technology" if "technology" not in candidates else f"technology-{i}"
+        content = build_technology_slide_content(summary)
+        block = SlideBlock(text=content, source=f"GitHub: {summary.full_name}")
+        if key in candidates:
+            candidates[key].blocks = candidates[key].blocks + [block]
+        else:
+            candidates[key] = Slide(id=key, type="text",
+                                    title=f"Technology: {summary.full_name}", blocks=[block])
 
-    # Product images, and any "other"-tagged uploads, each as its own slide
     for i, image_url in enumerate(images_by_tag.get("product", [])):
-        slides.append(Slide(id=f"product-image-{i}", type="image", title="Product", image_data_url=image_url))
-    for i, image_url in enumerate(images_by_tag.get("other", [])):
-        slides.append(Slide(id=f"other-image-{i}", type="image", title="Additional", image_data_url=image_url))
+        candidates[f"product-image-{i}"] = Slide(
+            id=f"product-image-{i}", type="image", title="Product", image_data_url=image_url)
 
-    # The ask
-    ask_blocks = _block_if_present(profile.get("funding_ask", "")) + _block_if_present(profile.get("use_of_funds", ""))
-    if ask_blocks:
-        slides.append(Slide(id="ask", type="text", title="The ask", blocks=ask_blocks))
+    # ── Order by the brief; anything it doesn't mention keeps a stable place
+    # at the end so nothing the founder wrote silently disappears. ──
+    ordered_keys = [k for k in brief.section_order if k in candidates]
+    ordered_keys += [k for k in candidates if k not in ordered_keys and k != "contents"]
 
-    # Risks
-    if profile.get("risks_and_mitigations"):
-        slides.append(Slide(
-            id="risks", type="text", title="Risks and mitigations",
-            blocks=_block_if_present(profile["risks_and_mitigations"]),
-        ))
+    slides = [candidates[k] for k in ordered_keys]
 
-    # An investor deck that runs past ~15 slides stops being read. Cap it
-    # and say so, rather than silently generating 30 pages nobody opens.
-    MAX_SLIDES = 14
+    # ── Trim to a length that gets read, dropping the least important first
+    # and never dropping a section the programme requires. ──
+    MAX_SLIDES = 13   # +1 for the contents page inserted below
     if len(slides) > MAX_SLIDES:
-        slides = slides[:MAX_SLIDES]
+        protected = set(brief.required_sections) | {"cover", "ask"}
+        droppable = [k for k in reversed(ordered_keys)
+                     if k not in protected and k in brief.deprioritised]
+        droppable += [k for k in reversed(ordered_keys) if k not in protected and k not in droppable]
+        to_drop: set[str] = set()
+        for k in droppable:
+            if len(slides) - len(to_drop) <= MAX_SLIDES:
+                break
+            to_drop.add(k)
+        ordered_keys = [k for k in ordered_keys if k not in to_drop]
+        slides = [candidates[k] for k in ordered_keys]
 
-    # Table of contents, built from every slide after the cover, then
-    # inserted right after it. Built last since it needs the final list.
     if len(slides) > 1:
-        toc_entries = [{"title": s.title} for s in slides[1:]]
-        slides.insert(1, Slide(id="toc", type="toc", title="Contents", toc_entries=toc_entries))
+        slides.insert(1, Slide(id="toc", type="toc", title="Contents",
+                               toc_entries=[{"title": s.title} for s in slides[1:]]))
 
     return slides, theme
 

@@ -39,7 +39,7 @@ export const LIBRARY: LibraryItem[] = [
     description: "Three headline figures with labels beneath. The standard way to open a traction slide.",
     category: "data",
     tags: ["metrics", "kpi", "traction", "numbers", "growth", "unit economics", "stats"],
-    industries: ["fintech", "saas", "marketplace", "consumer", "health"],
+    industries: ["fintech", "saas", "marketplace", "consumer", "health", "govtech", "agritech", "edtech", "impact"],
     build: ({ x, y }) => {
       const w = 300, gap = 40;
       return [0, 1, 2].flatMap((i) => [
@@ -58,7 +58,7 @@ export const LIBRARY: LibraryItem[] = [
     description: "Two tinted panels contrasting the status quo with your solution.",
     category: "structure",
     tags: ["comparison", "problem", "solution", "before after", "versus", "contrast"],
-    industries: ["saas", "fintech", "health", "logistics", "consumer"],
+    industries: ["saas", "fintech", "health", "logistics", "consumer", "govtech", "agritech", "impact"],
     build: ({ x, y }) => {
       const w = 470, gap = 40;
       return [
@@ -81,7 +81,7 @@ export const LIBRARY: LibraryItem[] = [
     description: "A horizontal sequence of milestones on a rule. Use for roadmap or company history.",
     category: "structure",
     tags: ["timeline", "roadmap", "milestones", "history", "phases", "plan"],
-    industries: ["saas", "hardware", "biotech", "fintech", "energy"],
+    industries: ["saas", "hardware", "biotech", "fintech", "energy", "agritech", "climate", "govtech"],
     build: ({ x, y }) => {
       const span = 980, steps = 4, gap = span / (steps - 1);
       const out: SlideElement[] = [
@@ -106,7 +106,7 @@ export const LIBRARY: LibraryItem[] = [
     description: "Three parallel points, each under a short accent rule.",
     category: "structure",
     tags: ["columns", "points", "features", "pillars", "three", "benefits"],
-    industries: ["saas", "consumer", "fintech", "health", "education"],
+    industries: ["saas", "consumer", "fintech", "health", "education", "edtech", "govtech", "impact"],
     build: ({ x, y }) => {
       const w = 320, gap = 32;
       return [0, 1, 2].flatMap((i) => [
@@ -122,7 +122,7 @@ export const LIBRARY: LibraryItem[] = [
     description: "A customer or investor quote set large with attribution.",
     category: "text",
     tags: ["quote", "testimonial", "customer", "social proof", "validation"],
-    industries: ["consumer", "saas", "marketplace", "health", "education"],
+    industries: ["consumer", "saas", "marketplace", "health", "education", "edtech", "agritech", "impact"],
     build: ({ x, y }) => [
       makeElement("quote", { x, y, w: 820, h: 140, z: 20 },
         { color: "ink", fontFamily: "display", fontSize: 34, lineHeight: 1.3, fontWeight: 500, borderLeft: 3, borderColor: "accent" },
@@ -138,7 +138,7 @@ export const LIBRARY: LibraryItem[] = [
     description: "One number at large scale with a supporting sentence. For a slide built on one fact.",
     category: "data",
     tags: ["statistic", "number", "callout", "headline metric", "single"],
-    industries: ["fintech", "health", "climate", "saas", "marketplace"],
+    industries: ["fintech", "health", "climate", "saas", "marketplace", "agritech", "govtech", "impact"],
     build: ({ x, y }) => [
       makeElement("statement", { x, y, w: 700, h: 120, z: 20 },
         { color: "accent", fontFamily: "display", fontSize: 96, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.04em" },
@@ -321,4 +321,45 @@ export function searchLibrary(query: string, industry?: string | null): LibraryI
 /** Re-ids a preset's elements so the same item can be inserted repeatedly. */
 export function instantiate(item: LibraryItem, at: { x: number; y: number }): SlideElement[] {
   return item.build(at).map((el) => ({ ...el, id: elementId(el.type as ElementType) }));
+}
+
+
+/**
+ * The industries a founder can filter the library by.
+ *
+ * The picker used to be a single checkbox reading "show items suited to
+ * Fintech", which made the product look like it was built for one sector.
+ * These are the sectors the library is actually tagged for.
+ */
+export const LIBRARY_INDUSTRIES: { id: string; label: string }[] = [
+  { id: "saas",        label: "SaaS / B2B" },
+  { id: "fintech",     label: "Fintech" },
+  { id: "health",      label: "Healthtech" },
+  { id: "govtech",     label: "Govtech" },
+  { id: "agritech",    label: "Agritech" },
+  { id: "edtech",      label: "Edtech" },
+  { id: "climate",     label: "Climate / Energy" },
+  { id: "impact",      label: "Impact / Non-profit" },
+  { id: "marketplace", label: "Marketplace" },
+  { id: "consumer",    label: "Consumer" },
+  { id: "logistics",   label: "Logistics" },
+  { id: "hardware",    label: "Hardware / Deeptech" },
+  { id: "biotech",     label: "Biotech" },
+  { id: "enterprise",  label: "Enterprise" },
+];
+
+/** Maps a free-text profile industry onto a library tag, best-effort. */
+export function normaliseIndustry(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.toLowerCase();
+  const hit = LIBRARY_INDUSTRIES.find(
+    (i) => t.includes(i.id) || i.label.toLowerCase().split(/[^a-z]+/).some((w) => w.length > 3 && t.includes(w)),
+  );
+  if (hit) return hit.id;
+  if (/bank|pay|lend|invest|wallet/.test(t)) return "fintech";
+  if (/farm|agri|crop|livestock/.test(t)) return "agritech";
+  if (/gov|public sector|civic/.test(t)) return "govtech";
+  if (/school|learn|student|educat/.test(t)) return "edtech";
+  if (/clinic|patient|medic|care|health/.test(t)) return "health";
+  return null;
 }

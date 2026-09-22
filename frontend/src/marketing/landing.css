@@ -283,3 +283,9 @@
   .mk-btn:hover { transform: none; }
   .mk * { transition: none !important; }
 }
+
+/* Product screenshots in the walkthrough steps */
+.mk-shot { margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.1); background: #0f0e0c; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
+.mk-shot img { display: block; width: 100%; height: auto; }
+.mk-domani { color: var(--mk-gold, #c49a28); text-decoration: none; font-weight: 500; }
+.mk-domani:hover { text-decoration: underline; }

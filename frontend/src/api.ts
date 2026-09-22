@@ -120,6 +120,13 @@ export interface CompanyProfile {
   risks_and_mitigations: string;
 
   program_name: string;
+  program_questions: string;
+  why_this_program: string;
+  why_now: string;
+  customer_segment: string;
+  unit_economics: string;
+  milestones_next_12m: string;
+  impact_outcomes: string;
   program_type: string;
   program_url: string;
   program_requirements: string;
