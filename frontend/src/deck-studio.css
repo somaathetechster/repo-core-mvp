@@ -1,12 +1,18 @@
+/* ── DeckStudio layout ──
+   .dst           = full height grid: [canvas area] [300px sidebar]
+   .dst-stage     = left column: canvas on top (flex:1), filmstrip pinned below
+   .dst-canvas-area = scrollable space the canvas sits in
+   .dst-panel     = right column: tabs + scrollable content
+*/
 .dst { display: grid; grid-template-columns: minmax(0,1fr) 300px; height: 100%; overflow: hidden; }
-.dst-stage { display: flex; flex-direction: column; height: 100%; overflow: hidden; padding: 1rem 1rem 0 1rem; gap: 0.75rem; }
-.dst-canvas-area { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding-bottom: 0.5rem; }
+.dst-stage { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.dst-canvas-area { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 1rem 1rem 0; }
 .dst-empty { color: var(--text-dim); font-style: italic; padding: 2rem; }
 
 
 .dst-canvas-hold { max-width: 100%; }
 
-.dst-filmstrip { display: flex; gap: 0.4rem; overflow-x: auto; padding: 0 1rem 0.75rem; flex-shrink: 0; }
+.dst-filmstrip { display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.5rem 1rem 0.75rem; flex-shrink: 0; border-top: 1px solid var(--ink-border); background: var(--ink-raised); }
 .dst-filmstrip::-webkit-scrollbar { height: 4px; }
 .dst-filmstrip::-webkit-scrollbar-thumb { background: var(--ink-border); border-radius: 2px; }
 .dst-thumb {

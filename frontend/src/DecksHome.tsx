@@ -107,7 +107,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
                     <div className="deck-card-icon">{initials}</div>
                     <div>
                       <div className="deck-card-name">{d.name}</div>
-                      <div className="deck-card-eyebrow">{relAgo ? `Edited ${relAgo}` : "—"}</div>
+                      <div className="deck-card-meta">{relAgo ? `Edited ${relAgo}` : "—"}</div>
                     </div>
                   </div>
                   <div className="deck-card-review-hint">
