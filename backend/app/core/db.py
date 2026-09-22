@@ -20,8 +20,87 @@ async def get_db():
         yield session
 
 
+def _add_missing_columns(conn) -> list[str]:
+    """
+    Adds columns that exist on a model but not yet in the database.
+
+    ``create_all`` only ever creates missing *tables*. Adding a field to an
+    existing model therefore leaves the database one column short, and every
+    query against that table fails — which looks like the whole API being
+    down rather than one schema change being incomplete.
+
+    This closes that gap for the additive case, which is the only kind of
+    change made so far: new nullable-or-defaulted columns. It deliberately
+    never drops, renames or retypes anything, so it cannot lose data. Once a
+    change needs any of those, this should be replaced with Alembic.
+    """
+    from sqlalchemy import inspect as sa_inspect, text as sa_text
+
+    inspector = sa_inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+    applied: list[str] = []
+
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue  # create_all handles this one
+
+        have = {c["name"] for c in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in have:
+                continue
+
+            type_sql = column.type.compile(dialect=conn.dialect)
+            # The membership check above already guarantees the column is
+            # absent; IF NOT EXISTS is belt-and-braces and only Postgres
+            # accepts it on ADD COLUMN.
+            guard = "IF NOT EXISTS " if conn.dialect.name == "postgresql" else ""
+            ddl = f'ALTER TABLE "{table.name}" ADD COLUMN {guard}"{column.name}" {type_sql}'
+
+            # A scalar Python default becomes a server default, so existing
+            # rows get a sensible value instead of NULL.
+            default = getattr(column.default, "arg", None)
+            if default is not None and not callable(default):
+                literal = (
+                    "true" if default is True else
+                    "false" if default is False else
+                    str(default) if isinstance(default, (int, float)) else
+                    "'" + str(default).replace("'", "''") + "'"
+                )
+                ddl += f" DEFAULT {literal}"
+
+            conn.execute(sa_text(ddl))
+
+            # Backfill, then enforce NOT NULL, in that order — the reverse
+            # fails on any table that already has rows.
+            if not column.nullable:
+                if default is not None and not callable(default):
+                    conn.execute(sa_text(
+                        f'UPDATE "{table.name}" SET "{column.name}" = {literal} '
+                        f'WHERE "{column.name}" IS NULL'
+                    ))
+                    # SQLite can't alter a column's nullability in place. It
+                    # isn't the production database, and the backfill above
+                    # already means no NULLs, so skipping it is safe.
+                    if conn.dialect.name == "postgresql":
+                        conn.execute(sa_text(
+                            f'ALTER TABLE "{table.name}" '
+                            f'ALTER COLUMN "{column.name}" SET NOT NULL'
+                        ))
+
+            applied.append(f"{table.name}.{column.name}")
+
+    return applied
+
+
 async def init_models():
-    """Create tables if they don't exist. Fine for early dev; switch to real
-    migrations (Alembic) once the schema needs to evolve carefully."""
+    """Create missing tables, then add any columns the models have gained."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        try:
+            added = await conn.run_sync(_add_missing_columns)
+            if added:
+                print(f"[db] added missing columns: {', '.join(added)}")
+        except Exception as exc:
+            # A failed column add must not stop the app from booting; the
+            # error is loud in the logs and the affected route will say so.
+            print(f"[db] column sync failed: {exc!r}")
