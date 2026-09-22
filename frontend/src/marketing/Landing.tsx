@@ -191,7 +191,7 @@ function HowItWorks() {
       title: "Make it yours, then download",
       body: "Switch templates, change colours and type, drag anything anywhere, drop in your own screenshots and charts. Export to PowerPoint or PDF when it's right.",
       video: "",
-      image: "",
+      image: "/marketing/step-4.png",
     },
   ];
 

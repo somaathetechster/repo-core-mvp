@@ -9,6 +9,7 @@ import MfaSettings from "./MfaSettings";
 import HomeDashboard from "./HomeDashboard";
 import NotificationBanner from "./NotificationBanner";
 import SupportWidget from "./SupportWidget";
+import ChangePassword from "./ChangePassword";
 import "./theme.css";
 import "./dashboard.css";
 
@@ -234,6 +235,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
 
       {tab === "security" && (
         <div className="dash-body">
+          <ChangePassword email={userEmail} />
           <MfaSettings />
         </div>
       )}

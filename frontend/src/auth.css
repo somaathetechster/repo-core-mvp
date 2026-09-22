@@ -28,3 +28,11 @@
 .auth-optin { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.78rem; color: var(--text-dim); line-height: 1.45; cursor: pointer; }
 .auth-optin input { margin-top: 0.15rem; accent-color: var(--gold); flex-shrink: 0; }
 .auth-optin em { display: block; font-style: normal; font-size: 0.71rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+/* Code entry and recovery links */
+.auth-code { text-align: center; letter-spacing: 0.4em; font-family: var(--font-mono); font-size: 1.1rem; }
+.auth-notice { font-size: 0.78rem; color: var(--success); margin: 0; }
+.auth-link { background: none; border: none; color: var(--gold-dim); font-size: 0.78rem; cursor: pointer; font-family: var(--font-body); padding: 0.35rem 0; }
+.auth-link:hover { color: var(--gold); }
+.auth-link:disabled { opacity: 0.5; cursor: default; }
+.auth-secondary { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.25rem; }

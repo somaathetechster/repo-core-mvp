@@ -34,3 +34,8 @@
 }
 .mfa-verify-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .mfa-verify-row input { max-width: 140px; }
+
+/* Change password */
+.pw-form { display: flex; flex-direction: column; gap: 0.85rem; max-width: 360px; margin-top: 1rem; }
+.pw-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.78rem; color: var(--text-dim); }
+.pw-done { font-size: 0.8rem; color: var(--success); margin: 0; }
