@@ -4,7 +4,7 @@ import "./home-dashboard.css";
 
 interface HomeDashboardProps {
   userName: string;
-  onNavigate: (tab: "evidence" | "profile" | "deck" | "security" | "data") => void;
+  onNavigate: (tab: "evidence" | "profile" | "deck" | "review" | "security" | "data") => void;
   onOpenDeck?: (id: string) => void;
 }
 
@@ -147,9 +147,9 @@ export default function HomeDashboard({ userName, onNavigate, onOpenDeck }: Home
                 </div>
               ))}
               {mostRecent && (
-                <div className="home-review-card" onClick={()=>onOpenDeck?.(mostRecent.id)}>
+                <div className="home-review-card" onClick={()=>onNavigate("review")}>
                   <div className="home-review-label">Review {mostRecent.name}</div>
-                  <div className="home-review-hint">Open the deck → Review tab to see your pitch score and what to fix.</div>
+                  <div className="home-review-hint">See your pitch score, what to fix, and the questions investors will ask.</div>
                   <div className="home-review-cta">Review deck →</div>
                 </div>
               )}

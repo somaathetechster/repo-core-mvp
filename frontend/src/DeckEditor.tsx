@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   getDeck, saveDeckEditorState, regenerateDeck, updateDeckProfile,
   type DeckTheme, type CompanyProfile, type AnalyzeResult,
@@ -388,6 +388,22 @@ export default function DeckEditor({
     setDirty(true);
   }
 
+  // The editor fills from wherever it starts down to the bottom of the
+  // window. The app's top bar wraps at different widths, so a hardcoded
+  // offset is wrong somewhere; measuring is right everywhere.
+  const editorRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = editorRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      el.style.height = `${Math.max(520, window.innerHeight - top)}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  });
+
   if (error && slides.length === 0) {
     return (
       <div className="deck-editor">
@@ -400,7 +416,7 @@ export default function DeckEditor({
   if (slides.length === 0) return <p className="deck-loading">Opening deck…</p>;
 
   return (
-    <div className="deck-editor">
+    <div className="deck-editor" ref={editorRef}>
       <div className="deck-editor-toolbar-wrap">
         <header className="deck-toolbar">
           <div className="deck-toolbar-left">

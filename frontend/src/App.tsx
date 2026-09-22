@@ -20,6 +20,7 @@ const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
 const DecksHome = lazy(() => import("./DecksHome"));
 const DataStudio = lazy(() => import("./DataStudio"));
 const Evidence = lazy(() => import("./Evidence"));
+const DeckReview = lazy(() => import("./DeckReview"));
 
 function TabLoading() {
   return <p style={{ padding: "2rem", color: "var(--text-dim)" }}>Loading...</p>;
@@ -125,7 +126,7 @@ export default function App() {
   );
 }
 
-type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "data";
+type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "review" | "data";
 
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
   const [tab, setTab] = useState<DashTab>("home");
@@ -141,6 +142,14 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
       setTab("evidence");
     }
   }, []);
+
+  // Stash first (the Decks page is lazy and may not be mounted yet), then
+  // notify it in case it already is.
+  const openDeck = (id: string) => {
+    sessionStorage.setItem("provisio:open-deck", id);
+    setTab("deck");
+    window.dispatchEvent(new CustomEvent("provisio:open-deck", { detail: { deckId: id } }));
+  };
 
   return (
     <div className="provisio dashboard">
@@ -160,6 +169,9 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           </button>
           <button className={`dash-tab ${tab === "deck" ? "dash-tab-active" : ""}`} onClick={() => setTab("deck")}>
             Deck
+          </button>
+          <button className={`dash-tab ${tab === "review" ? "dash-tab-active" : ""}`} onClick={() => setTab("review")}>
+            Review
           </button>
           <button className={`dash-tab ${tab === "data" ? "dash-tab-active" : ""}`} onClick={() => setTab("data")}>
             Data
@@ -190,6 +202,12 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
         </Suspense>
       )}
 
+      {tab === "review" && (
+        <Suspense fallback={<TabLoading />}>
+          <DeckReview onOpenDeck={openDeck} />
+        </Suspense>
+      )}
+
       {tab === "data" && (
         <Suspense fallback={<TabLoading />}>
           <DataStudio />
@@ -207,11 +225,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           <HomeDashboard
             userName={userName}
             onNavigate={(t) => setTab(t)}
-            onOpenDeck={(id) => {
-              setTab("deck");
-              // Dispatch a custom event so DecksHome can open this deck directly
-              window.dispatchEvent(new CustomEvent("provisio:open-deck", { detail: { deckId: id } }));
-            }}
+            onOpenDeck={openDeck}
           />
         </div>
       )}

@@ -31,9 +31,13 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
   // opens straight to the placement prompt instead of the founder having to
   // navigate back and find it.
   useEffect(() => {
+    // The request can arrive before this lazily-loaded page mounts, in which
+    // case the event is missed. It's also stashed, so pick that up first.
+    const pending = sessionStorage.getItem("provisio:open-deck");
+    if (pending) { sessionStorage.removeItem("provisio:open-deck"); setOpenDeckId(pending); }
     function onOpenDeck(e: Event) {
       const id = (e as CustomEvent).detail?.deckId;
-      if (id) setOpenDeckId(id);
+      if (id) { sessionStorage.removeItem("provisio:open-deck"); setOpenDeckId(id); }
     }
     window.addEventListener("provisio:open-deck", onOpenDeck);
     return () => window.removeEventListener("provisio:open-deck", onOpenDeck);
@@ -112,7 +116,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
                   </div>
                   <div className="deck-card-review-hint">
                     <span className="deck-card-review-dot" />
-                    Open deck → Review tab for pitch score
+                    See its pitch score in the Review tab
                   </div>
                   <div className="deck-card-actions" onClick={e => e.stopPropagation()}>
                     <button className="deck-card-btn primary" onClick={() => setOpenDeckId(d.id)}>Open</button>

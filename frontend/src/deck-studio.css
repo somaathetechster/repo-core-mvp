@@ -4,13 +4,13 @@
    .dst-canvas-area = scrollable space the canvas sits in
    .dst-panel     = right column: tabs + scrollable content
 */
-.dst { display: grid; grid-template-columns: minmax(0,1fr) 300px; height: 100%; overflow: hidden; }
+.dst { display: grid; grid-template-columns: minmax(0,1fr) 320px; height: 100%; min-height: 0; overflow: hidden; }
 .dst-stage { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.dst-canvas-area { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 1rem 1rem 0; }
+.dst-canvas-area { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 1rem 1rem 0; }
 .dst-empty { color: var(--text-dim); font-style: italic; padding: 2rem; }
 
 
-.dst-canvas-hold { max-width: 100%; }
+.dst-canvas-hold { width: 100%; max-width: min(1180px, calc((100vh - 260px) * 1.7778)); flex-shrink: 0; }
 
 .dst-filmstrip { display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.5rem 1rem 0.75rem; flex-shrink: 0; border-top: 1px solid var(--ink-border); background: var(--ink-raised); }
 .dst-filmstrip::-webkit-scrollbar { height: 4px; }
@@ -46,7 +46,7 @@
 .dst-tab:disabled { opacity: 0.35; cursor: default; }
 .dst-tab.is-active { color: var(--gold); border-bottom-color: var(--gold); }
 
-.dst-section { padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem; }
+.dst-section { padding: 1rem; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .dst-section h4 {
   font-size: 0.72rem; color: var(--text-dim); margin: 0.5rem 0 0.2rem;
   font-weight: 600; text-transform: capitalize;
@@ -112,9 +112,12 @@
 .dst-btn-row button.is-active { border-color: var(--gold); color: var(--gold); }
 .dst-btn-row button.dst-danger:hover { border-color: var(--danger); color: var(--danger); }
 
-@media (max-width: 1100px) {
-  .dst { grid-template-columns: 1fr; }
-  .dst-panel { position: static; max-height: none; }
+/* Only stack on genuinely small screens (phones). Zoomed desktop browsers
+   report narrow widths too, and stacking there hid the canvas entirely. */
+@media (max-width: 720px) {
+  .dst { grid-template-columns: 1fr; height: auto; overflow: visible; }
+  .dst-stage { height: auto; }
+  .dst-panel { height: auto; border-left: none; border-top: 1px solid var(--ink-border); }
 }
 
 /* Asset library */
