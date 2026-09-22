@@ -198,7 +198,8 @@ async def grant_plan(request: Request, body: GrantRequest, user_id: str = Depend
     granting admin's id is stored on the row.
     """
     async with AsyncSessionLocal() as session:
-        await require_admin(session, user_id)
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
 
         try:
             plan = PLANS[PlanId(body.plan_id)]
@@ -235,7 +236,8 @@ class RevokeRequest(BaseModel):
 @admin.post("/revoke")
 async def revoke(request: Request, body: RevokeRequest, user_id: str = Depends(get_current_user_id_optional)):
     async with AsyncSessionLocal() as session:
-        await require_admin(session, user_id)
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
         sub = await session.get(SubscriptionModel, body.subscription_id)
         if not sub:
             raise HTTPException(status_code=404, detail="Subscription not found.")
@@ -249,7 +251,8 @@ async def revoke(request: Request, body: RevokeRequest, user_id: str = Depends(g
 @admin.get("/usage")
 async def recent_usage(request: Request, limit: int = 100, user_id: str = Depends(get_current_user_id_optional)):
     async with AsyncSessionLocal() as session:
-        await require_admin(session, user_id)
+        if not _check_admin_key(request):
+            await require_admin(session, user_id)
         rows = (await session.execute(
             select(UsageModel).order_by(desc(UsageModel.created_at)).limit(limit)
         )).scalars().all()

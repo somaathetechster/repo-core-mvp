@@ -146,52 +146,89 @@ export default function DataStudio() {
 
   if (stage === "input") {
     return (
-      <div className="ds">
-        <header className="ds-head">
-          <h1 className="dash-title">Data Studio</h1>
-          <p className="dash-subtitle">
-            Bring in a spreadsheet, export, or report. Provisio works out what each column is and
-            shows you the charts that actually fit the data.
-          </p>
-        </header>
+      <div className="data-studio">
+        <div className="data-studio-header">
+          <div>
+            <div className="data-studio-title">Data Studio</div>
+            <div className="data-studio-desc">
+              Bring in a spreadsheet, export, or report. Provisio works out what each column is
+              and shows you the charts that actually fit the data.
+            </div>
+          </div>
+        </div>
+        <div className="data-studio-body">
+          <div className="data-studio-main" style={{ maxWidth: "700px" }}>
+            {error && <p className="data-error">{error}</p>}
+            {busy  && <p className="data-busy">⏳ {busy}…</p>}
 
-        {error && <p className="p-error">{error}</p>}
+            {/* Drop zone */}
+            <div
+              className="data-drop"
+              onClick={() => fileInput.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleFile(f);
+              }}
+            >
+              <div className="data-drop-icon">📂</div>
+              <div className="data-drop-title">Drop a file, or click to choose</div>
+              <div className="data-drop-sub">Excel, CSV, PDF, JSON — up to 15MB.</div>
+              <button className="data-upload-btn" type="button" onClick={e => { e.stopPropagation(); fileInput.current?.click(); }}>
+                Choose file
+              </button>
+            </div>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".csv,.tsv,.txt,.json,.xlsx,.xlsm,.pdf"
+              hidden
+              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            />
 
-        <div className="ds-intake">
-          <button
-            className="ds-drop"
-            onClick={() => fileInput.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) handleFile(f);
-            }}
-            disabled={!!busy}
-          >
-            <span className="ds-drop-title">Drop a file, or click to choose</span>
-            <span className="ds-drop-formats">Excel, CSV, PDF, JSON. Up to 15MB.</span>
-          </button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".csv,.tsv,.txt,.json,.xlsx,.xlsm,.pdf"
-            hidden
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-          />
+            {/* Paste */}
+            <span className="data-paste-label">or paste it</span>
+            <div className="data-paste">
+              <textarea
+                rows={6}
+                placeholder={"Paste a table, CSV, or JSON here.\nSeveral tables in one paste is fine — you'll pick which one to use."}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+              />
+            </div>
+            <div style={{ marginTop: "0.75rem" }}>
+              <button
+                className="p-btn p-btn-primary"
+                onClick={handlePaste}
+                disabled={!pasteText.trim() || !!busy}
+              >
+                {busy ?? "Read this data"}
+              </button>
+            </div>
+          </div>
 
-          <div className="ds-or">or paste it</div>
-
-          <textarea
-            className="p-input ds-paste"
-            rows={7}
-            placeholder={"Paste a table, CSV, or JSON here.\nSeveral tables in one paste is fine, you'll pick which one to use."}
-            value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
-          />
-          <button className="p-btn p-btn-primary" onClick={handlePaste} disabled={!pasteText.trim() || !!busy}>
-            {busy ?? "Read this data"}
-          </button>
+          {/* Side tips */}
+          <aside className="data-studio-side">
+            <div className="data-side-label">What you can bring in</div>
+            {[
+              { icon: "📊", label: "Excel / CSV", desc: "Any spreadsheet — we detect the structure" },
+              { icon: "📄", label: "PDF tables", desc: "Reports and exports with embedded tables" },
+              { icon: "📋", label: "Paste", desc: "Copy a table straight from Notion, Sheets, or a browser" },
+              { icon: "🗂", label: "JSON", desc: "Arrays of objects, API exports, raw data" },
+            ].map((t, i) => (
+              <div key={i} style={{ display:"flex", gap:".75rem", marginBottom:".85rem", alignItems:"flex-start" }}>
+                <span style={{ fontSize:"1.1rem", lineHeight:1 }}>{t.icon}</span>
+                <div>
+                  <div style={{ fontSize:".82rem", fontWeight:500, marginBottom:".15rem" }}>{t.label}</div>
+                  <div style={{ fontSize:".74rem", color:"var(--text-muted)", lineHeight:1.4 }}>{t.desc}</div>
+                </div>
+              </div>
+            ))}
+            <div className="data-side-hint" style={{ marginTop:"1.25rem", paddingTop:"1rem", borderTop:"1px solid var(--ink-border)" }}>
+              Once loaded, Provisio analyses every column and suggests the charts that show your data best. Then push any chart straight to your pitch deck.
+            </div>
+          </aside>
         </div>
       </div>
     );
@@ -201,25 +238,27 @@ export default function DataStudio() {
 
   if (stage === "choose_table") {
     return (
-      <div className="ds">
-        <header className="ds-head">
-          <h1 className="dash-title">{detected.length} tables found</h1>
-          <p className="dash-subtitle">Pick the one you want to work with. You can come back for the others.</p>
-        </header>
-        {error && <p className="p-error">{error}</p>}
-        <div className="ds-table-options">
-          {detected.map((t, i) => (
-            <button key={i} className="ds-table-option" onClick={() => loadTable(t)} disabled={!!busy}>
-              <span className="ds-option-title">{t.title}</span>
-              <span className="ds-option-meta">
-                {t.row_count} rows, {t.column_count} columns, from {t.source}
-              </span>
-              <span className="ds-option-cols">{t.columns.slice(0, 6).join(" · ")}</span>
-              {t.notes.length > 0 && <span className="ds-option-note">{t.notes.join(" ")}</span>}
-            </button>
-          ))}
+      <div className="data-studio">
+        <div className="data-studio-header">
+          <div className="data-studio-title">{detected.length} tables found</div>
+          <div className="data-studio-desc">Pick the one to work with. You can come back for the others.</div>
         </div>
-        <button className="p-btn p-btn-ghost" onClick={reset}>Start over</button>
+        <div className="data-studio-body">
+          {error && <p className="p-error">{error}</p>}
+          <div className="ds-table-options">
+            {detected.map((t, i) => (
+              <button key={i} className="ds-table-option" onClick={() => loadTable(t)} disabled={!!busy}>
+                <span className="ds-option-title">{t.title}</span>
+                <span className="ds-option-meta">
+                  {t.row_count} rows, {t.column_count} columns, from {t.source}
+                </span>
+                <span className="ds-option-cols">{t.columns.slice(0, 6).join(" · ")}</span>
+                {t.notes.length > 0 && <span className="ds-option-note">{t.notes.join(" ")}</span>}
+              </button>
+            ))}
+          </div>
+          <button className="p-btn p-btn-ghost" onClick={reset}>Start over</button>
+        </div>
       </div>
     );
   }
@@ -241,21 +280,18 @@ export default function DataStudio() {
   const visibleColumns = showAllColumns ? profile.columns : profile.columns.slice(0, 6);
 
   return (
-    <div className="ds ds-workspace">
-      <header className="ds-head ds-head-row">
+    <div className="data-studio">
+      <div className="data-studio-header">
         <div>
-          <h1 className="dash-title">{profile.title}</h1>
-          <p className="dash-subtitle">
-            {profile.row_count.toLocaleString()} rows, {profile.columns.length} columns
-          </p>
+          <div className="data-studio-title">{profile.title}</div>
+          <div className="data-studio-desc">{profile.row_count.toLocaleString()} rows · {profile.columns.length} columns</div>
         </div>
-        <div className="ds-head-actions">
-          <button className="p-btn p-btn-secondary" onClick={() => setPlacing(true)} disabled={!!busy}>
-            Add to deck
-          </button>
+        <div style={{display:"flex",gap:".5rem"}}>
+          <button className="p-btn p-btn-secondary" onClick={() => setPlacing(true)} disabled={!!busy}>Add to deck</button>
           <button className="p-btn p-btn-ghost" onClick={reset}>New import</button>
         </div>
-      </header>
+      </div>
+      <div className="data-studio-body">
 
       {error && <p className="p-error">{error}</p>}
       {notice && <p className="ds-notice">{notice}</p>}
@@ -270,10 +306,10 @@ export default function DataStudio() {
       )}
 
       <div className="ds-grid">
-        <main className="ds-main">
+        <main className="data-studio-main">
           {spec ? (
             <>
-              <div className="ds-chart-tabs">
+              <div className="data-chart-tabs">
                 {charts.recommendations.slice(0, 6).map((r, i) => (
                   <button
                     key={`${r.chart_type}-${i}`}
@@ -365,6 +401,7 @@ export default function DataStudio() {
             </section>
           )}
         </aside>
+        </div>
       </div>
     </div>
   );
