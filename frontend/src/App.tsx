@@ -8,6 +8,7 @@ import Landing from "./marketing/Landing";
 import MfaSettings from "./MfaSettings";
 import HomeDashboard from "./HomeDashboard";
 import NotificationBanner from "./NotificationBanner";
+import SupportWidget from "./SupportWidget";
 import "./theme.css";
 import "./dashboard.css";
 
@@ -117,6 +118,19 @@ export default function App() {
     );
   }
 
+  // The mailing-list choice was made before the account had a token, so it
+  // is synced here the first time a session exists. Guarded so it runs once
+  // per browser session rather than on every render.
+  if (session && !sessionStorage.getItem("provisio:optin-synced")) {
+    sessionStorage.setItem("provisio:optin-synced", "1");
+    const optIn = Boolean((session.user.user_metadata as Record<string, unknown>)?.marketing_opt_in);
+    fetch(`${import.meta.env.VITE_API_BASE}/me/marketing-optin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ opt_in: optIn, email: session.user.email ?? "" }),
+    }).catch(() => { /* not worth blocking sign-in over */ });
+  }
+
   return (
     <Dashboard
       userEmail={session.user.email ?? ""}
@@ -192,6 +206,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
       </div>
 
       <NotificationBanner accessToken={accessToken} />
+      <SupportWidget accessToken={accessToken} />
 
       {tab === "profile" && (
         <Suspense fallback={<TabLoading />}>

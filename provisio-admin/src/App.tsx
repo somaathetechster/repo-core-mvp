@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api, type AdminUser, type AdminStats, type AdminUsageRow, ApiError } from "./api";
+import { api, type AdminUser, type AdminStats, type AdminUsageRow, type SupportThread, type SupportMessage, type MailingEntry, ApiError } from "./api";
 
 /* ── Auth ──────────────────────────────────────────────────── */
 function useAuth() {
@@ -36,10 +36,12 @@ function Login({ onLogin }: { onLogin:(k:string)=>boolean }) {
 }
 
 /* ── Helpers ──────────────────────────────────────────────── */
-type Page = "overview"|"users"|"usage"|"plans"|"settings";
+type Page = "overview"|"users"|"support"|"mailing"|"usage"|"plans"|"settings";
 const NAV: {page:Page;label:string;icon:string}[] = [
   {page:"overview",label:"Overview",icon:"◈"},
   {page:"users",   label:"Users",   icon:"◉"},
+  {page:"support", label:"Support", icon:"✉"},
+  {page:"mailing", label:"Mailing list", icon:"◫"},
   {page:"usage",   label:"Usage",   icon:"◎"},
   {page:"plans",   label:"Plans",   icon:"◆"},
   {page:"settings",label:"Settings",icon:"⊙"},
@@ -351,6 +353,161 @@ function Settings({flash}:{flash:(m:string,e?:boolean)=>void}) {
   );
 }
 
+
+/* ── Support inbox ─────────────────────────────────────────── */
+function Support({flash}:{flash:(m:string,e?:boolean)=>void}) {
+  const [threads, setThreads] = useState<SupportThread[]>([]);
+  const [activeId, setActiveId] = useState<string|null>(null);
+  const [messages, setMessages] = useState<SupportMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const loadThreads = useCallback(async () => {
+    try { setThreads(await api.threads()); } catch { /* transient */ }
+  }, []);
+
+  const loadThread = useCallback(async (id: string) => {
+    try { setMessages(await api.thread(id)); } catch { /* transient */ }
+  }, []);
+
+  // Poll both lists while the window is visible, so a founder writing in
+  // appears without the operator refreshing.
+  useEffect(() => {
+    const tick = () => {
+      if (document.hidden) return;
+      loadThreads();
+      if (activeId) loadThread(activeId);
+    };
+    tick();
+    const t = setInterval(tick, 5000);
+    return () => clearInterval(t);
+  }, [activeId, loadThreads, loadThread]);
+
+  useEffect(() => { endRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages]);
+
+  const open = (id: string) => { setActiveId(id); setMessages([]); loadThread(id); };
+
+  const send = async () => {
+    const body = draft.trim();
+    if (!body || !activeId || sending) return;
+    setSending(true);
+    try {
+      const saved = await api.reply(activeId, body);
+      setMessages(m => [...m, saved]);
+      setDraft("");
+      loadThreads();
+    } catch(e) { flash(e instanceof ApiError ? e.message : "Reply failed", true); }
+    finally { setSending(false); }
+  };
+
+  const active = threads.find(t => t.user_id === activeId);
+  const totalUnread = threads.reduce((n,t) => n + t.unread, 0);
+
+  return (
+    <div className="sup-wrap">
+      <div className="sup-list">
+        <div className="sup-list-head">
+          Conversations
+          {totalUnread > 0 && <span className="badge badge-red">{totalUnread} unread</span>}
+        </div>
+        {threads.length === 0 && <div className="admin-empty" style={{padding:"2rem 1rem"}}>No messages yet</div>}
+        {threads.map(t => (
+          <button key={t.user_id}
+            className={`sup-thread ${activeId===t.user_id?"is-active":""}`}
+            onClick={() => open(t.user_id)}>
+            <div className="sup-thread-top">
+              <span className="sup-thread-email">{t.email}</span>
+              {t.unread > 0 && <span className="sup-dot" />}
+            </div>
+            <div className="sup-thread-last">
+              {t.last_sender === "admin" && <em>You: </em>}{t.last_message}
+            </div>
+            <div className="sup-thread-meta">{t.last_at ? relTime(t.last_at) : ""} · {t.messages} messages</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="sup-convo">
+        {!activeId ? (
+          <div className="admin-empty">Pick a conversation to read and reply.</div>
+        ) : (
+          <>
+            <div className="sup-convo-head">
+              <div>
+                <div style={{fontWeight:600}}>{active?.email}</div>
+                <div className="mono" style={{fontSize:".68rem",color:"var(--text3)"}}>{activeId}</div>
+              </div>
+            </div>
+            <div className="sup-msgs">
+              {messages.map(m => (
+                <div key={m.id} className={`sup-msg sup-${m.sender}`}>
+                  <div className="sup-bubble">{m.body}</div>
+                  <div className="sup-time">
+                    {m.sender==="admin"?"You":"Them"}
+                    {m.created_at && ` · ${new Date(m.created_at).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}`}
+                  </div>
+                </div>
+              ))}
+              <div ref={endRef}/>
+            </div>
+            <div className="sup-compose">
+              <textarea rows={2} placeholder="Write a reply…" value={draft}
+                onChange={e=>setDraft(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} }}/>
+              <button className="btn btn-gold" onClick={send} disabled={!draft.trim()||sending}>
+                {sending?"…":"Reply"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Mailing list ──────────────────────────────────────────── */
+function Mailing({flash}:{flash:(m:string,e?:boolean)=>void}) {
+  const [rows, setRows] = useState<MailingEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{ api.mailingList().then(setRows).catch(()=>{}).finally(()=>setLoading(false)); },[]);
+
+  const copy = () => {
+    navigator.clipboard.writeText(rows.map(r=>r.email).join(", "))
+      .then(()=>flash(`${rows.length} addresses copied`))
+      .catch(()=>flash("Couldn't copy", true));
+  };
+  const csv = () => {
+    const blob = new Blob(["email,name\n" + rows.map(r=>`${r.email},${(r.name??"").replace(/,/g,"")}`).join("\n")],
+      {type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `provisio-mailing-list-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  };
+
+  return (
+    <div className="admin-table-wrap">
+      <div className="admin-table-header">
+        <span className="admin-table-title">Opted in ({rows.length})</span>
+        <div style={{display:"flex",gap:".5rem"}}>
+          <button className="btn btn-ghost btn-sm" onClick={copy} disabled={!rows.length}>Copy addresses</button>
+          <button className="btn btn-gold btn-sm" onClick={csv} disabled={!rows.length}>Export CSV</button>
+        </div>
+      </div>
+      {loading ? <div className="loading-row"><div className="spinner"/></div> : (
+        <table>
+          <thead><tr><th>Email</th><th>Name</th></tr></thead>
+          <tbody>
+            {rows.length===0 && <tr><td colSpan={2} className="admin-empty">Nobody has opted in yet.</td></tr>}
+            {rows.map(r=>(<tr key={r.user_id}><td>{r.email}</td><td>{r.name ?? "—"}</td></tr>))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 /* ── Shell ─────────────────────────────────────────────────── */
 export default function App() {
   const {authed,login,logout} = useAuth();
@@ -416,6 +573,8 @@ export default function App() {
         <div className="admin-content">
           {page==="overview" && <Overview stats={stats}/>}
           {page==="users"    && <Users flash={flash}/>}
+          {page==="support"  && <Support flash={flash}/>}
+          {page==="mailing"  && <Mailing flash={flash}/>}
           {page==="usage"    && <Usage/>}
           {page==="plans"    && <Plans/>}
           {page==="settings" && <Settings flash={flash}/>}

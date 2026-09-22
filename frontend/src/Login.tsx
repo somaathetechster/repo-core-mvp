@@ -14,6 +14,7 @@ export default function Login({ onGoHome }: LoginProps) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [error, setError] = useState<string | null>(null);
   const [signupSent, setSignupSent] = useState(false);
+  const [optIn, setOptIn] = useState(true);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -33,7 +34,10 @@ export default function Login({ onGoHome }: LoginProps) {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          // The account isn't confirmed yet, so there's no token to call our
+          // API with. The choice rides along in metadata and is synced to the
+          // mailing list the first time the founder signs in.
+          options: { data: { full_name: fullName, marketing_opt_in: optIn } },
         });
         if (error) setError(error.message);
         else setSignupSent(true);
@@ -99,6 +103,19 @@ export default function Login({ onGoHome }: LoginProps) {
                 minLength={6}
               />
               {error && <p className="p-error">{error}</p>}
+              {mode === "signup" && (
+                <label className="auth-optin">
+                  <input
+                    type="checkbox"
+                    checked={optIn}
+                    onChange={(e) => setOptIn(e.target.checked)}
+                  />
+                  <span>
+                    Email me product updates and fundraising tips.
+                    <em>No more than twice a month. Unsubscribe any time.</em>
+                  </span>
+                </label>
+              )}
               <button className="p-btn p-btn-primary" type="submit" disabled={loading}>
                 {loading ? "Working..." : mode === "login" ? "Log in" : "Sign up"}
               </button>

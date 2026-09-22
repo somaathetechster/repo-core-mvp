@@ -23,3 +23,8 @@
 .auth-switch { margin-top: 1.2rem; width: 100%; text-decoration: underline; }
 .auth-confirm h2 { font-size: 1.3rem; margin-bottom: 0.6rem; }
 .auth-confirm p { color: var(--text-dim); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.4rem; }
+
+/* Mailing list opt-in */
+.auth-optin { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.78rem; color: var(--text-dim); line-height: 1.45; cursor: pointer; }
+.auth-optin input { margin-top: 0.15rem; accent-color: var(--gold); flex-shrink: 0; }
+.auth-optin em { display: block; font-style: normal; font-size: 0.71rem; color: var(--text-muted); margin-top: 0.15rem; }

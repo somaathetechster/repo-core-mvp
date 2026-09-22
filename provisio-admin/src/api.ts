@@ -53,7 +53,31 @@ export interface AdminUsageRow {
   plan: string;
 }
 
+export interface SupportThread {
+  user_id: string;
+  email: string;
+  last_message: string;
+  last_sender: "user" | "admin";
+  last_at: string | null;
+  unread: number;
+  messages: number;
+}
+
+export interface SupportMessage {
+  id: number;
+  sender: "user" | "admin";
+  body: string;
+  created_at: string | null;
+}
+
+export interface MailingEntry { user_id: string; email: string; name: string | null; }
+
 export const api = {
+  threads: () => req<SupportThread[]>("/admin/support/threads"),
+  thread: (id: string) => req<SupportMessage[]>(`/admin/support/threads/${id}`),
+  reply: (id: string, body: string) =>
+    req<SupportMessage>(`/admin/support/threads/${id}/reply`, { method: "POST", body: JSON.stringify({ body }) }),
+  mailingList: () => req<MailingEntry[]>("/admin/mailing-list"),
   stats: () => req<AdminStats>("/admin/stats"),
   users: (q?: string) => req<AdminUser[]>(
     `/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}`
