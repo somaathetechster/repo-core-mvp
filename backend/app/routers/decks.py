@@ -132,17 +132,18 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
                 diligence = summary["diligence"]
                 break
         try:
+            brief = build_brief(profile)
+            brief_dict = brief.to_dict()
+        except Exception:
+            brief = None
+            brief_dict = {}
+
+        try:
             narrative = generate_narrative(profile, diligence)
             slide_list, deck_theme, narrative_warnings = build_deck_from_narrative(
                 profile, narrative, body.repo_summaries
             )
         except Exception as e:
-            try:
-                brief = build_brief(profile)
-                brief_dict = brief.to_dict()
-            except Exception:
-                brief = None
-                brief_dict = {}
             slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief)
             narrative_warnings = [
                 f"Slides were written directly from your profile because the narrative "
