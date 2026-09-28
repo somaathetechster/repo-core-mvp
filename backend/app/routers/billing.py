@@ -15,7 +15,7 @@ from sqlalchemy import select, func, desc
 from app.core.deps import get_current_user_id, get_current_user_id_optional
 from app.core.db import AsyncSessionLocal
 from app.models.billing import (
-    PLANS, PlanId, SubscriptionStatus, SubscriptionModel, UsageModel, UserFlagsModel,
+    PLANS, PlanId, SubscriptionStatus, SubscriptionModel, UsageModel, UserFlagsModel, UserNotificationModel,
     evaluate_entitlement, entitlement_to_dict, plan_to_dict, period_end_for,
 )
 from app.models.deck import DeckModel
