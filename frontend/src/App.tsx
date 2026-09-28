@@ -147,6 +147,7 @@ type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "review" 
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
   const [tab, setTab] = useState<DashTab>("home");
   const [analyzedRepos, setAnalyzedRepos] = useState<AnalyzeResult[]>([]);
+  const [profileFocusField, setProfileFocusField] = useState<string | null>(null);
 
   // Returning from the GitHub install flow lands here with ?status=success.
   // Clear the param and open the Evidence tab, which handles loading repos
@@ -161,10 +162,17 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
 
   // Stash first (the Decks page is lazy and may not be mounted yet), then
   // notify it in case it already is.
-  const openDeck = (id: string) => {
+  const openDeck = (id: string, slideIndex?: number) => {
     sessionStorage.setItem("provisio:open-deck", id);
+    if (slideIndex != null) sessionStorage.setItem("provisio:open-slide", String(slideIndex));
+    else sessionStorage.removeItem("provisio:open-slide");
     setTab("deck");
-    window.dispatchEvent(new CustomEvent("provisio:open-deck", { detail: { deckId: id } }));
+    window.dispatchEvent(new CustomEvent("provisio:open-deck", { detail: { deckId: id, slideIndex } }));
+  };
+
+  const navigateTo = (t: DashTab, focusField?: string) => {
+    if (focusField) setProfileFocusField(focusField);
+    setTab(t);
   };
 
   return (
@@ -215,7 +223,10 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
 
       {tab === "profile" && (
         <Suspense fallback={<TabLoading />}>
-          <CompanyProfileForm />
+          <CompanyProfileForm
+            focusField={profileFocusField}
+            onFocusHandled={() => setProfileFocusField(null)}
+          />
         </Suspense>
       )}
 
@@ -227,8 +238,14 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
 
       {tab === "review" && (
         <Suspense fallback={<TabLoading />}>
-          <DeckReview onOpenDeck={openDeck} />
+          <DeckReview onOpenDeck={openDeck} onNavigate={navigateTo} />
         </Suspense>
+      )}
+
+      {tab === "billing" && (
+        <div className="dash-body">
+          <BillingPlans accessToken={accessToken} />
+        </div>
       )}
 
       {tab === "data" && (

@@ -1,0 +1,37 @@
+/* Fix button + preview on each review finding */
+.rvp-fix-box {
+  margin-top: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: rgba(196,154,40,.05);
+  border: 1px solid rgba(196,154,40,.15);
+  border-radius: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.rvp-fix-preview {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.rvp-fix-btn {
+  align-self: flex-start;
+  background: var(--gold);
+  color: #0d0c0a;
+  border: none;
+  border-radius: 7px;
+  padding: 0.45rem 1rem;
+  font: 600 0.8rem var(--font-body);
+  cursor: pointer;
+}
+.rvp-fix-btn:hover { background: var(--gold-hover); }
+.rvp-fix-btn:disabled { opacity: 0.55; cursor: default; }
+
+.rvp-finding-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+.rvp-slide-tag {
+  font: 0.62rem var(--font-mono);
+  color: var(--gold-dim);
+  background: var(--gold-faint);
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+}

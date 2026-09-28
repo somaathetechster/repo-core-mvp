@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DeckImport from "./DeckImport";
 import { getCompanyProfile, saveCompanyProfile, type CompanyProfile, type TeamMember, type TaggedImage } from "./api";
 import { fileToDataUrl, extractDominantColor, MAX_IMAGE_BYTES } from "./fileUtils";
@@ -166,15 +166,25 @@ interface CompanyProfileFormProps {
   save?: (profile: CompanyProfile) => Promise<void>;
   heading?: string;
   description?: string;
+  focusField?: string | null;
+  onFocusHandled?: () => void;
 }
 
-export default function CompanyProfileForm({ load, save, heading, description }: CompanyProfileFormProps = {}) {
+export default function CompanyProfileForm({
+  load,
+  save,
+  heading,
+  description,
+  focusField,
+  onFocusHandled,
+}: CompanyProfileFormProps = {}) {
   const [profile, setProfile] = useState<CompanyProfile>(EMPTY_PROFILE);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [importing, setImporting] = useState(false);
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const doLoad = load ?? getCompanyProfile;
   const doSave = save ?? saveCompanyProfile;
@@ -186,6 +196,19 @@ export default function CompanyProfileForm({ load, save, heading, description }:
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!focusField || loading) return;
+    const el = fieldRefs.current[focusField];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const input = el.querySelector("input, textarea") as HTMLElement | null;
+      input?.focus();
+      el.classList.add("profile-field-flash");
+      setTimeout(() => el.classList.remove("profile-field-flash"), 2000);
+    }
+    onFocusHandled?.();
+  }, [focusField, loading, onFocusHandled]);
 
   function update(key: TextField, value: string) {
     setProfile((p) => ({ ...p, [key]: value }));
@@ -449,7 +472,11 @@ export default function CompanyProfileForm({ load, save, heading, description }:
           <p className="profile-section-desc">{section.description}</p>
           <div className="profile-fields">
             {section.fields.map((field) => (
-              <label className="profile-field" key={field.key}>
+              <label
+                className="profile-field"
+                key={field.key}
+                ref={(el) => { fieldRefs.current[field.key] = el; }}
+              >
                 <span>{field.label}</span>
                 {field.multiline ? (
                   <textarea

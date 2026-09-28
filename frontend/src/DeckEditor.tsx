@@ -85,7 +85,15 @@ export default function DeckEditor({
   const [images, setImages] = useState<BrandImage[]>([]);
   // Every distinct image in the deck, stored once and referenced by hash.
   const imageMapRef = useRef<ImageMap>({});
-  const [current, setCurrent] = useState(0);
+  const [current, setCurrent] = useState(() => {
+    const stashed = sessionStorage.getItem("provisio:open-slide");
+    if (stashed != null) {
+      sessionStorage.removeItem("provisio:open-slide");
+      const n = parseInt(stashed, 10);
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  });
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);

@@ -23,6 +23,14 @@
 .profile-field { display: flex; flex-direction: column; gap: 0.4rem; }
 .profile-field span { font-size: 0.85rem; color: var(--text-dim); font-weight: 500; }
 .profile-field textarea { resize: vertical; font-family: var(--font-body); line-height: 1.5; }
+.profile-field-flash {
+  animation: profile-flash 2s ease;
+  border-radius: 10px;
+}
+@keyframes profile-flash {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  15% { box-shadow: 0 0 0 3px rgba(196,154,40,.35); }
+}
 
 .profile-footer-save { display: flex; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--ink-border); }
 

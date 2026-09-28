@@ -7,30 +7,58 @@
  * questions the deck leaves unanswered. Computed locally, so it's instant.
  */
 import { useEffect, useMemo, useState } from "react";
-import { listDecks, getDeck, type DeckSummary } from "./api";
+import {
+  getCompanyProfile,
+  getDeck,
+  listDecks,
+  regenerateDeck,
+  type CompanyProfile,
+  type DeckSummary,
+} from "./api";
 import { toElementSlides, type StoredSlide } from "./deck/migrate";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
+import { planFix } from "./deck/fixActions";
+import type { FixAction } from "./deck/fixActions";
 import { reviewDeck, unansweredQuestions, type Finding, type ProgramBrief } from "./deck/review";
 import { planVariants } from "./deck/variants";
 import type { ElementSlide } from "./deck/elements";
 import "./deck-review.css";
+import "./fix-button.css";
 
-interface Props { onOpenDeck?: (id: string) => void; }
+interface Props {
+  onOpenDeck?: (id: string, slideIndex?: number) => void;
+  onNavigate?: (tab: "profile", focusField?: string) => void;
+}
 
-export default function DeckReview({ onOpenDeck }: Props) {
+export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
   const [deckId, setDeckId] = useState<string | null>(null);
   const [slides, setSlides] = useState<ElementSlide[] | null>(null);
   const [brief, setBrief] = useState<ProgramBrief | null>(null);
+  const [profile, setProfile] = useState<CompanyProfile | null>(null);
+  const [fixing, setFixing] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | Finding["severity"]>("all");
 
   useEffect(() => {
+    getCompanyProfile().then(setProfile).catch(() => setProfile(null));
+  }, []);
+
+  useEffect(() => {
     listDecks()
-      .then((d) => { setDecks(d); if (d.length) setDeckId(d[0].id); })
+      .then((d) => {
+        const stored = sessionStorage.getItem("provisio:review-deck");
+        const preferred = stored ? d.find((x) => x.id === stored) : null;
+        setDecks(d);
+        if (d.length) setDeckId(preferred?.id ?? d[0].id);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : "Couldn't load decks"));
   }, []);
+
+  useEffect(() => {
+    if (deckId) sessionStorage.setItem("provisio:review-deck", deckId);
+  }, [deckId]);
 
   useEffect(() => {
     if (!deckId) return;
@@ -61,6 +89,36 @@ export default function DeckReview({ onOpenDeck }: Props) {
     })));
     return { ...reviewDeck(slides, variants, brief), questions: unansweredQuestions(slides) };
   }, [slides, brief]);
+
+  const runFix = async (findingId: string, action: FixAction) => {
+    if (action.kind === "fill-profile" && action.profileField) {
+      onNavigate?.("profile", action.profileField);
+      return;
+    }
+    if (action.kind === "open-slide") {
+      if (deckId) onOpenDeck?.(deckId, action.slideIndex);
+      return;
+    }
+    if (action.kind === "manual") {
+      if (deckId) onOpenDeck?.(deckId);
+      return;
+    }
+    if (action.kind === "regenerate" && deckId) {
+      setFixing(findingId);
+      try {
+        await regenerateDeck(deckId, []);
+        const d = await getDeck(deckId);
+        const theme = d.theme as { template_id?: string; program_brief?: ProgramBrief } | null;
+        const tpl = theme?.template_id ?? DEFAULT_TEMPLATE_ID;
+        setBrief(theme?.program_brief ?? null);
+        setSlides(toElementSlides(d.slides as unknown as StoredSlide[], tpl, { companyName: d.name }));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Regeneration failed");
+      } finally {
+        setFixing(null);
+      }
+    }
+  };
 
   const deck = decks?.find((d) => d.id === deckId);
   const shown = review?.findings.filter((f) => filter === "all" || f.severity === filter) ?? [];
@@ -157,6 +215,21 @@ export default function DeckReview({ onOpenDeck }: Props) {
                     <h3>{f.title}</h3>
                     <p className="rvp-f-detail">{f.detail}</p>
                     <p className="rvp-f-fix"><strong>Fix:</strong> {f.fix}</p>
+                    {(() => {
+                      const action = planFix(f, profile);
+                      return (
+                        <div className="rvp-fix-box">
+                          <div className="rvp-fix-preview">{action.preview}</div>
+                          <button
+                            className="rvp-fix-btn"
+                            disabled={fixing === f.id}
+                            onClick={() => runFix(f.id, action)}
+                          >
+                            {fixing === f.id ? "Working…" : action.label} →
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </article>
                 ))}
               </div>
