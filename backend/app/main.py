@@ -9,7 +9,7 @@ from app.core.db import init_models
 # created and every entitlement check fails at runtime.
 from app.models import billing as _billing_models  # noqa: F401
 from app.models import support as _support_models  # noqa: F401
-from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import, billing, support
+from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import, billing, support, payments
 
 app = FastAPI(title="repo-core API")
 
@@ -56,6 +56,7 @@ app.include_router(support.router)
 app.include_router(support.admin)
 app.include_router(billing.router)
 app.include_router(billing.admin)
+app.include_router(payments.router)
 
 
 @app.on_event("startup")

@@ -9,6 +9,7 @@ import MfaSettings from "./MfaSettings";
 import HomeDashboard from "./HomeDashboard";
 import NotificationBanner from "./NotificationBanner";
 import SupportWidget from "./SupportWidget";
+import BillingPlans from "./BillingPlans";
 import ChangePassword from "./ChangePassword";
 import "./theme.css";
 import "./dashboard.css";
@@ -141,7 +142,7 @@ export default function App() {
   );
 }
 
-type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "review" | "data";
+type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "review" | "data" | "billing";
 
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
   const [tab, setTab] = useState<DashTab>("home");
@@ -193,6 +194,9 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           </button>
           <button className={`dash-tab ${tab === "security" ? "dash-tab-active" : ""}`} onClick={() => setTab("security")}>
             Security
+          </button>
+          <button className={`dash-tab ${tab === "billing" ? "dash-tab-active" : ""}`} onClick={() => setTab("billing")}>
+            Billing
           </button>
         </nav>
         <div className="dash-user">
