@@ -83,6 +83,31 @@ export interface ProgramBrief {
   question_map: { question: string; section: string | null }[];
 }
 
+
+const SECTION_SIGNALS: Record<string, RegExp> = {
+  problem: /\b(problem|pain|broken|fails?|failing|struggle|frustrat|inefficien|bottleneck|gap|lack of|no way to|difficult to|too (?:slow|expensive|hard)|underserved|friction|barrier)\b/i,
+  solution: /\b(solution|we (?:built|make|offer|provide|enable)|our (?:product|platform|approach|technology)|how it works|introduc\w+|lets? (?:you|them|users)|so that|enables?|automat\w+)\b/i,
+  market: /\b(market|tam|sam|som|addressable|billion|trillion|\$\s?\d|industry|segment|customers? (?:in|across)|opportunity|demand|sector)\b/i,
+  traction: /\b(traction|users?|customers?|revenue|growth|mrr|arr|signed up|transactions?|volume|retention|waitlist|pilot|paying|active users?|downloads?|\d+\s*%|month[- ]over[- ]month|already)\b/i,
+  business_model: /\b(business model|revenue model|we charge|pricing|subscription|per (?:seat|user|month|transaction)|commission|take rate|monetiz|unit econom|margin|fee|how we make money)\b/i,
+  competition: /\b(competit|alternative|versus|vs\.?|unlike|incumbents?|existing (?:solutions|players|tools)|differ\w+|moat|defensib|better than|compared to)\b/i,
+  team: /\b(team|founder|co[- ]?founder|ceo|cto|we are|our background|previously (?:at|built)|years? of experience|led|built .* at|ex[- ])\b/i,
+  ask: /\b(raising|the ask|seeking|looking to raise|round|investment|funding|\$\s?\d[\d,.]*\s*(?:k|m|million|bn|billion)|runway|use of (?:the )?funds|in exchange for|equity)\b/i,
+  impact: /\b(impact|beneficiar|outcome|social|people (?:reached|served|affected)|lives|community|sdg|sustainab|carbon|emissions|reduce\w*|improv\w+ (?:access|outcomes)|underserved)\b/i,
+  use_of_funds: /\b(use of funds|use of the funds|allocat|budget|spend|we will (?:use|invest|hire|build)|proceeds|capital will|breakdown of)\b/i,
+  milestones: /\b(milestone|roadmap|next (?:6|12|twelve|six) months|by (?:q[1-4]|end of|20\d\d)|timeline|phase|deliverable|targets?|goals? for)\b/i,
+  risks: /\b(risk|mitigat|challeng|assumption|dependency|contingency|what could go wrong|regulatory|threat)\b/i,
+  why_now: /\b(why now|timing|recently|shift|regulat\w+ change|new (?:law|regulation|technology)|inflection|tailwind|just became possible)\b/i,
+  technology: /\b(technolog|architecture|built (?:on|with)|patent|proprietary|algorithm|infrastructure|api|model|engine|stack)\b/i,
+};
+
+function sectionCovered(section: string, slides: ElementSlide[], kinds: string[]): boolean {
+  if (kinds.includes(section as SlideKind)) return true;
+  const signal = SECTION_SIGNALS[section];
+  if (!signal) return false;
+  return slides.some((sl) => signal.test(slideText(sl)));
+}
+
 export function reviewDeck(
   slides: ElementSlide[],
   variants: LayoutVariant[] = [],
@@ -99,14 +124,14 @@ export function reviewDeck(
   // workplan is not satisfied by a deck with a great competition slide.
   if (brief?.required_sections?.length) {
     for (const section of brief.required_sections) {
-      if (kinds.includes(section as SlideKind)) continue;
+      if (sectionCovered(section, slides, kinds)) continue;
       const label = section.replace(/_/g, " ");
       findings.push({
         id: `prog-missing-${section}`,
         severity: "critical",
         slideIndex: null,
-        title: `No ${label} slide, and ${brief.programme} asks for one`,
-        detail: `This is a requirement of the programme you're applying to, not a general suggestion.`,
+        title: `Nothing in the deck covers ${label}, and ${brief.programme} asks for it`,
+        detail: `This is a requirement of the programme you're applying to. The review checked both slide titles and the text on every slide.`,
         fix: `Add a ${label} slide, or fill that section of your company profile and regenerate.`,
       });
     }
@@ -125,7 +150,7 @@ export function reviewDeck(
 
   for (const expected of EXPECTED) {
     if (brief?.required_sections?.length && !brief.required_sections.includes(expected.kind)) continue;
-    if (!kinds.includes(expected.kind)) {
+    if (!sectionCovered(expected.kind, slides, kinds)) {
       findings.push({
         id: `missing-${expected.kind}`,
         severity: expected.kind === "ask" || expected.kind === "traction" ? "critical" : "important",
@@ -275,7 +300,7 @@ export function reviewDeck(
 
   /* --- strengths ---------------------------------------------------- */
 
-  const covered = EXPECTED.filter((e) => kinds.includes(e.kind)).length;
+  const covered = EXPECTED.filter((e) => sectionCovered(e.kind, slides, kinds)).length;
   if (covered === EXPECTED.length) strengths.push("Every section an investor expects is present.");
   if (content >= 8 && content <= 12) strengths.push(`${content} content slides is the length that gets read.`);
   if (withImages >= 3) strengths.push("Imagery appears throughout rather than on one slide.");
@@ -289,10 +314,12 @@ export function reviewDeck(
 
   // Weighted by how much each class of problem actually costs a founder.
   const penalty =
-    findings.filter((f) => f.severity === "critical").length * 14 +
+    findings.filter((f) => f.severity === "critical").length * 11 +
     findings.filter((f) => f.severity === "important").length * 6 +
     findings.filter((f) => f.severity === "polish").length * 2;
-  const score = Math.max(0, Math.min(100, 100 - penalty));
+  const coverageRatio = covered / EXPECTED.length;
+  const floor = coverageRatio >= 0.6 ? 15 : 0;
+  const score = Math.max(floor, Math.min(100, 100 - penalty));
 
   const order: Record<Severity, number> = { critical: 0, important: 1, polish: 2 };
   findings.sort((a, b) => order[a.severity] - order[b.severity] || (a.slideIndex ?? -1) - (b.slideIndex ?? -1));
