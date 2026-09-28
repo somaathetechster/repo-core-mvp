@@ -137,7 +137,12 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
                 profile, narrative, body.repo_summaries
             )
         except Exception as e:
-            brief = build_brief(profile)
+            try:
+                brief = build_brief(profile)
+                brief_dict = brief.to_dict()
+            except Exception:
+                brief = None
+                brief_dict = {}
             slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief)
             narrative_warnings = [
                 f"Slides were written directly from your profile because the narrative "
@@ -150,7 +155,7 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
             profile_snapshot=profile,
             repo_full_names=[s.full_name for s in body.repo_summaries],
             slides=[slide_to_dict(s) for s in slide_list],
-            theme={**theme_to_dict(deck_theme), "program_brief": brief.to_dict()},
+            theme={**theme_to_dict(deck_theme), "program_brief": brief_dict},
             layouts={},
             freeform_slide_ids=[],
         )
@@ -226,7 +231,7 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
         # Carrying them across means "regenerate" doesn't silently undo the
         # styling work they just did.
         previous_theme = deck.theme or {}
-        new_theme = {**theme_to_dict(deck_theme), "program_brief": brief.to_dict()}
+        new_theme = {**theme_to_dict(deck_theme), "program_brief": brief_dict}
         for key in ("template_id", "scheme_id"):
             if previous_theme.get(key):
                 new_theme[key] = previous_theme[key]
