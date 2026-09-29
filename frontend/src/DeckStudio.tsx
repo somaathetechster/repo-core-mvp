@@ -576,6 +576,14 @@ export default function DeckStudio({
             {(selected.type === "image" || selected.type === "portrait" || selected.type === "logo") && (
               <>
                 <label className="dst-field">
+                  <span>Opacity · {Math.round((selected.opacity ?? 1) * 100)}%</span>
+                  <input
+                    type="range" min={0} max={1} step={0.01}
+                    value={selected.opacity ?? 1}
+                    onChange={(e) => patchSelected({ opacity: parseFloat(e.target.value) })}
+                  />
+                </label>
+                <label className="dst-field">
                   <span>Focal point X</span>
                   <input
                     type="range" min={0} max={1} step={0.02}
@@ -623,6 +631,17 @@ export default function DeckStudio({
                   </select>
                 </label>
               </>
+            )}
+
+            {selected.type === "shape" && (
+              <label className="dst-field">
+                <span>Opacity · {Math.round((selected.opacity ?? 1) * 100)}%</span>
+                <input
+                  type="range" min={0} max={1} step={0.01}
+                  value={selected.opacity ?? 1}
+                  onChange={(e) => patchSelected({ opacity: parseFloat(e.target.value) })}
+                />
+              </label>
             )}
 
             <div className="dst-btn-row">

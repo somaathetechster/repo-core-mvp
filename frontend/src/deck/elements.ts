@@ -110,6 +110,10 @@ export interface SlideElement {
   attachedTo?: string | null;
   /** Locked elements resist accidental dragging (page numbers, logos). */
   locked?: boolean;
+  /** Presentation opacity, independent of the style token values. */
+  opacity?: number;
+  /** Hidden elements remain in the layer stack but are not rendered. */
+  hidden?: boolean;
 }
 
 /** The semantic purpose of a slide, independent of its visual arrangement. */

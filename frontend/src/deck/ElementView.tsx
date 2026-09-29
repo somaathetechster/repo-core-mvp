@@ -45,7 +45,8 @@ export function elementStyleToCss(el: SlideElement, theme: DeckTheme): CSSProper
     width: el.frame.w,
     height: el.frame.h,
     zIndex: el.frame.z ?? 10,
-    opacity: s.opacity ?? 1,
+    opacity: el.opacity ?? s.opacity ?? 1,
+    display: el.hidden ? "none" : undefined,
     boxSizing: "border-box",
   };
 
