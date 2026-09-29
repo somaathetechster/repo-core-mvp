@@ -53,7 +53,7 @@ function HexColorControl({ value, onChange }: { value: string; onChange: (value:
   );
 }
 
-type Panel = "template" | "theme" | "library" | "assets" | "images" | "element";
+type Panel = "template" | "theme" | "library" | "assets" | "images" | "layers" | "element";
 
 export interface DeckStudioProps {
   slides: ElementSlide[];
@@ -148,6 +148,21 @@ export default function DeckStudio({
     });
   }
 
+  function reorderLayers(sourceId: string, targetId: string) {
+    const order = [...slide.elements].sort((a, b) => (b.frame.z ?? 10) - (a.frame.z ?? 10));
+    const sourceIndex = order.findIndex((item) => item.id === sourceId);
+    const targetIndex = order.findIndex((item) => item.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return;
+    const [source] = order.splice(sourceIndex, 1);
+    order.splice(targetIndex, 0, source);
+    const zById = new Map(order.map((item, index) => [item.id, (order.length - index) * 10]));
+    updateSlide({
+      ...slide,
+      customized: true,
+      elements: slide.elements.map((item) => ({ ...item, frame: { ...item.frame, z: zById.get(item.id) ?? item.frame.z } })),
+    }, "reorder-layers");
+  }
+
   const contrast = contrastRatio(themeSettings.ink, themeSettings.paper);
   const accentContrast = contrastRatio(themeSettings.accent, themeSettings.paper);
 
@@ -213,7 +228,7 @@ export default function DeckStudio({
 
       <aside className="dst-panel">
         <nav className="dst-tabs">
-          {(["template", "theme", "assets", "library", "images", "element"] as Panel[]).map((p) => (
+          {(["template", "theme", "assets", "library", "images", "layers", "element"] as Panel[]).map((p) => (
             <button
               key={p}
               className={`dst-tab ${panel === p ? "is-active" : ""}`}
@@ -447,6 +462,45 @@ export default function DeckStudio({
               onChange={(next) => onImagesChange?.(next)}
               onInsert={(img) => insertImage(img)}
             />
+          </section>
+        )}
+
+        {panel === "layers" && (
+          <section className="dst-section dst-layers">
+            <p className="dst-hint">Higher layers appear above lower layers. Drag to reorder.</p>
+            {[...slide.elements]
+              .sort((a, b) => (b.frame.z ?? 10) - (a.frame.z ?? 10))
+              .map((el) => (
+                <div
+                  key={el.id}
+                  className={`dst-layer-row ${selectedIds.has(el.id) ? "is-selected" : ""}`}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", el.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); reorderLayers(e.dataTransfer.getData("text/plain"), el.id); }}
+                  onClick={() => { setSelectedIds(new Set([el.id])); setSelectedId(el.id); }}
+                >
+                  <span className="dst-layer-grip" aria-hidden="true">⋮⋮</span>
+                  <span className="dst-layer-icon" aria-hidden="true">
+                    {el.type === "image" || el.type === "portrait" || el.type === "logo" ? "▧" : el.type === "shape" ? "◇" : "T"}
+                  </span>
+                  <span className="dst-layer-name">{el.text?.trim().slice(0, 28) || el.type}</span>
+                  <button
+                    className="dst-layer-action"
+                    title={el.hidden ? "Show element" : "Hide element"}
+                    onClick={(e) => { e.stopPropagation(); updateSlide({ ...slide, customized: true, elements: slide.elements.map((item) => item.id === el.id ? { ...item, hidden: !item.hidden } : item) }, "toggle-visibility"); }}
+                  >
+                    {el.hidden ? "◌" : "◉"}
+                  </button>
+                  <button
+                    className="dst-layer-action"
+                    title={el.locked ? "Unlock element" : "Lock element"}
+                    onClick={(e) => { e.stopPropagation(); updateSlide({ ...slide, customized: true, elements: slide.elements.map((item) => item.id === el.id ? { ...item, locked: !item.locked } : item) }, "toggle-lock"); }}
+                  >
+                    {el.locked ? "🔒" : "⌑"}
+                  </button>
+                </div>
+              ))}
           </section>
         )}
 

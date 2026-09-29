@@ -83,6 +83,13 @@
 .dst-hex-control { display: inline-flex; align-items: center; gap: 0.35rem; }
 .dst-hex-control input[type="color"] { width: 34px; height: 24px; border: none; background: none; padding: 0; cursor: pointer; }
 .dst-hex-control .p-input { width: 86px; padding: 0.25rem 0.35rem; font-size: 0.72rem; }
+.dst-layers { gap: 0.35rem; }
+.dst-layer-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.35rem; border: 1px solid transparent; border-radius: 6px; cursor: grab; }
+.dst-layer-row:hover, .dst-layer-row.is-selected { border-color: rgba(184,134,11,.45); background: rgba(184,134,11,.08); }
+.dst-layer-grip { color: var(--text-dim); letter-spacing: -0.15em; }
+.dst-layer-icon { width: 1.2rem; text-align: center; color: var(--text-dim); }
+.dst-layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
+.dst-layer-action { border: 0; background: transparent; padding: 0.15rem; cursor: pointer; color: var(--text-dim); }
 
 .dst-slider { display: flex; align-items: center; gap: 0.6rem; }
 .dst-slider input { flex: 1; }

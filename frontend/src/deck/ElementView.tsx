@@ -144,7 +144,7 @@ export default function ElementView({
           <div style={{
             ...css,
             background: theme.accentSoft,
-            display: "flex", alignItems: "center", justifyContent: "center",
+            display: element.hidden ? "none" : "flex", alignItems: "center", justifyContent: "center",
             color: theme.muted, fontFamily: theme.fonts.display,
             fontSize: Math.min(element.frame.h * 0.3, 34),
             borderRadius: s.borderRadius ?? 0,
@@ -179,7 +179,7 @@ export default function ElementView({
       // Zoom needs a clipping wrapper, otherwise the scaled image bleeds
       // past its frame and over neighbouring elements.
       return (
-        <div style={{ ...css, overflow: "hidden", borderRadius: s.borderRadius ?? 0 }}>
+        <div style={{ ...css, display: element.hidden ? "none" : undefined, overflow: "hidden", borderRadius: s.borderRadius ?? 0 }}>
           {img}
         </div>
       );
