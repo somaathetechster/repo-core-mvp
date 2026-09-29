@@ -8,6 +8,19 @@
 .cv-el { outline: 1px solid transparent; transition: outline-color 0.1s ease; }
 .cv-el:hover { outline-color: rgba(120,140,255,0.45); cursor: move; }
 .cv-el.is-selected { outline: 1.5px solid #5b7cfa; }
+.cv-selection-box {
+  position: absolute;
+  border: 1.5px solid #5b7cfa;
+  pointer-events: none;
+  z-index: 190;
+}
+.cv-marquee {
+  position: absolute;
+  border: 1px solid rgba(91,124,250,0.95);
+  background: rgba(91,124,250,0.12);
+  pointer-events: none;
+  z-index: 210;
+}
 .cv-el.is-locked:hover { outline-color: rgba(160,160,160,0.4); cursor: default; }
 
 .cv-handle {

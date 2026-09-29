@@ -25,6 +25,8 @@ type DragState =
   | { mode: "resize"; id: string; handle: string; startX: number; startY: number; origin: Frame }
   | null;
 
+type Marquee = { startX: number; startY: number; currentX: number; currentY: number } | null;
+
 export interface CanvasProps {
   slide: ElementSlide;
   theme: DeckTheme;
@@ -35,24 +37,50 @@ export interface CanvasProps {
   margin?: number;
   onSelect?: (id: string | null) => void;
   selectedId?: string | null;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>, activeId: string | null) => void;
 }
 
 export default function SlideCanvas({
   slide, theme, onChange, renderChart,
   interactive = true, margin = 80,
   onSelect, selectedId: controlledSelection,
+  selectedIds: controlledSelections, onSelectionChange,
 }: CanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [internalSelection, setInternalSelection] = useState<string | null>(null);
+  const [internalSelections, setInternalSelections] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<DragState>(null);
+  const [marquee, setMarquee] = useState<Marquee>(null);
   const [guides, setGuides] = useState<{ axis: "x" | "y"; at: number }[]>([]);
 
   const selectedId = controlledSelection !== undefined ? controlledSelection : internalSelection;
-  const select = useCallback((id: string | null) => {
-    if (onSelect) onSelect(id);
-    else setInternalSelection(id);
-  }, [onSelect]);
+  const selectedIds = controlledSelections ?? internalSelections;
+  const setSelection = useCallback((ids: Set<string>, activeId: string | null) => {
+    if (onSelectionChange) onSelectionChange(ids, activeId);
+    else {
+      setInternalSelections(ids);
+      setInternalSelection(activeId);
+      onSelect?.(activeId);
+    }
+  }, [onSelect, onSelectionChange]);
+  const select = useCallback((id: string | null, additive = false) => {
+    const next = additive ? new Set(selectedIds) : new Set<string>();
+    if (id) next.add(id);
+    setSelection(next, id);
+  }, [selectedIds, setSelection]);
+
+  const canvasPoint = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left) / scale,
+      y: (clientY - rect.top) / scale,
+    };
+  }, [scale]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -78,6 +106,11 @@ export default function SlideCanvas({
     if (!drag) return;
 
     function onMove(ev: PointerEvent) {
+      if (marquee) {
+        const point = canvasPoint(ev.clientX, ev.clientY);
+        setMarquee({ ...marquee, currentX: point.x, currentY: point.y });
+        return;
+      }
       const dx = (ev.clientX - drag!.startX) / scale;
       const dy = (ev.clientY - drag!.startY) / scale;
       const siblings = slide.elements.filter((e) => e.id !== drag!.id);
@@ -102,6 +135,24 @@ export default function SlideCanvas({
     }
 
     function onUp() {
+      if (marquee) {
+        const left = Math.min(marquee.startX, marquee.currentX);
+        const right = Math.max(marquee.startX, marquee.currentX);
+        const top = Math.min(marquee.startY, marquee.currentY);
+        const bottom = Math.max(marquee.startY, marquee.currentY);
+        const isClick = right - left < 4 && bottom - top < 4;
+        if (isClick) {
+          select(null);
+        } else {
+          const hits = slide.elements.filter((el) =>
+            el.frame.x < right && el.frame.x + el.frame.w > left
+            && el.frame.y < bottom && el.frame.y + el.frame.h > top,
+          ).map((el) => el.id);
+          setSelection(new Set(hits), hits[hits.length - 1] ?? null);
+        }
+        setMarquee(null);
+        return;
+      }
       setDrag(null);
       setGuides([]);
     }
@@ -112,44 +163,50 @@ export default function SlideCanvas({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [drag, scale, slide.elements, margin, updateElement]);
+  }, [drag, marquee, scale, slide.elements, margin, updateElement, canvasPoint, select, setSelection]);
 
   // Keyboard nudging: arrow keys move by 1px, shift by 10. Precise
   // positioning by dragging alone is genuinely hard at small scales.
   useEffect(() => {
-    if (!interactive || !selectedId) return;
+    if (!interactive || !selectedIds.size) return;
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
 
-      const activeId = selectedId;
+      const ids = [...selectedIds];
+      const activeId = selectedId && selectedIds.has(selectedId) ? selectedId : ids[ids.length - 1];
       if (!activeId) return;
-      const el = slide.elements.find((x) => x.id === activeId);
-      if (!el) return;
       const step = e.shiftKey ? 10 : 1;
       let handled = true;
-      const f = { ...el.frame };
       switch (e.key) {
-        case "ArrowLeft": f.x -= step; break;
-        case "ArrowRight": f.x += step; break;
-        case "ArrowUp": f.y -= step; break;
-        case "ArrowDown": f.y += step; break;
+        case "ArrowLeft":
+        case "ArrowRight":
+        case "ArrowUp":
+        case "ArrowDown": {
+          const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+          const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+          onChange({
+            ...slide,
+            customized: true,
+            elements: slide.elements.map((item) => selectedIds.has(item.id)
+              ? { ...item, frame: clampFrame({ ...item.frame, x: item.frame.x + dx, y: item.frame.y + dy }) }
+              : item),
+          }, `nudge:${ids.join(",")}`);
+          break;
+        }
         case "Delete":
         case "Backspace":
-          onChange({ ...slide, customized: true, elements: slide.elements.filter((x) => x.id !== activeId) });
-          select(null);
+          onChange({ ...slide, customized: true, elements: slide.elements.filter((x) => !selectedIds.has(x.id)) }, "delete-selection");
+          setSelection(new Set(), null);
           return;
-        case "Escape": select(null); return;
+        case "Escape": setSelection(new Set(), null); return;
         default: handled = false;
       }
-      if (handled) {
-        e.preventDefault();
-        updateElement(activeId, { frame: clampFrame(f) }, `nudge:${activeId}`);
-      }
+      if (handled) e.preventDefault();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [interactive, selectedId, slide, updateElement, onChange, select]);
+  }, [interactive, selectedId, selectedIds, slide, onChange, setSelection]);
 
   const background =
     slide.background === "ink" ? theme.ink
@@ -157,10 +214,23 @@ export default function SlideCanvas({
         : theme.paper;
 
   const sorted = [...slide.elements].sort((a, b) => (a.frame.z ?? 10) - (b.frame.z ?? 10));
+  const selectedElements = slide.elements.filter((el) => selectedIds.has(el.id));
+  const selectionBounds = selectedElements.length ? selectedElements.reduce((bounds, el) => ({
+    left: Math.min(bounds.left, el.frame.x),
+    top: Math.min(bounds.top, el.frame.y),
+    right: Math.max(bounds.right, el.frame.x + el.frame.w),
+    bottom: Math.max(bounds.bottom, el.frame.y + el.frame.h),
+  }), {
+    left: selectedElements[0].frame.x,
+    top: selectedElements[0].frame.y,
+    right: selectedElements[0].frame.x + selectedElements[0].frame.w,
+    bottom: selectedElements[0].frame.y + selectedElements[0].frame.h,
+  }) : null;
 
   return (
     <div ref={wrapRef} className="cv-wrap" style={{ height: CANVAS_H * scale }}>
       <div
+        ref={canvasRef}
         className="cv-canvas"
         style={{
           width: CANVAS_W, height: CANVAS_H,
@@ -168,11 +238,14 @@ export default function SlideCanvas({
           background,
         }}
         onPointerDown={(e) => {
-          if (e.target === e.currentTarget) select(null);
+          if (e.target === e.currentTarget && interactive) {
+            const point = canvasPoint(e.clientX, e.clientY);
+            setMarquee({ startX: point.x, startY: point.y, currentX: point.x, currentY: point.y });
+          }
         }}
       >
         {sorted.map((el) => {
-          const isSelected = selectedId === el.id;
+          const isSelected = selectedIds.has(el.id);
           return (
             <div
               key={el.id}
@@ -188,7 +261,7 @@ export default function SlideCanvas({
                 const target = e.target as HTMLElement;
                 if (target.isContentEditable) return;
                 e.stopPropagation();
-                select(el.id);
+                select(el.id, e.shiftKey);
                 if (el.locked) return;
                 setDrag({ mode: "move", id: el.id, startX: e.clientX, startY: e.clientY, origin: el.frame });
               }}
@@ -220,6 +293,30 @@ export default function SlideCanvas({
             </div>
           );
         })}
+
+        {selectionBounds && (
+          <div
+            className="cv-selection-box"
+            style={{
+              left: selectionBounds.left,
+              top: selectionBounds.top,
+              width: selectionBounds.right - selectionBounds.left,
+              height: selectionBounds.bottom - selectionBounds.top,
+            }}
+          />
+        )}
+
+        {marquee && (
+          <div
+            className="cv-marquee"
+            style={{
+              left: Math.min(marquee.startX, marquee.currentX),
+              top: Math.min(marquee.startY, marquee.currentY),
+              width: Math.abs(marquee.currentX - marquee.startX),
+              height: Math.abs(marquee.currentY - marquee.startY),
+            }}
+          />
+        )}
 
         {guides.map((g, i) => (
           <div

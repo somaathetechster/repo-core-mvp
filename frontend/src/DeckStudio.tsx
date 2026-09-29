@@ -51,6 +51,7 @@ export default function DeckStudio({
 }: DeckStudioProps) {
   const [panel, setPanel] = useState<Panel>("template");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [assetQuery, setAssetQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string | null>(() => normaliseIndustry(industry));
@@ -77,7 +78,10 @@ export default function DeckStudio({
 
   function addElements(els: SlideElement[]) {
     updateSlide({ ...slide, customized: true, elements: [...slide.elements, ...els] }, "add-element");
-    if (els.length === 1) setSelectedId(els[0].id);
+    if (els.length === 1) {
+      setSelectedId(els[0].id);
+      setSelectedIds(new Set([els[0].id]));
+    }
   }
 
   /**
@@ -154,7 +158,11 @@ export default function DeckStudio({
             onChange={updateSlide}
             renderChart={renderChart}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedIds={selectedIds}
+            onSelectionChange={(ids, activeId) => {
+              setSelectedIds(ids);
+              setSelectedId(activeId);
+            }}
           />
         </div>
 
@@ -164,7 +172,7 @@ export default function DeckStudio({
             <button
               key={s.id}
               className={`dst-thumb ${i === current ? "is-active" : ""}`}
-              onClick={() => { onCurrentChange(i); setSelectedId(null); }}
+              onClick={() => { onCurrentChange(i); setSelectedId(null); setSelectedIds(new Set()); }}
             >
               <span className="dst-thumb-num">{i + 1}</span>
               <span className="dst-thumb-title">{s.title}</span>
