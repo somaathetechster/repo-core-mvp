@@ -6,7 +6,7 @@
  * claims without numbers, hedge words, density, rhythm, and the investor
  * questions the deck leaves unanswered. Computed locally, so it's instant.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   getCompanyProfile,
   addSlide,
@@ -130,31 +130,53 @@ function reviewTheme(raw: {
   });
 }
 
+const THUMB_W = 220;
+
 function Thumbnail({
   slide,
   theme,
   slideNumber,
   className = "",
+  overlay,
+  caption = true,
 }: {
   slide: ElementSlide;
   theme: DeckTheme;
   slideNumber?: number;
   className?: string;
+  overlay?: ReactNode;
+  caption?: boolean;
 }) {
   return (
     <div className={`rvp-thumbnail ${className}`}>
-      <SlideCanvas
-        slide={slide}
-        theme={theme}
-        interactive={false}
-        onChange={() => undefined}
-      />
-      <div className="rvp-thumbnail-caption">
-        <span>{slide.title}</span>
-        <span>{slideNumber != null ? `Slide ${slideNumber + 1}` : "Suggested layout"}</span>
+      <div className="rvp-thumb-media">
+        <SlideCanvas
+          slide={slide}
+          theme={theme}
+          interactive={false}
+          containerWidth={THUMB_W}
+          onChange={() => undefined}
+        />
+        {overlay}
       </div>
+      {caption && (
+        <div className="rvp-thumbnail-caption">
+          <span>{slide.title}</span>
+          <span>{slideNumber != null ? `Slide ${slideNumber + 1}` : "Suggested layout"}</span>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Pulls the quoted hedge words out of a hedging finding's detail string. */
+function hedgeWords(detail: string): string[] {
+  return [...detail.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+}
+
+/** Reads the word count a density finding reports in its title. */
+function slideWordCount(finding: Finding): number {
+  return Number(finding.title.match(/(\d+)\s+words?/)?.[1] ?? 0);
 }
 
 function FindingVisual({
@@ -171,20 +193,134 @@ function FindingVisual({
   profile: CompanyProfile | null;
 }) {
   const coverIndex = Math.max(0, slides.findIndex((slide) => slide.kind === "cover"));
-  const currentIndex = finding.slideIndex != null ? finding.slideIndex : coverIndex;
-  const current = slides[currentIndex] ?? slides[coverIndex];
-  if (!current) return null;
-
   const section = sectionFromFinding(finding);
   const missing = findingType(finding) === "completeness" && section;
-  const annotation = finding.id.startsWith("no-numbers-")
-    ? "Add a concrete figure here — users, revenue, growth, retention, or another measurable proof."
-    : finding.id.startsWith("hedging-")
-      ? "Replace vague language with a claim the reader can verify."
-      : finding.id.startsWith("dense-")
-        ? "This needs fewer words and one clearer claim."
-        : "This is the current state. Use the fix below to decide what changes next.";
 
+  // For a missing section there is no current slide to point at; everything
+  // else anchors to the slide the finding names.
+  const currentIndex = finding.slideIndex != null ? finding.slideIndex : coverIndex;
+  const current = slides[currentIndex] ?? slides[coverIndex];
+
+  const isNoNumbers = finding.id.startsWith("no-numbers-");
+  const isHedging = finding.id.startsWith("hedging-");
+  const isDense = finding.id.startsWith("dense-");
+
+  // A slide-specific finding we can render a meaningful "after" for, versus a
+  // whole-deck finding where a repeated cover thumbnail would mislead.
+  const hasSlide = finding.slideIndex != null && !!current;
+
+  // Missing section: show the current deck beside a ghost of the slide to add.
+  if (missing) {
+    if (!current) return null;
+    return (
+      <div className="rvp-visual-split">
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What is there now</div>
+          <Thumbnail slide={current} theme={theme} slideNumber={currentIndex} />
+        </div>
+        <div className="rvp-visual-arrow" aria-hidden="true">→</div>
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What a {sectionTitle(section)} slide could look like</div>
+          <Thumbnail slide={ghostSlide(section, templateId, profile)} theme={theme} className="rvp-ghost" caption={false} />
+          <div className="rvp-ghost-label">This is what a {sectionTitle(section)} slide looks like in your template</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Findings with no slide to point at (whole-deck structure/completeness):
+  // no thumbnail — the finding detail and the fix box already carry it.
+  if (!hasSlide || !current) return null;
+
+  // no-numbers: same slide, gold highlight wash, and a concrete-figure prompt
+  // pinned to the bottom of the "after".
+  if (isNoNumbers) {
+    return (
+      <div className="rvp-visual-split">
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What is there now</div>
+          <Thumbnail slide={current} theme={theme} slideNumber={currentIndex} />
+        </div>
+        <div className="rvp-visual-arrow" aria-hidden="true">→</div>
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What needs to change</div>
+          <Thumbnail
+            slide={current}
+            theme={theme}
+            slideNumber={currentIndex}
+            overlay={(
+              <>
+                <div className="rvp-highlight-wash" aria-hidden="true" />
+                <div className="rvp-thumb-annotation">
+                  Add a specific figure here — e.g. “₦2.3M processed” or “1,350 transactions”
+                </div>
+              </>
+            )}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // hedging: same slide, and the actual hedge words struck through with a
+  // replacement instruction.
+  if (isHedging) {
+    const words = hedgeWords(finding.detail);
+    return (
+      <div className="rvp-visual-split">
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What is there now</div>
+          <Thumbnail slide={current} theme={theme} slideNumber={currentIndex} />
+        </div>
+        <div className="rvp-visual-arrow" aria-hidden="true">→</div>
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What needs to change</div>
+          <Thumbnail
+            slide={current}
+            theme={theme}
+            slideNumber={currentIndex}
+            className="rvp-hedged"
+            overlay={(
+              <div className="rvp-thumb-annotation">
+                {words.length > 0 && (
+                  <div className="rvp-hedge-words">
+                    {words.map((word) => <s key={word}>{word}</s>)}
+                  </div>
+                )}
+                Replace each with the specific figure or fact it stands in for.
+              </div>
+            )}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // dense: no "after" slide — a word-count badge and the one-claim message.
+  if (isDense) {
+    const words = slideWordCount(finding);
+    return (
+      <div className="rvp-visual-split">
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What is there now</div>
+          <Thumbnail slide={current} theme={theme} slideNumber={currentIndex} />
+        </div>
+        <div className="rvp-visual-arrow" aria-hidden="true">→</div>
+        <div className="rvp-visual-column">
+          <div className="rvp-visual-label">What needs to change</div>
+          <div className="rvp-density-fix">
+            <div className="rvp-wordcount-badge">
+              <strong>{words || "—"}</strong> words
+            </div>
+            <p>Aim for under 60 words. Cut to the one claim.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Everything else that is slide-specific: show the slide, but no repeated
+  // "after" — a fix-only panel instead of a misleading identical thumbnail.
   return (
     <div className="rvp-visual-split">
       <div className="rvp-visual-column">
@@ -193,20 +329,8 @@ function FindingVisual({
       </div>
       <div className="rvp-visual-arrow" aria-hidden="true">→</div>
       <div className="rvp-visual-column">
-        <div className="rvp-visual-label">
-          {missing ? `What a ${sectionTitle(section)} slide could look like` : "What needs to change"}
-        </div>
-        {missing ? (
-          <div className="rvp-ghost-wrap">
-            <Thumbnail slide={ghostSlide(section, templateId, profile)} theme={theme} className="rvp-ghost" />
-            <div className="rvp-ghost-label">This is what a {sectionTitle(section)} slide looks like in your template</div>
-          </div>
-        ) : (
-          <div className="rvp-annotated-wrap">
-            <Thumbnail slide={current} theme={theme} slideNumber={currentIndex} className="rvp-annotated" />
-            <div className="rvp-annotation">{annotation}</div>
-          </div>
-        )}
+        <div className="rvp-visual-label">What needs to change</div>
+        <div className="rvp-fix-only">{finding.fix}</div>
       </div>
     </div>
   );
