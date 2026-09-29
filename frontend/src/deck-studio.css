@@ -31,6 +31,22 @@
   position: absolute; top: 6px; right: 6px; width: 5px; height: 5px;
   border-radius: 50%; background: var(--gold);
 }
+.dst-thumb[draggable="true"] { cursor: grab; }
+.dst-thumb[draggable="true"]:active { cursor: grabbing; }
+/* Gold insertion indicator shown while dragging a slide over a target. */
+.dst-thumb-drag-over { border-left: 2px solid var(--gold); }
+
+/* A small "+" that lives in the gap between thumbnails (and before the
+   first / after the last), surfacing only when the filmstrip is hovered. */
+.dst-insert-btn {
+  flex-shrink: 0; align-self: stretch; width: 16px; min-width: 16px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px; background: transparent;
+  color: var(--gold); font: 600 1rem/1 var(--font-body); cursor: pointer;
+  opacity: 0; transition: opacity 0.12s ease, background 0.12s ease;
+}
+.dst-filmstrip:hover .dst-insert-btn { opacity: 0.4; }
+.dst-insert-btn:hover { opacity: 1; background: color-mix(in srgb, var(--gold) 16%, transparent); }
 
 .dst-panel {
   background: var(--ink-raised); border: 1px solid var(--ink-border);

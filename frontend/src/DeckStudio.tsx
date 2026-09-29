@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SlideCanvas from "./deck/SlideCanvas";
+import { blankSlide } from "./deck/migrate";
 import { resolveColor } from "./deck/ElementView";
 import { searchLibrary, instantiate, LIBRARY_INDUSTRIES, normaliseIndustry, type LibraryItem } from "./deck/library";
 import {
@@ -204,6 +205,46 @@ export default function DeckStudio({
     updateSlide({ ...slide, customized: true, elements }, "customize-layout");
   }
 
+  // --- Filmstrip: drag-to-reorder and insert-at-position ---------------
+  // Native HTML5 drag events only. dragSrcIndex holds the slide being
+  // dragged; dragOverIndex drives the gold insertion indicator.
+  const dragSrcIndex = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  function moveSlide(from: number, to: number) {
+    const next = [...slides];
+    const [moved] = next.splice(from, 1);
+    // Removing the source shifts everything after it left by one, so the
+    // insertion point moves back when dragging a slide forward.
+    const insertAt = from < to ? to - 1 : to;
+    if (insertAt === from) return; // dropped in its own position
+    next.splice(insertAt, 0, moved);
+    onSlidesChange(next, "reorder-slides");
+    onCurrentChange(insertAt); // keep the editor on the dragged slide
+  }
+
+  function insertSlideAt(index: number) {
+    const fresh = blankSlide(templateId);
+    const next = [...slides];
+    next.splice(index, 0, fresh);
+    onSlidesChange(next, "insert-slide");
+    onCurrentChange(index); // open the editor on the new slide
+    setSelectedId(null);
+    setSelectedIds(new Set());
+  }
+
+  const insertButton = (at: number) => (
+    <button
+      key={`ins-${at}`}
+      className="dst-insert-btn"
+      title="Insert a slide here"
+      aria-label={`Insert a slide at position ${at + 1}`}
+      onClick={() => insertSlideAt(at)}
+    >
+      +
+    </button>
+  );
+
   const contrast = contrastRatio(themeSettings.ink, themeSettings.paper);
   const accentContrast = contrastRatio(themeSettings.accent, themeSettings.paper);
 
@@ -260,16 +301,39 @@ export default function DeckStudio({
         </div>
         <div className="dst-filmstrip">
           {slides.map((s, i) => (
-            <button
-              key={s.id}
-              className={`dst-thumb ${i === current ? "is-active" : ""}`}
-              onClick={() => { onCurrentChange(i); setSelectedId(null); setSelectedIds(new Set()); }}
-            >
-              <span className="dst-thumb-num">{i + 1}</span>
-              <span className="dst-thumb-title">{s.title}</span>
-              {s.customized && <span className="dst-thumb-dot" title="Hand-edited" />}
-            </button>
+            <Fragment key={s.id}>
+              {insertButton(i)}
+              <button
+                className={`dst-thumb ${i === current ? "is-active" : ""} ${dragOverIndex === i ? "dst-thumb-drag-over" : ""}`}
+                draggable
+                onDragStart={(e) => {
+                  dragSrcIndex.current = i;
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", String(i)); // Firefox needs data set
+                }}
+                onDragOver={(e) => {
+                  if (dragSrcIndex.current === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDragOverIndex(i);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = dragSrcIndex.current;
+                  if (from !== null) moveSlide(from, i);
+                  dragSrcIndex.current = null;
+                  setDragOverIndex(null);
+                }}
+                onDragEnd={() => { dragSrcIndex.current = null; setDragOverIndex(null); }}
+                onClick={() => { onCurrentChange(i); setSelectedId(null); setSelectedIds(new Set()); }}
+              >
+                <span className="dst-thumb-num">{i + 1}</span>
+                <span className="dst-thumb-title">{s.title}</span>
+                {s.customized && <span className="dst-thumb-dot" title="Hand-edited" />}
+              </button>
+            </Fragment>
           ))}
+          {insertButton(slides.length)}
         </div>
       </div>
 
