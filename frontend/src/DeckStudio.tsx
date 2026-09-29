@@ -230,9 +230,15 @@ export default function DeckStudio({
             // the image lands where it was released, not at a default spot.
             const rect = e.currentTarget.getBoundingClientRect();
             const scale = rect.width / CANVAS_W;
+            // Centre the image on the drop point. insertImage sizes the image
+            // from its own aspect ratio, so mirror that here to offset by half
+            // the real dimensions rather than an arbitrary constant.
+            const ratio = img.width && img.height ? img.width / img.height : 1.5;
+            const targetW = Math.min(560, ratio >= 1 ? 560 : 360);
+            const targetH = Math.min(Math.round(targetW / ratio), 560);
             insertImage(img, {
-              x: Math.round((e.clientX - rect.left) / scale) - 120,
-              y: Math.round((e.clientY - rect.top) / scale) - 80,
+              x: Math.round((e.clientX - rect.left) / scale) - targetW / 2,
+              y: Math.round((e.clientY - rect.top) / scale) - targetH / 2,
             });
           }}
         >

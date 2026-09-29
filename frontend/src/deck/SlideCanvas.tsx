@@ -34,6 +34,12 @@ export interface CanvasProps {
   renderChart?: (el: SlideElement) => ReactNode;
   /** Read-only mode is used for thumbnails and preview. */
   interactive?: boolean;
+  /**
+   * Fixed container width in pixels. Passed for thumbnails, where the wrapper
+   * may not have a reliable clientWidth when the canvas first mounts, which
+   * would otherwise scale the canvas to 0 and render nothing.
+   */
+  containerWidth?: number;
   margin?: number;
   onSelect?: (id: string | null) => void;
   selectedId?: string | null;
@@ -44,7 +50,7 @@ export interface CanvasProps {
 
 export default function SlideCanvas({
   slide, theme, onChange, renderChart,
-  interactive = true, margin = 80,
+  interactive = true, containerWidth, margin = 80,
   onSelect, selectedId: controlledSelection,
   selectedIds: controlledSelections, onSelectionChange,
   guidesEnabled = true,
@@ -57,6 +63,11 @@ export default function SlideCanvas({
   const [drag, setDrag] = useState<DragState>(null);
   const [marquee, setMarquee] = useState<Marquee>(null);
   const [guides, setGuides] = useState<{ axis: "x" | "y"; at: number }[]>([]);
+  // The window pointer handlers are created once per drag/marquee session, so
+  // reading marquee through a ref keeps the latest value available inside them
+  // rather than the value captured when the handler was created.
+  const marqueeRef = useRef<Marquee>(marquee);
+  useEffect(() => { marqueeRef.current = marquee; }, [marquee]);
 
   const selectedId = controlledSelection !== undefined ? controlledSelection : internalSelection;
   const selectedIds = controlledSelections ?? internalSelections;
@@ -70,8 +81,11 @@ export default function SlideCanvas({
   }, [onSelect, onSelectionChange]);
   const select = useCallback((id: string | null, additive = false) => {
     const next = additive ? new Set(selectedIds) : new Set<string>();
-    if (id) next.add(id);
-    setSelection(next, id);
+    if (id) {
+      if (additive && next.has(id)) next.delete(id); // shift-click toggles off
+      else next.add(id);
+    }
+    setSelection(next, next.has(id ?? "") ? id : [...next].at(-1) ?? null);
   }, [selectedIds, setSelection]);
 
   const canvasPoint = useCallback((clientX: number, clientY: number) => {
@@ -87,12 +101,12 @@ export default function SlideCanvas({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const measure = () => setScale(el.clientWidth / CANVAS_W);
+    const measure = () => setScale((containerWidth ?? el.clientWidth) / CANVAS_W);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [containerWidth]);
 
   const updateElement = useCallback((id: string, patch: Partial<SlideElement>, label = "edit") => {
     onChange({
@@ -105,12 +119,12 @@ export default function SlideCanvas({
   // Pointer maths runs in canvas space, so a drag feels 1:1 regardless of
   // how the canvas is currently scaled to fit its container.
   useEffect(() => {
-    if (!drag) return;
+    if (!drag && !marquee) return;
 
     function onMove(ev: PointerEvent) {
-      if (marquee) {
+      if (marqueeRef.current) {
         const point = canvasPoint(ev.clientX, ev.clientY);
-        setMarquee({ ...marquee, currentX: point.x, currentY: point.y });
+        setMarquee((prev) => (prev ? { ...prev, currentX: point.x, currentY: point.y } : null));
         return;
       }
       const dx = (ev.clientX - drag!.startX) / scale;
@@ -174,11 +188,12 @@ export default function SlideCanvas({
     }
 
     function onUp() {
-      if (marquee) {
-        const left = Math.min(marquee.startX, marquee.currentX);
-        const right = Math.max(marquee.startX, marquee.currentX);
-        const top = Math.min(marquee.startY, marquee.currentY);
-        const bottom = Math.max(marquee.startY, marquee.currentY);
+      const m = marqueeRef.current;
+      if (m) {
+        const left = Math.min(m.startX, m.currentX);
+        const right = Math.max(m.startX, m.currentX);
+        const top = Math.min(m.startY, m.currentY);
+        const bottom = Math.max(m.startY, m.currentY);
         const isClick = right - left < 4 && bottom - top < 4;
         if (isClick) {
           select(null);
@@ -300,9 +315,17 @@ export default function SlideCanvas({
                 const target = e.target as HTMLElement;
                 if (target.isContentEditable) return;
                 e.stopPropagation();
+
+                // Selection state updates asynchronously, so compute what the
+                // selection will be after this click and drive the drag from
+                // that rather than from the stale current selectedIds.
+                const nextIds: Set<string> = e.shiftKey
+                  ? new Set([...selectedIds, el.id])
+                  : new Set([el.id]);
+
                 select(el.id, e.shiftKey);
                 if (el.locked) return;
-                const ids = (selectedIds.has(el.id) ? [...selectedIds] : [el.id])
+                const ids = [...nextIds]
                   .filter((id) => !slide.elements.find((item) => item.id === id)?.locked);
                 const origins = Object.fromEntries(
                   slide.elements.filter((item) => ids.includes(item.id)).map((item) => [item.id, item.frame]),
