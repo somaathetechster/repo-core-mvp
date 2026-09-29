@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  CANVAS_W, CANVAS_H, clampFrame, snapFrame,
+  CANVAS_W, CANVAS_H, clampFrame,
   type SlideElement, type ElementSlide, type Frame,
 } from "./elements";
 import ElementView from "./ElementView";
@@ -21,7 +21,7 @@ import "./canvas.css";
  */
 
 type DragState =
-  | { mode: "move"; id: string; startX: number; startY: number; origin: Frame }
+  | { mode: "move"; ids: string[]; startX: number; startY: number; origins: Record<string, Frame> }
   | { mode: "resize"; id: string; handle: string; startX: number; startY: number; origin: Frame }
   | null;
 
@@ -113,13 +113,36 @@ export default function SlideCanvas({
       }
       const dx = (ev.clientX - drag!.startX) / scale;
       const dy = (ev.clientY - drag!.startY) / scale;
-      const siblings = slide.elements.filter((e) => e.id !== drag!.id);
 
       if (drag!.mode === "move") {
-        const moved = { ...drag!.origin, x: drag!.origin.x + dx, y: drag!.origin.y + dy };
-        const snapped = snapFrame(clampFrame(moved), siblings, margin);
-        setGuides(snapped.guides);
-        updateElement(drag!.id, { frame: snapped.frame }, `move:${drag!.id}`);
+        const origins = drag!.origins;
+        const moved = drag!.ids.map((id) => {
+          const origin = origins[id];
+          return { id, frame: { ...origin, x: origin.x + dx, y: origin.y + dy } };
+        });
+        const bounds = moved.reduce((box, item) => ({
+          left: Math.min(box.left, item.frame.x),
+          top: Math.min(box.top, item.frame.y),
+          right: Math.max(box.right, item.frame.x + item.frame.w),
+          bottom: Math.max(box.bottom, item.frame.y + item.frame.h),
+        }), {
+          left: Number.POSITIVE_INFINITY,
+          top: Number.POSITIVE_INFINITY,
+          right: Number.NEGATIVE_INFINITY,
+          bottom: Number.NEGATIVE_INFINITY,
+        });
+        const boundedDx = dx + (bounds.left < 0 ? -bounds.left : bounds.right > CANVAS_W ? CANVAS_W - bounds.right : 0);
+        const boundedDy = dy + (bounds.top < 0 ? -bounds.top : bounds.bottom > CANVAS_H ? CANVAS_H - bounds.bottom : 0);
+        onChange({
+          ...slide,
+          customized: true,
+          elements: slide.elements.map((item) => {
+            const origin = origins[item.id];
+            return origin
+              ? { ...item, frame: { ...origin, x: origin.x + boundedDx, y: origin.y + boundedDy } }
+              : item;
+          }),
+        }, `move:${drag!.ids.join(",")}`);
       } else {
         const h = drag!.handle;
         let { x, y, w, hgt } = {
@@ -163,7 +186,7 @@ export default function SlideCanvas({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [drag, marquee, scale, slide.elements, margin, updateElement, canvasPoint, select, setSelection]);
+  }, [drag, marquee, scale, slide, margin, updateElement, onChange, canvasPoint, select, setSelection]);
 
   // Keyboard nudging: arrow keys move by 1px, shift by 10. Precise
   // positioning by dragging alone is genuinely hard at small scales.
@@ -263,7 +286,12 @@ export default function SlideCanvas({
                 e.stopPropagation();
                 select(el.id, e.shiftKey);
                 if (el.locked) return;
-                setDrag({ mode: "move", id: el.id, startX: e.clientX, startY: e.clientY, origin: el.frame });
+                const ids = (selectedIds.has(el.id) ? [...selectedIds] : [el.id])
+                  .filter((id) => !slide.elements.find((item) => item.id === id)?.locked);
+                const origins = Object.fromEntries(
+                  slide.elements.filter((item) => ids.includes(item.id)).map((item) => [item.id, item.frame]),
+                ) as Record<string, Frame>;
+                setDrag({ mode: "move", ids, startX: e.clientX, startY: e.clientY, origins });
               }}
             >
               <div style={{ position: "absolute", inset: 0 }}>
