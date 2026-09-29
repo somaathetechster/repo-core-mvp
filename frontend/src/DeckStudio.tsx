@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import SlideCanvas from "./deck/SlideCanvas";
+import { resolveColor } from "./deck/ElementView";
 import { searchLibrary, instantiate, LIBRARY_INDUSTRIES, normaliseIndustry, type LibraryItem } from "./deck/library";
 import {
   buildTheme, loadFontPairing, contrastRatio, FONT_PAIRINGS,
@@ -25,6 +26,32 @@ const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; ac
   { id: "mono", name: "Monochrome", ink: "#0a0a0a", paper: "#ffffff", accent: "#0a0a0a" },
   { id: "signal", name: "Signal", ink: "#0d0d0d", paper: "#fafafa", accent: "#d64933" },
 ];
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function HexColorControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const safeValue = HEX_COLOR.test(value) ? value : "#000000";
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  return (
+    <span className="dst-hex-control">
+      <input type="color" value={safeValue} onChange={(e) => { setDraft(e.target.value); onChange(e.target.value); }} />
+      <input
+        className="p-input"
+        value={draft}
+        maxLength={7}
+        aria-label="Hex colour"
+        onChange={(e) => {
+          const next = e.target.value;
+          setDraft(next);
+          if (HEX_COLOR.test(next)) onChange(next);
+        }}
+      />
+    </span>
+  );
+}
 
 type Panel = "template" | "theme" | "library" | "assets" | "images" | "element";
 
@@ -243,12 +270,10 @@ export default function DeckStudio({
               {(["ink", "accent", "paper"] as const).map((k) => (
                 <label key={k} className="dst-color">
                   <span>{k}</span>
-                  <input
-                    type="color"
+                  <HexColorControl
                     value={themeSettings[k]}
-                    onChange={(e) => onThemeChange({ ...themeSettings, [k]: e.target.value })}
+                    onChange={(value) => onThemeChange({ ...themeSettings, [k]: value })}
                   />
-                  <code>{themeSettings[k]}</code>
                 </label>
               ))}
             </div>
@@ -303,9 +328,9 @@ export default function DeckStudio({
                 ))}
               </div>
               {(themeSettings as any).pageBackground === 'custom' && (
-                <input type="color" className="p-input"
+                <HexColorControl
                   value={(themeSettings as any).pageBackgroundCustom ?? '#F8F5EE'}
-                  onChange={e => onThemeChange({...themeSettings, pageBackground:'custom', pageBackgroundCustom: e.target.value} as any)}
+                  onChange={(value) => onThemeChange({ ...themeSettings, pageBackground: 'custom', pageBackgroundCustom: value } as any)}
                 />
               )}
             </div>
@@ -470,6 +495,14 @@ export default function DeckStudio({
               >
                 {["ink", "accent", "muted", "inverse", "paper"].map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
+            </label>
+
+            <label className="dst-field">
+              <span>Colour</span>
+              <HexColorControl
+                value={resolveColor(selected.style.color, theme)}
+                onChange={(value) => patchSelected({ style: { ...selected.style, color: value } })}
+              />
             </label>
 
             <label className="dst-field">

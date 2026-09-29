@@ -80,6 +80,9 @@
 .dst-color span { width: 48px; text-transform: capitalize; }
 .dst-color input { width: 34px; height: 24px; border: none; background: none; padding: 0; cursor: pointer; }
 .dst-color code { font-size: 0.7rem; color: var(--text-dim); }
+.dst-hex-control { display: inline-flex; align-items: center; gap: 0.35rem; }
+.dst-hex-control input[type="color"] { width: 34px; height: 24px; border: none; background: none; padding: 0; cursor: pointer; }
+.dst-hex-control .p-input { width: 86px; padding: 0.25rem 0.35rem; font-size: 0.72rem; }
 
 .dst-slider { display: flex; align-items: center; gap: 0.6rem; }
 .dst-slider input { flex: 1; }
