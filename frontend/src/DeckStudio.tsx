@@ -30,6 +30,14 @@ const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; ac
 ];
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const BG_PRESETS: { label: string; value: string }[] = [
+  { label: "Cream", value: "#F8F5EE" },
+  { label: "White", value: "#FFFFFF" },
+  { label: "Near-black", value: "#12100E" },
+  { label: "Slate", value: "#1C2533" },
+  { label: "Forest", value: "#1B2E22" },
+  { label: "Burgundy", value: "#2A1218" },
+];
 const LAYOUT_VARIANTS: LayoutVariant[] = [
   "statement", "lead-and-points", "numbered-rows", "grid", "split-image",
   "image-led", "metric-hero", "two-column", "quote", "data",
@@ -210,6 +218,7 @@ export default function DeckStudio({
   // dragged; dragOverIndex drives the gold insertion indicator.
   const dragSrcIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [bgCustomOpen, setBgCustomOpen] = useState(false);
 
   function moveSlide(from: number, to: number) {
     const next = [...slides];
@@ -249,6 +258,9 @@ export default function DeckStudio({
   const accentContrast = contrastRatio(themeSettings.accent, themeSettings.paper);
 
   if (!slide) return <p className="dst-empty">No slides yet.</p>;
+
+  const slideBg = typeof slide.background === "string" ? slide.background : "";
+  const bgIsCustom = HEX_COLOR.test(slideBg) && !BG_PRESETS.some((p) => p.value.toUpperCase() === slideBg.toUpperCase());
 
   return (
     <div className="dst">
@@ -446,36 +458,39 @@ export default function DeckStudio({
               </button>
             ))}
 
-            <h4>Scale</h4>
-            {/* Page background colour */}
+            {/* Slide background colour — applies to the current slide, so a
+                dark statement page can sit inside a light deck. Writes
+                slide.background, which is what SlideCanvas actually reads. */}
+            <h4>Slide background</h4>
             <div className="dst-field">
-              <span style={{fontSize:'0.76rem',color:'var(--text-dim)'}}>Page background</span>
               <div className="dst-bg-swatches">
-                {[
-                  { label:'Cream', value:'#F8F5EE' },
-                  { label:'White', value:'#FFFFFF' },
-                  { label:'Near-black', value:'#12100E' },
-                  { label:'Slate', value:'#1C2533' },
-                  { label:'Forest', value:'#1B2E22' },
-                  { label:'Burgundy', value:'#2A1218' },
-                  { label:'Custom', value:'custom' },
-                ].map(({label,value}) => (
+                {BG_PRESETS.map(({ label, value }) => (
                   <button key={value}
-                    className={`dst-bg-swatch ${(themeSettings as any).pageBackground === value ? 'is-active' : ''}`}
-                    style={{background: value === 'custom' ? 'linear-gradient(135deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f)' : value}}
+                    className={`dst-bg-swatch ${slideBg.toUpperCase() === value.toUpperCase() ? 'is-active' : ''}`}
+                    style={{ background: value }}
                     title={label}
-                    onClick={() => onThemeChange({...themeSettings, pageBackground: value} as any)}
+                    onClick={() => { setBgCustomOpen(false); updateSlide({ ...slide, background: value }, "slide-background"); }}
                   />
                 ))}
+                <button
+                  className={`dst-bg-swatch ${bgIsCustom ? 'is-active' : ''}`}
+                  style={{ background: 'linear-gradient(135deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f)' }}
+                  title="Custom"
+                  onClick={() => {
+                    setBgCustomOpen(true);
+                    if (!HEX_COLOR.test(slideBg)) updateSlide({ ...slide, background: '#F8F5EE' }, "slide-background");
+                  }}
+                />
               </div>
-              {(themeSettings as any).pageBackground === 'custom' && (
+              {(bgCustomOpen || bgIsCustom) && (
                 <HexColorControl
-                  value={(themeSettings as any).pageBackgroundCustom ?? '#F8F5EE'}
-                  onChange={(value) => onThemeChange({ ...themeSettings, pageBackground: 'custom', pageBackgroundCustom: value } as any)}
+                  value={HEX_COLOR.test(slideBg) ? slideBg : '#F8F5EE'}
+                  onChange={(value) => updateSlide({ ...slide, background: value }, "slide-background")}
                 />
               )}
             </div>
 
+            <h4>Scale</h4>
             <label className="dst-slider">
               <input
                 type="range" min={0.85} max={1.25} step={0.05}

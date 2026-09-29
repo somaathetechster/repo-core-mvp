@@ -21,7 +21,7 @@ export interface StoredSlide extends LegacySlide {
   /** Present once a slide has been through the element system. */
   elements?: SlideElement[];
   kind?: SlideKind;
-  background?: "paper" | "ink" | "accent" | null;
+  background?: string | null;
   customized?: boolean;
 }
 
@@ -70,8 +70,10 @@ export function toElementSlide(
 
   const composed = compose(templateId, content);
   // Keep the original id so slide ordering, selection, and deck references
-  // survive a recompose.
-  return { ...composed, id: stored.id };
+  // survive a recompose. A background the user set is slide metadata, not
+  // layout, so it is carried across the recompose too; without this a
+  // non-hand-edited slide loses its chosen colour on reload.
+  return { ...composed, id: stored.id, background: stored.background ?? composed.background };
 }
 
 export function toElementSlides(

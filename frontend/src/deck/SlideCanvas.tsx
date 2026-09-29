@@ -262,10 +262,14 @@ export default function SlideCanvas({
     return () => window.removeEventListener("keydown", onKey);
   }, [interactive, selectedId, selectedIds, slide, onChange, setSelection]);
 
+  // "ink"/"accent" resolve against the theme; "paper" (or unset) uses the
+  // deck paper; anything else is a literal colour the user picked for this
+  // slide.
   const background =
     slide.background === "ink" ? theme.ink
       : slide.background === "accent" ? theme.accent
-        : theme.paper;
+        : slide.background && slide.background !== "paper" ? slide.background
+          : theme.paper;
 
   const sorted = [...slide.elements].sort((a, b) => (a.frame.z ?? 10) - (b.frame.z ?? 10));
   const selectedElements = slide.elements.filter((el) => selectedIds.has(el.id));

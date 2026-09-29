@@ -140,8 +140,10 @@ export interface ElementSlide {
   title: string;
   elements: SlideElement[];
   /** Overrides the deck background for this slide (a dark statement page
-   *  inside a light deck, say). */
-  background?: "paper" | "ink" | "accent" | null;
+   *  inside a light deck, say). The keywords resolve against the theme;
+   *  any other value is used as a literal CSS colour (e.g. a hex the user
+   *  picked in the background control). */
+  background?: "paper" | "ink" | "accent" | (string & {}) | null;
   /** Set when the user has hand-positioned elements, so a template change
    *  can offer to preserve their work instead of silently discarding it. */
   customized?: boolean;
