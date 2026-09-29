@@ -5,8 +5,8 @@
  * does about it, and that depends entirely on the kind of finding:
  *
  *   - A missing section whose content the founder HAS already written in
- *     their profile → the deck just didn't include it. Regenerate fixes it.
- *   - A missing section with NO profile content → sending them to regenerate
+ *     their profile → the deck just didn't include it. Adding the section fixes it.
+ *   - A missing section with NO profile content → sending them to refresh the deck
  *     would change nothing. Send them to the exact profile field to fill.
  *   - A slide-specific problem (no numbers, hedging, too dense) → open the
  *     editor at that slide so they can fix the words themselves.
@@ -17,7 +17,7 @@
 import type { Finding } from "./review";
 import type { CompanyProfile } from "../api";
 
-export type FixKind = "regenerate" | "fill-profile" | "open-slide" | "manual";
+export type FixKind = "add-slide" | "fill-profile" | "open-slide" | "manual";
 
 export interface FixAction {
   kind: FixKind;
@@ -27,13 +27,15 @@ export interface FixAction {
   preview: string;
   /** For fill-profile: the profile field key to focus. */
   profileField?: string;
+  /** For add-slide: the section key to append. */
+  section?: string;
   /** For open-slide: the slide index to open at. */
   slideIndex?: number;
 }
 
 /**
  * Maps a missing-section id to the profile field(s) that feed it. If ANY of
- * these has content, the section can be regenerated rather than filled.
+ * these has content, the section can be added rather than filled.
  */
 const SECTION_TO_PROFILE_FIELDS: Record<string, string[]> = {
   problem: ["problem"],
@@ -115,11 +117,12 @@ export function planFix(finding: Finding, profile: CompanyProfile | null): FixAc
 
     if (hasAny) {
       return {
-        kind: "regenerate",
+        kind: "add-slide",
         label: "Add this section",
         preview:
           `You've written this in your profile but the deck didn't include it. ` +
-          `Regenerating will rebuild the deck with a ${section.replace(/_/g, " ")} slide.`,
+          `We'll add a ${section.replace(/_/g, " ")} slide without changing the rest of the deck.`,
+        section,
       };
     }
 
@@ -130,7 +133,7 @@ export function planFix(finding: Finding, profile: CompanyProfile | null): FixAc
         label: `Fill ${FIELD_LABEL[primary] ?? primary} in your profile`,
         preview:
           `Your profile has nothing for this yet. ` +
-          `We'll take you to the ${FIELD_LABEL[primary] ?? primary} field — fill it, then regenerate.`,
+          `We'll take you to the ${FIELD_LABEL[primary] ?? primary} field — fill it, then refresh the deck.`,
         profileField: primary,
       };
     }

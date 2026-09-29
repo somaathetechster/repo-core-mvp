@@ -6,10 +6,12 @@
   border: 1px solid rgba(196,154,40,.15);
   border-radius: 9px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 0.65rem;
 }
 .rvp-fix-preview {
+  flex: 1 0 100%;
   font-size: 0.8rem;
   color: var(--text-dim);
   line-height: 1.5;

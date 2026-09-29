@@ -215,6 +215,45 @@ export async function getDeck(deckId: string): Promise<FullDeck> {
   return res.json();
 }
 
+export interface DeckCoachMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function askDeckCoach(
+  messages: DeckCoachMessage[],
+  deckContext: {
+    findings: { id: string; title: string; detail: string; severity: string }[];
+    approved_ids: string[];
+    rejected_ids: string[];
+    brief: unknown;
+    profile: CompanyProfile | null;
+    deck_name: string;
+  },
+): Promise<{ reply: string }> {
+  const res = await fetch(`${API_BASE}/ai/deck-coach`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, deck_context: deckContext }),
+  });
+  if (!res.ok) await throwWithDetail(res, `Failed to contact the deck coach: ${res.status}`);
+  return res.json();
+}
+
+export async function addSlide(
+  deckId: string,
+  section: string,
+  position?: number,
+): Promise<FullDeck> {
+  const res = await fetch(`${API_BASE}/decks/${deckId}/slides`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ section, position }),
+  });
+  if (!res.ok) await throwWithDetail(res, `Failed to add slide: ${res.status}`);
+  return res.json();
+}
+
 export async function saveDeckEditorState(
   deckId: string,
   state: {

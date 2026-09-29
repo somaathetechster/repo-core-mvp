@@ -4,6 +4,7 @@ Multi-deck management. Replaces the earlier single-deck-per-user model
 many decks, each with its own profile snapshot and repo selection.
 """
 from typing import Any
+import logging
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
@@ -20,6 +21,7 @@ from app.services.narrative_engine import generate_narrative
 from app.services.github_extract import RepoSummary
 
 router = APIRouter(prefix="/decks", tags=["decks"])
+log = logging.getLogger(__name__)
 
 
 async def _shared_profile_dict(session, user_id: str) -> dict:
@@ -217,6 +219,41 @@ class RegenerateRequest(BaseModel):
     repo_summaries: list[RepoSummary] = []
 
 
+class AppendSlideRequest(BaseModel):
+    section: str
+    position: int | None = None
+
+
+@router.post("/{deck_id}/slides")
+async def append_slide(deck_id: str, body: AppendSlideRequest, user_id: str = Depends(get_current_user_id)):
+    async with AsyncSessionLocal() as session:
+        deck = await session.get(DeckModel, deck_id)
+        if not deck or deck.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Deck not found.")
+
+        profile = deck.profile_snapshot or {}
+        brief = build_brief(profile)
+        slide_list, _ = build_deck(profile, [], brief)
+        candidate = next((slide for slide in slide_list if slide.id == body.section), None)
+        if candidate is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No content for section '{body.section}' in the profile",
+            )
+
+        slides = list(deck.slides or [])
+        slide = slide_to_dict(candidate)
+        if body.position is None:
+            slides.append(slide)
+        else:
+            position = max(0, min(body.position, len(slides)))
+            slides.insert(position, slide)
+        deck.slides = slides
+        await session.commit()
+        await session.refresh(deck)
+        return _deck_full(deck)
+
+
 @router.post("/{deck_id}/regenerate")
 async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = Depends(get_current_user_id)):
     async with AsyncSessionLocal() as session:
@@ -224,9 +261,43 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
         if not deck or deck.user_id != user_id:
             raise HTTPException(status_code=404, detail="Deck not found.")
 
-        brief = build_brief(deck.profile_snapshot or {})
-        slide_list, deck_theme = build_deck(deck.profile_snapshot or {}, body.repo_summaries, brief)
-        deck.slides = [slide_to_dict(s) for s in slide_list]
+        profile = deck.profile_snapshot or {}
+        brief = build_brief(profile)
+        brief_dict = brief.to_dict()
+        slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief)
+        generated_slides = [slide_to_dict(s) for s in slide_list]
+        old_slides = list(deck.slides or [])
+        freeform_ids = list(deck.freeform_slide_ids or [])
+        old_by_id = {slide.get("id"): slide for slide in old_slides}
+        freeform_set = set(freeform_ids)
+        preserved_ids: set[str] = set()
+
+        updated_slides = []
+        for slide in generated_slides:
+            slide_id = slide.get("id")
+            if slide_id in freeform_set and slide_id in old_by_id:
+                updated_slides.append(old_by_id[slide_id])
+                preserved_ids.add(slide_id)
+            else:
+                updated_slides.append(slide)
+
+        # A hand-edited slide may no longer be produced by the current profile.
+        # Keep it at its former position instead of silently deleting it.
+        for old_index, old_slide in enumerate(old_slides):
+            slide_id = old_slide.get("id")
+            if slide_id not in freeform_set or slide_id in preserved_ids:
+                continue
+            insert_at = min(old_index, len(updated_slides))
+            updated_slides.insert(insert_at, old_slide)
+            preserved_ids.add(slide_id)
+
+        deck.slides = updated_slides
+        log.info(
+            "Regenerated deck %s: preserved %d hand-edited slides, regenerated %d slides",
+            deck_id,
+            len(preserved_ids),
+            len(generated_slides) - len(preserved_ids & {slide.get("id") for slide in generated_slides}),
+        )
         # Regenerating rewrites the slides, but the founder's chosen template
         # and colour scheme are design decisions about this deck, not content.
         # Carrying them across means "regenerate" doesn't silently undo the
@@ -239,7 +310,7 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
         deck.theme = new_theme
         deck.repo_full_names = [s.full_name for s in body.repo_summaries]
         deck.layouts = {}
-        deck.freeform_slide_ids = []
+        deck.freeform_slide_ids = freeform_ids
         await session.commit()
         await session.refresh(deck)
         return _deck_full(deck)
