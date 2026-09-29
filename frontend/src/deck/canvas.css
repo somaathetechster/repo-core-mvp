@@ -37,4 +37,10 @@
 .cv-handle-w { left: -5px; top: 50%; margin-top: -4.5px; cursor: ew-resize; }
 .cv-handle-e { right: -5px; top: 50%; margin-top: -4.5px; cursor: ew-resize; }
 
-.cv-guide { position: absolute; background: #ff3b7b; z-index: 200; pointer-events: none; }
+.cv-guide {
+  position: absolute;
+  background: #b23a3a;
+  box-shadow: 0 0 0 1px rgba(196,154,40,0.3);
+  z-index: 200;
+  pointer-events: none;
+}

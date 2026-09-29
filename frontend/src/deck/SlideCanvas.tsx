@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  CANVAS_W, CANVAS_H, clampFrame,
+  CANVAS_W, CANVAS_H, clampFrame, snapDelta,
   type SlideElement, type ElementSlide, type Frame,
 } from "./elements";
 import ElementView from "./ElementView";
@@ -39,6 +39,7 @@ export interface CanvasProps {
   selectedId?: string | null;
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>, activeId: string | null) => void;
+  guidesEnabled?: boolean;
 }
 
 export default function SlideCanvas({
@@ -46,6 +47,7 @@ export default function SlideCanvas({
   interactive = true, margin = 80,
   onSelect, selectedId: controlledSelection,
   selectedIds: controlledSelections, onSelectionChange,
+  guidesEnabled = true,
 }: CanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -120,26 +122,40 @@ export default function SlideCanvas({
           const origin = origins[id];
           return { id, frame: { ...origin, x: origin.x + dx, y: origin.y + dy } };
         });
-        const bounds = moved.reduce((box, item) => ({
-          left: Math.min(box.left, item.frame.x),
-          top: Math.min(box.top, item.frame.y),
-          right: Math.max(box.right, item.frame.x + item.frame.w),
-          bottom: Math.max(box.bottom, item.frame.y + item.frame.h),
-        }), {
-          left: Number.POSITIVE_INFINITY,
-          top: Number.POSITIVE_INFINITY,
-          right: Number.NEGATIVE_INFINITY,
-          bottom: Number.NEGATIVE_INFINITY,
-        });
-        const boundedDx = dx + (bounds.left < 0 ? -bounds.left : bounds.right > CANVAS_W ? CANVAS_W - bounds.right : 0);
-        const boundedDy = dy + (bounds.top < 0 ? -bounds.top : bounds.bottom > CANVAS_H ? CANVAS_H - bounds.bottom : 0);
+        const boundDelta = (nextDx: number, nextDy: number) => {
+          const bounds = drag!.ids.reduce((box, id) => {
+            const origin = origins[id];
+            return {
+              left: Math.min(box.left, origin.x + nextDx),
+              top: Math.min(box.top, origin.y + nextDy),
+              right: Math.max(box.right, origin.x + nextDx + origin.w),
+              bottom: Math.max(box.bottom, origin.y + nextDy + origin.h),
+            };
+          }, {
+            left: Number.POSITIVE_INFINITY,
+            top: Number.POSITIVE_INFINITY,
+            right: Number.NEGATIVE_INFINITY,
+            bottom: Number.NEGATIVE_INFINITY,
+          });
+          return {
+            dx: nextDx + (bounds.left < 0 ? -bounds.left : bounds.right > CANVAS_W ? CANVAS_W - bounds.right : 0),
+            dy: nextDy + (bounds.top < 0 ? -bounds.top : bounds.bottom > CANVAS_H ? CANVAS_H - bounds.bottom : 0),
+          };
+        };
+        const bounded = boundDelta(dx, dy);
+        const siblings = slide.elements.filter((item) => !drag!.ids.includes(item.id));
+        const snapped = guidesEnabled
+          ? snapDelta(moved.map(({ id, frame }) => ({ id, frame: { ...frame, x: frame.x - dx + bounded.dx, y: frame.y - dy + bounded.dy } })), siblings, 4)
+          : { dx: 0, dy: 0, guides: [] };
+        const finalDelta = boundDelta(bounded.dx + snapped.dx, bounded.dy + snapped.dy);
+        setGuides(guidesEnabled ? snapped.guides : []);
         onChange({
           ...slide,
           customized: true,
           elements: slide.elements.map((item) => {
             const origin = origins[item.id];
             return origin
-              ? { ...item, frame: { ...origin, x: origin.x + boundedDx, y: origin.y + boundedDy } }
+              ? { ...item, frame: { ...origin, x: origin.x + finalDelta.dx, y: origin.y + finalDelta.dy } }
               : item;
           }),
         }, `move:${drag!.ids.join(",")}`);
@@ -186,7 +202,7 @@ export default function SlideCanvas({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [drag, marquee, scale, slide, margin, updateElement, onChange, canvasPoint, select, setSelection]);
+  }, [drag, marquee, scale, slide, margin, updateElement, onChange, canvasPoint, select, setSelection, guidesEnabled]);
 
   // Keyboard nudging: arrow keys move by 1px, shift by 10. Precise
   // positioning by dragging alone is genuinely hard at small scales.

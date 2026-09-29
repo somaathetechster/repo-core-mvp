@@ -226,6 +226,46 @@ export function snapFrame(
   return { frame: { ...frame, x, y }, guides };
 }
 
+/** Snap a moving selection as a group. The returned delta is shared by every
+ * selected frame, so a multi-selection stays rigid while it aligns. */
+export function snapDelta(
+  moving: { id: string; frame: Frame }[],
+  siblings: SlideElement[],
+  threshold = 4,
+): { dx: number; dy: number; guides: { axis: "x" | "y"; at: number }[] } {
+  const guides: { axis: "x" | "y"; at: number }[] = [];
+  const xTargets = [0, CANVAS_W / 2, CANVAS_W, ...siblings.flatMap((s) => [s.frame.x, s.frame.x + s.frame.w / 2, s.frame.x + s.frame.w])];
+  const yTargets = [0, CANVAS_H / 2, CANVAS_H, ...siblings.flatMap((s) => [s.frame.y, s.frame.y + s.frame.h / 2, s.frame.y + s.frame.h])];
+  let dx = 0;
+  let dy = 0;
+  let bestX = threshold + 1;
+  let bestY = threshold + 1;
+
+  for (const { frame } of moving) {
+    const xEdges = [frame.x, frame.x + frame.w / 2, frame.x + frame.w];
+    for (const edge of xEdges) for (const target of xTargets) {
+      const distance = Math.abs(edge - target);
+      if (distance <= threshold && distance < bestX) {
+        bestX = distance;
+        dx = target - edge;
+        guides.splice(0, guides.length, ...guides.filter((g) => g.axis !== "x"));
+        guides.push({ axis: "x", at: target });
+      }
+    }
+    const yEdges = [frame.y, frame.y + frame.h / 2, frame.y + frame.h];
+    for (const edge of yEdges) for (const target of yTargets) {
+      const distance = Math.abs(edge - target);
+      if (distance <= threshold && distance < bestY) {
+        bestY = distance;
+        dy = target - edge;
+        guides.splice(0, guides.length, ...guides.filter((g) => g.axis !== "y"));
+        guides.push({ axis: "y", at: target });
+      }
+    }
+  }
+  return { dx, dy, guides };
+}
+
 /* ------------------------------------------------------------------ */
 /* Migration from the old document-shaped slide                        */
 /* ------------------------------------------------------------------ */

@@ -41,13 +41,14 @@ export interface DeckStudioProps {
   onTemplateChange: (templateId: string) => void;
   onCurrentChange: (index: number) => void;
   renderChart?: (el: SlideElement) => ReactNode;
+  guidesEnabled?: boolean;
 }
 
 export default function DeckStudio({
   slides, current, themeSettings, templateId, industry,
   images = [], onImagesChange,
   onSlidesChange, onThemeChange, onTemplateChange, onCurrentChange,
-  renderChart,
+  renderChart, guidesEnabled = true,
 }: DeckStudioProps) {
   const [panel, setPanel] = useState<Panel>("template");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export default function DeckStudio({
             renderChart={renderChart}
             selectedId={selectedId}
             selectedIds={selectedIds}
+            guidesEnabled={guidesEnabled}
             onSelectionChange={(ids, activeId) => {
               setSelectedIds(ids);
               setSelectedId(activeId);

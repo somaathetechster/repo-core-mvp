@@ -100,6 +100,7 @@ export default function DeckEditor({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dropPrompt, setDropPrompt] = useState<PendingChart | null>(null);
+  const [guidesEnabled, setGuidesEnabled] = useState(() => localStorage.getItem("provisio:guides") !== "off");
   const loadedRef = useRef(false);
 
 
@@ -475,6 +476,17 @@ export default function DeckEditor({
           >
             Reset layout
           </button>
+          <button
+            className="p-btn p-btn-ghost"
+            onClick={() => setGuidesEnabled((enabled) => {
+              const next = !enabled;
+              localStorage.setItem("provisio:guides", next ? "on" : "off");
+              return next;
+            })}
+            title="Toggle alignment guides and snapping"
+          >
+            Guides {guidesEnabled ? "On" : "Off"}
+          </button>
           <button className="p-btn p-btn-ghost" onClick={addSlide}>+ Slide</button>
           <button className="p-btn p-btn-ghost" onClick={deleteSlide} disabled={slides.length <= 1}>
             Delete slide
@@ -525,6 +537,7 @@ export default function DeckEditor({
           onThemeChange={(next) => { setThemeSettings(next); setDirty(true); }}
           onTemplateChange={applyTemplate}
           onCurrentChange={setCurrent}
+          guidesEnabled={guidesEnabled}
         />
       ) : (
         deckProfile && (
