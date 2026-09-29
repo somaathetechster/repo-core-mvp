@@ -11,6 +11,7 @@ import {
   type ElementSlide, type SlideElement,
 } from "./deck/elements";
 import { COMPOSERS } from "./deck/composers";
+import { planVariants, type LayoutVariant } from "./deck/variants";
 import ImageLibrary from "./ImageLibrary";
 import { DEFAULT_CROP, type BrandImage } from "./deck/images";
 import { ASSET_CATEGORIES, searchAssets, assetToSvg, type AssetCategory } from "./deck/assets";
@@ -28,6 +29,10 @@ const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; ac
 ];
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const LAYOUT_VARIANTS: LayoutVariant[] = [
+  "statement", "lead-and-points", "numbered-rows", "grid", "split-image",
+  "image-led", "metric-hero", "two-column", "quote", "data",
+];
 
 function HexColorControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const safeValue = HEX_COLOR.test(value) ? value : "#000000";
@@ -80,6 +85,7 @@ export default function DeckStudio({
   const [panel, setPanel] = useState<Panel>("template");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [slideVariants, setSlideVariants] = useState<Record<string, LayoutVariant>>({});
   const [query, setQuery] = useState("");
   const [assetQuery, setAssetQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string | null>(() => normaliseIndustry(industry));
@@ -161,6 +167,41 @@ export default function DeckStudio({
       customized: true,
       elements: slide.elements.map((item) => ({ ...item, frame: { ...item.frame, z: zById.get(item.id) ?? item.frame.z } })),
     }, "reorder-layers");
+  }
+
+  const plannedVariants = useMemo(() => planVariants(slides.map((item) => ({
+    kind: item.kind,
+    paragraphs: item.elements.filter((el) => el.text).map((el) => ({ text: el.text ?? "" })),
+    image: item.elements.find((el) => ["image", "portrait", "logo"].includes(el.type))?.src,
+    chart: item.elements.find((el) => el.type === "chart")?.chart,
+  }))), [slides]);
+  const currentVariant = slideVariants[slide?.id ?? ""] ?? plannedVariants[current] ?? "lead-and-points";
+
+  function customizeLayout(variant: LayoutVariant) {
+    if (!slide) return;
+    const frameFor = (item: SlideElement, index: number) => {
+      const image = ["image", "portrait", "logo"].includes(item.type);
+      const text = item.text !== undefined;
+      if (variant === "statement") return index === 0 ? { ...item.frame, x: 110, y: 190, w: 1060, h: 190 } : { ...item.frame, x: 110, y: 430 + index * 42, w: 1060, h: 34 };
+      if (variant === "lead-and-points") return index === 0 ? { ...item.frame, x: 110, y: 150, w: 620, h: 250 } : { ...item.frame, x: 790, y: 150 + (index - 1) * 105, w: 370, h: 80 };
+      if (variant === "numbered-rows") return { ...item.frame, x: 120, y: 135 + index * 92, w: 980, h: 68 };
+      if (variant === "grid") return { ...item.frame, x: 110 + (index % 3) * 365, y: 160 + Math.floor(index / 3) * 210, w: 320, h: 170 };
+      if (variant === "split-image") return image ? { ...item.frame, x: 700, y: 110, w: 470, h: 500 } : { ...item.frame, x: 110, y: 150 + index * 80, w: 500, h: text ? 70 : item.frame.h };
+      if (variant === "image-led") return image ? { ...item.frame, x: 100, y: 90, w: 1080, h: 500 } : { ...item.frame, x: 120, y: 610, w: 1040, h: 50 };
+      if (variant === "metric-hero") return index === 0 ? { ...item.frame, x: 120, y: 180, w: 1040, h: 250 } : { ...item.frame, x: 140, y: 470 + (index - 1) * 50, w: 1000, h: 40 };
+      if (variant === "two-column") return { ...item.frame, x: 110 + (index % 2) * 560, y: 150 + Math.floor(index / 2) * 150, w: 500, h: 120 };
+      if (variant === "quote") return index === 0 ? { ...item.frame, x: 170, y: 190, w: 940, h: 220 } : { ...item.frame, x: 740, y: 450, w: 350, h: 60 };
+      return { ...item.frame, x: 150, y: 150 + index * 75, w: 900, h: item.type === "chart" ? 390 : 55 };
+    };
+    let freeIndex = 0;
+    const elements = slide.elements.map((item) => {
+      if (item.locked) return item;
+      const next = { ...item, frame: frameFor(item, freeIndex) };
+      freeIndex += 1;
+      return next;
+    });
+    setSlideVariants((prev) => ({ ...prev, [slide.id]: variant }));
+    updateSlide({ ...slide, customized: true, elements }, "customize-layout");
   }
 
   const contrast = contrastRatio(themeSettings.ink, themeSettings.paper);
@@ -255,6 +296,21 @@ export default function DeckStudio({
                 <strong>{id[0].toUpperCase() + id.slice(1)}</strong>
               </button>
             ))}
+            <div className="dst-custom-layout">
+              <h4>Customize layout</h4>
+              <p className="dst-hint">Current slide: <strong>{currentVariant}</strong>. Recompose this slide only.</p>
+              <div className="dst-variant-list">
+                {LAYOUT_VARIANTS.map((variant) => (
+                  <button
+                    key={variant}
+                    className={`dst-option ${currentVariant === variant ? "is-active" : ""}`}
+                    onClick={() => customizeLayout(variant)}
+                  >
+                    {variant.replaceAll("-", " ")}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="dst-warn">
               {slides.filter((s) => s.customized).length > 0
                 ? `${slides.filter((s) => s.customized).length} slide(s) you've hand-edited keep their layout.`

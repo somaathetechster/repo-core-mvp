@@ -90,6 +90,9 @@
 .dst-layer-icon { width: 1.2rem; text-align: center; color: var(--text-dim); }
 .dst-layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
 .dst-layer-action { border: 0; background: transparent; padding: 0.15rem; cursor: pointer; color: var(--text-dim); }
+.dst-custom-layout { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid rgba(0,0,0,.1); }
+.dst-variant-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+.dst-variant-list .dst-option { min-height: 2.25rem; text-transform: capitalize; }
 
 .dst-slider { display: flex; align-items: center; gap: 0.6rem; }
 .dst-slider input { flex: 1; }
