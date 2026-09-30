@@ -150,7 +150,15 @@ async def _get_or_create_customer(client: httpx.AsyncClient, user_id: str, email
     if res.status_code not in (200, 201):
         raise HTTPException(status_code=502, detail="Could not create payment customer.")
     data = res.json()
-    return (data.get("data") or data)["id"]
+
+# Fix — safe extraction with logging
+customer = data.get("data") or data
+customer_id = customer.get("id") or customer.get("customer_id")
+if not customer_id:
+    log.error("Bachs customer creation response missing id: %s", data)
+    raise HTTPException(status_code=502, detail="Could not create payment customer.")
+return customer_id
+
 
 
 # ---------------------------------------------------------------------------
