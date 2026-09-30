@@ -22,6 +22,14 @@
   z-index: 210;
 }
 .cv-el.is-locked:hover { outline-color: rgba(160,160,160,0.4); cursor: default; }
+.cv-lock-badge {
+  position: absolute; top: 3px; right: 3px;
+  font-size: 11px; line-height: 1;
+  padding: 2px 3px; border-radius: 3px;
+  background: rgba(30,30,30,0.55); color: #fff;
+  pointer-events: none; z-index: 120;
+  opacity: 0.75;
+}
 
 .cv-handle {
   position: absolute; width: 9px; height: 9px;

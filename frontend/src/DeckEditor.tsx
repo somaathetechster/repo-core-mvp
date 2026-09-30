@@ -95,6 +95,16 @@ export default function DeckEditor({
     return 0;
   });
   const [dirty, setDirty] = useState(false);
+  // Every local edit bumps `editSeq`; a completed save records the seq it
+  // persisted in `savedSeq`. The deck is dirty whenever those differ. This is
+  // what stops the autosave race: edits made *while a save is in flight* bump
+  // editSeq past the value that save persists, so `dirty` stays true and a
+  // follow-up save runs instead of the completing save flipping the UI to
+  // "Saved" and dropping them.
+  const editSeq = useRef(0);
+  const savedSeq = useRef(0);
+  const savingRef = useRef(false);
+  const markDirty = useCallback(() => { editSeq.current += 1; setDirty(true); }, []);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -179,9 +189,16 @@ export default function DeckEditor({
   /* ---------------- save ---------------- */
 
   const save = useCallback(async () => {
-    if (!loadedRef.current) return;
+    // Never re-enter: a save already in flight owns the write. Overlapping
+    // saves could land out of order and resurrect stale slides.
+    if (!loadedRef.current || savingRef.current) return;
+    // Snapshot the edit counter this save is about to persist. Anything edited
+    // after this point leaves the deck dirty so it gets saved next.
+    const seqAtStart = editSeq.current;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
+    let persisted = false;
     try {
       const nextStored = toStoredSlides(slides, stored);
 
@@ -201,8 +218,7 @@ export default function DeckEditor({
           `This deck is about ${(bytes / 1_000_000).toFixed(1)}MB, which is too large to save. ` +
           `Remove a few images from the Images panel, or use smaller files.`,
         );
-        setSaving(false);
-        return;
+        return; // `finally` clears the saving flags; persisted stays false.
       }
 
       await saveDeckEditorState(deckId, {
@@ -222,19 +238,37 @@ export default function DeckEditor({
         freeform_slide_ids: [],
       });
       setStored(nextStored);
-      setDirty(false);
+      savedSeq.current = seqAtStart;
+      persisted = true;
+      // Only clear dirty if nothing was edited while this save was running.
+      // Otherwise leave it dirty so the newer edits are saved next.
+      if (editSeq.current === seqAtStart) setDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
+      // Edits arrived while this save was in flight: run the latest save so
+      // they aren't lost. Uses the ref to reach the newest closure (with the
+      // newest slides), not this now-stale one. Only after a save that
+      // actually persisted, so a failed or size-blocked save doesn't spin.
+      if (persisted && loadedRef.current && editSeq.current !== savedSeq.current) {
+        setTimeout(() => saveRef.current(), 0);
+      }
     }
   }, [slides, stored, deckId, deckTheme, themeSettings, templateId, images]);
 
+  // Always points at the most recent `save`, so a follow-up triggered from
+  // inside a stale save still persists the current slides.
+  const saveRef = useRef(save);
+  useEffect(() => { saveRef.current = save; }, [save]);
+
   // Autosave on a delay: losing hand-positioned layout work to a closed tab
-  // would be worse than an occasional redundant write.
+  // would be worse than an occasional redundant write. Keyed on editSeq (not
+  // just the dirty boolean) so each edit reschedules against the latest state.
   useEffect(() => {
     if (!dirty) return;
-    const t = setTimeout(() => { save(); }, 2200);
+    const t = setTimeout(() => { saveRef.current(); }, 2200);
     return () => clearTimeout(t);
   }, [dirty, save]);
 
@@ -248,7 +282,7 @@ export default function DeckEditor({
       e.preventDefault();
       if (e.shiftKey) history.redo();
       else history.undo();
-      setDirty(true);
+      markDirty();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -272,7 +306,7 @@ export default function DeckEditor({
     const nextStored = toStoredSlides(slides, stored);
     setStored(nextStored);
     history.reset(toElementSlides(nextStored, nextId, { companyName: deckName }));
-    setDirty(true);
+    markDirty();
     flash(
       customized > 0
         ? `Switched template. ${customized} hand-edited slide${customized === 1 ? "" : "s"} kept their layout.`
@@ -316,7 +350,7 @@ export default function DeckEditor({
       flash("Added as a new slide. Drag the chart and its note into place.");
     }
     setDropPrompt(null);
-    setDirty(true);
+    markDirty();
   }
 
   /* ---------------- chart rendering inside slides ---------------- */
@@ -374,7 +408,7 @@ export default function DeckEditor({
       totalPages: slides.length,
     });
     setSlides((prev) => prev.map((s, i) => (i === current ? fresh : s)), "reset-template");
-    setDirty(true);
+    markDirty();
     flash("Slide reset to the template. Undo if that wasn't what you wanted.");
   }
 
@@ -386,7 +420,7 @@ export default function DeckEditor({
       return next;
     });
     setCurrent((c) => c + 1);
-    setDirty(true);
+    markDirty();
   }
 
   function deleteSlide() {
@@ -394,7 +428,7 @@ export default function DeckEditor({
     if (!window.confirm(`Delete slide ${current + 1}?`)) return;
     setSlides((prev) => prev.filter((_, i) => i !== current));
     setCurrent((c) => Math.max(0, c - 1));
-    setDirty(true);
+    markDirty();
   }
 
   // The editor fills from wherever it starts down to the bottom of the
@@ -433,7 +467,7 @@ export default function DeckEditor({
           <input
             className="p-input deck-name-input"
             value={deckName}
-            onChange={(e) => { setDeckName(e.target.value); setDirty(true); }}
+            onChange={(e) => { setDeckName(e.target.value); markDirty(); }}
           />
         </div>
 
@@ -454,7 +488,7 @@ export default function DeckEditor({
           </div>
           <button
             className="p-btn p-btn-ghost"
-            onClick={() => { history.undo(); setDirty(true); }}
+            onClick={() => { history.undo(); markDirty(); }}
             disabled={!history.canUndo}
             title="Undo (Cmd/Ctrl+Z)"
           >
@@ -462,7 +496,7 @@ export default function DeckEditor({
           </button>
           <button
             className="p-btn p-btn-ghost"
-            onClick={() => { history.redo(); setDirty(true); }}
+            onClick={() => { history.redo(); markDirty(); }}
             disabled={!history.canRedo}
             title="Redo (Shift+Cmd/Ctrl+Z)"
           >
@@ -531,10 +565,10 @@ export default function DeckEditor({
           templateId={templateId}
           industry={deckProfile?.industry ?? null}
           images={images}
-          onImagesChange={(next) => { setImages(next); setDirty(true); }}
+          onImagesChange={(next) => { setImages(next); markDirty(); }}
           renderChart={renderChart}
-          onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); setDirty(true); }}
-          onThemeChange={(next) => { setThemeSettings(next); setDirty(true); }}
+          onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); markDirty(); }}
+          onThemeChange={(next) => { setThemeSettings(next); markDirty(); }}
           onTemplateChange={applyTemplate}
           onCurrentChange={setCurrent}
           guidesEnabled={guidesEnabled}

@@ -92,6 +92,7 @@ export default function DeckStudio({
   renderChart, guidesEnabled = true,
 }: DeckStudioProps) {
   const [panel, setPanel] = useState<Panel>("template");
+  const [toolMode, setToolMode] = useState<"pointer" | "text">("pointer");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [slideVariants, setSlideVariants] = useState<Record<string, LayoutVariant>>({});
@@ -107,6 +108,21 @@ export default function DeckStudio({
   useEffect(() => {
     loadFontPairing(themeSettings.fontPairing);
   }, [themeSettings.fontPairing]);
+
+  // V selects the pointer tool, T the text tool — the standard shortcuts,
+  // skipped while typing so they don't fight a text field.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement;
+      if (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "v") setToolMode("pointer");
+      else if (key === "t") setToolMode("text");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const slide = slides[current];
   const selected = slide?.elements.find((e) => e.id === selectedId) ?? null;
@@ -265,7 +281,26 @@ export default function DeckStudio({
   return (
     <div className="dst">
       <div className="dst-stage">
-        <div className="dst-canvas-area"><div
+        <div className="dst-canvas-area">
+        <div className="dst-toolmode" role="group" aria-label="Canvas tool">
+          <button
+            className={`dst-tool ${toolMode === "pointer" ? "is-active" : ""}`}
+            onClick={() => setToolMode("pointer")}
+            title="Move — select and drag (V)"
+            aria-pressed={toolMode === "pointer"}
+          >
+            <span aria-hidden="true">↖</span> Pointer
+          </button>
+          <button
+            className={`dst-tool ${toolMode === "text" ? "is-active" : ""}`}
+            onClick={() => setToolMode("text")}
+            title="Text — click a text element to edit it (T)"
+            aria-pressed={toolMode === "text"}
+          >
+            <span aria-hidden="true">T</span> Text
+          </button>
+        </div>
+        <div
           className="dst-canvas-hold"
           onDragOver={(e) => {
             if (e.dataTransfer.types.includes("application/x-provisio-image")) {
@@ -303,6 +338,8 @@ export default function DeckStudio({
             selectedId={selectedId}
             selectedIds={selectedIds}
             guidesEnabled={guidesEnabled}
+            toolMode={toolMode}
+            onRequestPointerMode={() => setToolMode("pointer")}
             onSelectionChange={(ids, activeId) => {
               setSelectedIds(ids);
               setSelectedId(activeId);

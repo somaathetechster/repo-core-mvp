@@ -27,6 +27,14 @@ type DragState =
 
 type Marquee = { startX: number; startY: number; currentX: number; currentY: number } | null;
 
+// Element types that are NOT edited as inline text. Everything else carries a
+// `text` field and drops into contentEditable, so this is the single source of
+// truth for "is this a text element" used by the pointer/text tool logic.
+const NON_TEXT_TYPES = new Set(["asset", "shape", "rule", "image", "logo", "portrait", "chart", "table"]);
+function isTextEl(el: SlideElement): boolean {
+  return el.text !== undefined && !NON_TEXT_TYPES.has(el.type);
+}
+
 export interface CanvasProps {
   slide: ElementSlide;
   theme: DeckTheme;
@@ -34,6 +42,16 @@ export interface CanvasProps {
   renderChart?: (el: SlideElement) => ReactNode;
   /** Read-only mode is used for thumbnails and preview. */
   interactive?: boolean;
+  /**
+   * "pointer": clicks select and drag moves; text is edited only by
+   * double-clicking a single selection. "text": clicking a text element drops
+   * straight into editing. Defaults to pointer so a group drag never turns
+   * into a stray text edit.
+   */
+  toolMode?: "pointer" | "text";
+  /** Asks the parent to switch back to the pointer tool (text tool is
+   *  one-shot: after a click on empty canvas or a non-text element it reverts). */
+  onRequestPointerMode?: () => void;
   /**
    * Fixed container width in pixels. Passed for thumbnails, where the wrapper
    * may not have a reliable clientWidth when the canvas first mounts, which
@@ -54,12 +72,18 @@ export default function SlideCanvas({
   onSelect, selectedId: controlledSelection,
   selectedIds: controlledSelections, onSelectionChange,
   guidesEnabled = true,
+  toolMode = "pointer", onRequestPointerMode,
 }: CanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [internalSelection, setInternalSelection] = useState<string | null>(null);
   const [internalSelections, setInternalSelections] = useState<Set<string>>(new Set());
+  // Which element is currently open for inline text editing. Kept separate
+  // from selection: an element can be selected (for dragging) without its text
+  // being editable, which is exactly what stops a multi-select drag from
+  // landing inside a contentEditable.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState>(null);
   const [marquee, setMarquee] = useState<Marquee>(null);
   const [guides, setGuides] = useState<{ axis: "x" | "y"; at: number }[]>([]);
@@ -97,6 +121,10 @@ export default function SlideCanvas({
       y: (clientY - rect.top) / scale,
     };
   }, [scale]);
+
+  // Switching slides ends any in-progress text edit; the editing id refers to
+  // an element that is no longer on screen otherwise.
+  useEffect(() => { setEditingId(null); }, [slide.id]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -199,7 +227,8 @@ export default function SlideCanvas({
           select(null);
         } else {
           const hits = slide.elements.filter((el) =>
-            el.frame.x < right && el.frame.x + el.frame.w > left
+            !el.locked
+            && el.frame.x < right && el.frame.x + el.frame.w > left
             && el.frame.y < bottom && el.frame.y + el.frame.h > top,
           ).map((el) => el.id);
           setSelection(new Set(hits), hits[hits.length - 1] ?? null);
@@ -253,7 +282,7 @@ export default function SlideCanvas({
           onChange({ ...slide, customized: true, elements: slide.elements.filter((x) => !selectedIds.has(x.id)) }, "delete-selection");
           setSelection(new Set(), null);
           return;
-        case "Escape": setSelection(new Set(), null); return;
+        case "Escape": setSelection(new Set(), null); setEditingId(null); return;
         default: handled = false;
       }
       if (handled) e.preventDefault();
@@ -297,6 +326,9 @@ export default function SlideCanvas({
         }}
         onPointerDown={(e) => {
           if (e.target === e.currentTarget && interactive) {
+            setEditingId(null);
+            // Clicking empty canvas with the text tool reverts to pointer.
+            if (toolMode === "text") onRequestPointerMode?.();
             const point = canvasPoint(e.clientX, e.clientY);
             setMarquee({ startX: point.x, startY: point.y, currentX: point.x, currentY: point.y });
           }
@@ -317,18 +349,42 @@ export default function SlideCanvas({
               onPointerDown={(e) => {
                 if (!interactive) return;
                 const target = e.target as HTMLElement;
-                if (target.isContentEditable) return;
+                if (target.isContentEditable) return; // typing inside the open editor
                 e.stopPropagation();
+
+                // Locked elements are inert on the canvas: no select, no drag,
+                // no text edit. They can only be changed from the layers panel.
+                if (el.locked) return;
+
+                // Text tool: a click on a text element drops straight into
+                // editing (Figma's T behaviour).
+                if (toolMode === "text" && isTextEl(el)) {
+                  setSelection(new Set([el.id]), el.id);
+                  setEditingId(el.id);
+                  return; // no drag: the user is about to type
+                }
+                // Text tool on a non-text element falls back to the pointer.
+                if (toolMode === "text") onRequestPointerMode?.();
 
                 // Selection state updates asynchronously, so compute what the
                 // selection will be after this click and drive the drag from
                 // that rather than from the stale current selectedIds.
+                //
+                // Grabbing an element that is already part of a multi-selection
+                // keeps the whole selection and drags it as a group, instead of
+                // collapsing to the one clicked. That is what makes "select
+                // several, then drag" actually move all of them.
+                const inGroup = selectedIds.has(el.id) && selectedIds.size > 1;
                 const nextIds: Set<string> = e.shiftKey
                   ? new Set([...selectedIds, el.id])
-                  : new Set([el.id]);
+                  : inGroup
+                    ? new Set(selectedIds)
+                    : new Set([el.id]);
 
-                select(el.id, e.shiftKey);
-                if (el.locked) return;
+                if (e.shiftKey || !inGroup) select(el.id, e.shiftKey);
+                // Selecting a different element ends any in-progress text edit,
+                // so a group drag moves rather than editing.
+                setEditingId((prev) => (prev === el.id ? prev : null));
                 const ids = [...nextIds]
                   .filter((id) => !slide.elements.find((item) => item.id === id)?.locked);
                 const origins = Object.fromEntries(
@@ -336,16 +392,34 @@ export default function SlideCanvas({
                 ) as Record<string, Frame>;
                 setDrag({ mode: "move", ids, startX: e.clientX, startY: e.clientY, origins });
               }}
+              onDoubleClick={(e) => {
+                if (!interactive || el.locked || !isTextEl(el)) return;
+                // Pointer tool: double-click edits a text element, but only
+                // when it is the sole selection — never mid multi-select.
+                const canEditText = toolMode === "text" || selectedIds.size <= 1;
+                if (!canEditText) return;
+                e.stopPropagation();
+                setSelection(new Set([el.id]), el.id);
+                setEditingId(el.id);
+              }}
             >
               <div style={{ position: "absolute", inset: 0 }}>
                 <ElementView
                   element={{ ...el, frame: { ...el.frame, x: 0, y: 0 } }}
                   theme={theme}
                   renderChart={renderChart}
-                  editable={interactive && isSelected}
-                  onTextChange={(id, text) => updateElement(id, { text }, `text:${id}`)}
+                  editable={interactive && editingId === el.id}
+                  onTextChange={(id, text) => {
+                    updateElement(id, { text }, `text:${id}`);
+                    // Blur commits the edit and closes the editor.
+                    setEditingId((prev) => (prev === id ? null : prev));
+                  }}
                 />
               </div>
+
+              {el.locked && (
+                <span className="cv-lock-badge" aria-hidden="true">🔒</span>
+              )}
 
               {interactive && isSelected && !el.locked && (
                 <>

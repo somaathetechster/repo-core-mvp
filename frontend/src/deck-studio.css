@@ -6,11 +6,27 @@
 */
 .dst { display: grid; grid-template-columns: minmax(0,1fr) 320px; height: 100%; min-height: 0; overflow: hidden; }
 .dst-stage { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.dst-canvas-area { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 1rem 1rem 0; }
+.dst-canvas-area { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: center; padding: 0.75rem 1rem 0; }
 .dst-empty { color: var(--text-dim); font-style: italic; padding: 2rem; }
 
 
 .dst-canvas-hold { width: 100%; max-width: min(1180px, calc((100vh - 260px) * 1.7778)); flex-shrink: 0; }
+
+/* Pointer / Text tool switcher — sits above the canvas, Figma-style. */
+.dst-toolmode {
+  display: inline-flex; gap: 2px; margin-bottom: 0.55rem; flex-shrink: 0;
+  padding: 2px; border-radius: 8px; background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+}
+.dst-tool {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.3rem 0.65rem; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-dim);
+  font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+.dst-tool span { font-weight: 700; width: 1em; text-align: center; }
+.dst-tool:hover { color: var(--text); }
+.dst-tool.is-active { background: var(--accent, #b8860b); color: #fff; }
 
 .dst-filmstrip { display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.5rem 1rem 0.75rem; flex-shrink: 0; border-top: 1px solid var(--ink-border); background: var(--ink-raised); }
 .dst-filmstrip::-webkit-scrollbar { height: 4px; }

@@ -114,9 +114,94 @@ def _data_url_bytes(data_url: str | None) -> bytes | None:
         return None
 
 
+def _cover_crop(im, tw: int, th: int, fx: float, fy: float, zoom: float):
+    """Crop ``im`` to a ``tw`` x ``th`` window the way CSS object-fit: cover
+    does in the editor: scale to cover the frame (times any zoom), then take
+    the window positioned by the focal point."""
+    from PIL import Image
+    iw, ih = im.size
+    if iw <= 0 or ih <= 0:
+        return im
+    scale = max(tw / iw, th / ih) * (zoom if zoom and zoom > 1 else 1)
+    nw, nh = max(1, int(round(iw * scale))), max(1, int(round(ih * scale)))
+    im = im.resize((nw, nh), Image.LANCZOS)
+    left = int(round(max(nw - tw, 0) * min(max(fx, 0.0), 1.0)))
+    top = int(round(max(nh - th, 0) * min(max(fy, 0.0), 1.0)))
+    return im.crop((left, top, left + tw, top + th))
+
+
+def _element_opacity(el: dict) -> float:
+    """The element's presentation opacity, read exactly where the editor writes
+    it (top-level ``opacity``, falling back to ``style.opacity``)."""
+    style = el.get("style") or {}
+    value = el.get("opacity")
+    if value is None:
+        value = style.get("opacity")
+    try:
+        return 1.0 if value is None else float(value)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def _prepare_image(el: dict, frame_w: float, frame_h: float) -> tuple[bytes, str, int, int] | None:
+    """Render an image element to the pixels the editor shows: frame-cropped
+    for object-fit cover, with the element's opacity baked into the alpha
+    channel. Returns ``(png_bytes, fit, width_px, height_px)``. Falls back to
+    the raw bytes (dimensions 0) if Pillow is unavailable, so the export still
+    succeeds — it just can't crop or fade."""
+    raw = _data_url_bytes(el.get("src"))
+    if not raw:
+        return None
+    style = el.get("style") or {}
+    fit = style.get("objectFit") or "cover"
+    opacity = _element_opacity(el)
+
+    try:
+        from PIL import Image
+    except Exception:
+        return raw, fit, 0, 0
+    try:
+        im = Image.open(io.BytesIO(raw)).convert("RGBA")
+    except Exception:
+        return raw, fit, 0, 0
+
+    if fit == "cover":
+        tw, th = max(1, int(round(frame_w))), max(1, int(round(frame_h)))
+        try:
+            im = _cover_crop(
+                im, tw, th,
+                float(style.get("focusX", 0.5) or 0.5),
+                float(style.get("focusY", 0.5) or 0.5),
+                float(style.get("zoom", 1) or 1),
+            )
+        except Exception:
+            pass
+
+    if opacity < 1:
+        try:
+            alpha = im.split()[3].point(lambda a: int(a * opacity))
+            im.putalpha(alpha)
+        except Exception:
+            pass
+
+    out = io.BytesIO()
+    im.save(out, format="PNG")
+    return out.getvalue(), fit, im.size[0], im.size[1]
+
+
 def _slide_background(slide: dict, theme: Theme) -> str:
+    # Mirrors the editor (SlideCanvas): the keywords resolve against the theme,
+    # and any literal hex the user picked in the background control is used
+    # as-is. Previously a hex fell through to paper, so a per-slide colour set
+    # in the editor silently disappeared on export.
     bg = slide.get("background") or "paper"
-    return {"ink": theme.ink, "accent": theme.accent}.get(bg, theme.paper)
+    if bg == "ink":
+        return theme.ink
+    if bg == "accent":
+        return theme.accent
+    if isinstance(bg, str) and bg.startswith("#"):
+        return _hex(bg, theme.paper)
+    return theme.paper
 
 
 def _sorted_elements(slide: dict) -> list[dict]:
@@ -201,9 +286,25 @@ def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str
         return
 
     if etype in IMAGE_TYPES:
-        img = _data_url_bytes(el.get("src"))
-        if img:
-            slide.shapes.add_picture(io.BytesIO(img), x, y, w, h)
+        prepared = _prepare_image(el, frame.get("w", 100), frame.get("h", 40))
+        if prepared:
+            data, fit, pw, ph = prepared
+            if fit == "contain" and pw and ph:
+                # Letterbox inside the frame, preserving aspect, since
+                # add_picture with both dimensions would otherwise stretch it.
+                fw, fh = frame.get("w", 100), frame.get("h", 40)
+                s = min(fw / pw, fh / ph)
+                dw, dh = pw * s, ph * s
+                slide.shapes.add_picture(
+                    io.BytesIO(data),
+                    _px_to_emu(frame.get("x", 0) + (fw - dw) / 2),
+                    _px_to_emu(frame.get("y", 0) + (fh - dh) / 2),
+                    _px_to_emu(dw), _px_to_emu(dh),
+                )
+            else:
+                # Cover images are already cropped to the frame, so placing at
+                # the frame size fills it exactly without distortion.
+                slide.shapes.add_picture(io.BytesIO(data), x, y, w, h)
         return
 
     if etype in TEXT_TYPES:
@@ -316,11 +417,16 @@ def _draw_pdf_element(c, el: dict, theme: Theme, chart_images: dict[str, str], p
         return
 
     if etype in IMAGE_TYPES:
-        img = _data_url_bytes(el.get("src"))
-        if img:
+        prepared = _prepare_image(el, frame.get("w", 100), frame.get("h", 40))
+        if prepared:
+            data, fit, _pw, _ph = prepared
             try:
-                c.drawImage(ImageReader(io.BytesIO(img)), x, y, w, h,
-                            preserveAspectRatio=(style.get("objectFit") == "contain"),
+                # Cover images are pre-cropped to the frame aspect, so they fill
+                # the box; contain images letterbox via preserveAspectRatio.
+                # mask="auto" honours the alpha channel the opacity is baked
+                # into, so a faded image reads as faded here too.
+                c.drawImage(ImageReader(io.BytesIO(data)), x, y, w, h,
+                            preserveAspectRatio=(fit == "contain"),
                             anchor="c", mask="auto")
             except Exception:
                 pass
