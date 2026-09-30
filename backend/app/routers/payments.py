@@ -87,11 +87,6 @@ async def create_checkout(
 ):
     """
     Creates a Bachs checkout session and returns the URL to redirect to.
-
-    Called by the frontend when a user picks a plan. We look up (or create)
-    a Bachs customer for this user, attach the right product, and hand back
-    a hosted checkout URL. The user pays there; fulfilment happens via
-    webhook.
     """
     plan = PLAN_DETAILS.get(body.plan_id)
     if not plan:
@@ -138,7 +133,7 @@ async def _get_or_create_customer(client: httpx.AsyncClient, user_id: str, email
         headers=_headers(),
     )
     if res.status_code == 200:
-        items = (res.json().get("data") or res.json().get("items") or [])
+        items = res.json().get("data") or res.json().get("items") or []
         if items:
             return items[0]["id"]
 
@@ -148,17 +143,17 @@ async def _get_or_create_customer(client: httpx.AsyncClient, user_id: str, email
         headers=_headers(),
     )
     if res.status_code not in (200, 201):
+        log.error("Bachs customer creation failed %s: %s", res.status_code, res.text[:500])
         raise HTTPException(status_code=502, detail="Could not create payment customer.")
+
     data = res.json()
-
-# Fix — safe extraction with logging
-customer = data.get("data") or data
-customer_id = customer.get("id") or customer.get("customer_id")
-if not customer_id:
-    log.error("Bachs customer creation response missing id: %s", data)
-    raise HTTPException(status_code=502, detail="Could not create payment customer.")
-return customer_id
-
+    # Bachs may wrap the object under a "data" key or return it at the top level.
+    customer = data.get("data") or data
+    customer_id = customer.get("id") or customer.get("customer_id")
+    if not customer_id:
+        log.error("Bachs customer creation response missing id: %s", data)
+        raise HTTPException(status_code=502, detail="Could not create payment customer.")
+    return customer_id
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +166,7 @@ async def bachs_webhook(request: Request):
     Receives and verifies Bachs webhook events.
 
     Bachs signs every payload with HMAC-SHA256 using the endpoint secret.
-    We verify before touching the database. Fulfilment is idempotent: if
-    a row already exists for this user+provider, nothing changes.
+    We verify before touching the database. Fulfilment is idempotent.
     """
     raw = await request.body()
     sig = request.headers.get("Bachs-Signature", "")
@@ -203,13 +197,18 @@ def _verify_signature(payload: bytes, header: str) -> bool:
         log.warning("BACHS_WEBHOOK_SECRET not set — skipping signature check")
         return True
 
+    # Header may arrive as "sha256=<hex>" or just "<hex>"
+    actual = header.removeprefix("sha256=").strip()
+    if not actual:
+        log.warning("Bachs webhook received with no signature header")
+        return False
+
     expected = hmac.new(
         BACHS_WEBHOOK_SECRET.encode(),
         payload,
         hashlib.sha256,
     ).hexdigest()
 
-    actual = header.removeprefix("sha256=")
     return hmac.compare_digest(expected, actual)
 
 
