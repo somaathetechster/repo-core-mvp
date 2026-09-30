@@ -189,6 +189,45 @@ def _prepare_image(el: dict, frame_w: float, frame_h: float) -> tuple[bytes, str
     return out.getvalue(), fit, im.size[0], im.size[1]
 
 
+def _srgb_alpha(solid_fill, opacity: float) -> None:
+    """Append an <a:alpha> to a solidFill's srgbClr. Shared by shape fills and
+    text runs: python-pptx has no public API for either, so the transparency is
+    written into the DrawingML directly. `val` is in thousandths of a percent."""
+    if solid_fill is None:
+        return
+    from pptx.oxml.ns import qn
+    clr = solid_fill.find(qn("a:srgbClr"))
+    if clr is None:
+        return
+    for old in clr.findall(qn("a:alpha")):
+        clr.remove(old)
+    alpha = clr.makeelement(qn("a:alpha"), {"val": str(int(max(0.0, min(1.0, opacity)) * 100000))})
+    clr.append(alpha)
+
+
+def _pptx_fill_alpha(fill, opacity: float) -> None:
+    """Make a shape's solid fill semi-transparent."""
+    if opacity >= 1:
+        return
+    try:
+        from pptx.oxml.ns import qn
+        _srgb_alpha(fill._xPr.find(qn("a:solidFill")), opacity)
+    except Exception:
+        pass
+
+
+def _pptx_font_alpha(font, opacity: float) -> None:
+    """Fade text by adding alpha to the run/paragraph colour fill."""
+    if opacity >= 1:
+        return
+    try:
+        from pptx.oxml.ns import qn
+        rpr = font._rPr
+        _srgb_alpha(rpr.find(qn("a:solidFill")) if rpr is not None else None, opacity)
+    except Exception:
+        pass
+
+
 def _slide_background(slide: dict, theme: Theme) -> str:
     # Mirrors the editor (SlideCanvas): the keywords resolve against the theme,
     # and any literal hex the user picked in the background control is used
@@ -264,6 +303,7 @@ def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str
         shp.fill.fore_color.rgb = RGBColor.from_string(fill[1:].upper())
         shp.line.fill.background()
         shp.shadow.inherit = False
+        _pptx_fill_alpha(shp.fill, _element_opacity(el))
         return
 
     if etype == "chart":
@@ -332,6 +372,7 @@ def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str
         color = theme.color(style.get("color"), "ink")
         if color:
             font.color.rgb = RGBColor.from_string(color[1:].upper())
+            _pptx_font_alpha(font, _element_opacity(el))
         # Use the deck's real families. They are embedded into the package
         # after rendering, so the reviewer sees the actual typeface rather
         # than a substitute.
@@ -373,6 +414,24 @@ def build_pdf_from_elements(
 
 
 def _draw_pdf_element(c, el: dict, theme: Theme, chart_images: dict[str, str], page_h: float) -> None:
+    # Element opacity: images bake it into their own alpha channel (see
+    # _prepare_image), so only the vector/text elements need the canvas-level
+    # alpha, and applying it to images too would fade them twice.
+    etype = el.get("type")
+    opacity = _element_opacity(el)
+    faded = opacity < 1 and etype not in IMAGE_TYPES
+    if faded:
+        c.saveState()
+        c.setFillAlpha(opacity)
+        c.setStrokeAlpha(opacity)
+    try:
+        _draw_pdf_element_body(c, el, theme, chart_images, page_h)
+    finally:
+        if faded:
+            c.restoreState()
+
+
+def _draw_pdf_element_body(c, el: dict, theme: Theme, chart_images: dict[str, str], page_h: float) -> None:
     frame = el.get("frame") or {}
     style = el.get("style") or {}
     etype = el.get("type")
