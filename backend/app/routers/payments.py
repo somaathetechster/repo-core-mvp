@@ -105,7 +105,7 @@ async def create_checkout(
 
         payload = {
             "customer_id": cust_id,
-            "line_items": [{"product_id": product_id, "quantity": 1}],
+            "product_cart": [{"product_id": product_id, "quantity": 1}],
             "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
             "cancel_url":  f"{FRONTEND_URL}?checkout=cancelled",
             "metadata": {"user_id": user_id, "plan_id": body.plan_id},
