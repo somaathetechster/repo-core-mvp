@@ -29,11 +29,12 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.db import AsyncSessionLocal
+from app.core.deps import get_current_user_id
 from app.models.billing import SubscriptionModel, UsageModel, UserFlagsModel
 
 log = logging.getLogger(__name__)
@@ -48,8 +49,6 @@ BACHS_BASE = "https://api.bachs.io"
 BACHS_SECRET = os.getenv("BACHS_SECRET_KEY", "")
 BACHS_WEBHOOK_SECRET = os.getenv("BACHS_WEBHOOK_SECRET", "")
 
-# Bachs product IDs — create these in the Bachs dashboard, then set the env
-# vars. First boot will log a warning if they're missing but won't crash.
 PRODUCT_IDS: dict[str, str] = {
     "single":  os.getenv("BACHS_PRODUCT_SINGLE", ""),
     "monthly": os.getenv("BACHS_PRODUCT_MONTHLY", ""),
@@ -57,9 +56,9 @@ PRODUCT_IDS: dict[str, str] = {
 }
 
 PLAN_DETAILS = {
-    "single":  {"name": "Single export",     "price": "10.00",  "currency": "USD", "interval": None},
-    "monthly": {"name": "Monthly plan",       "price": "30.00",  "currency": "USD", "interval": "month"},
-    "yearly":  {"name": "Yearly plan",        "price": "99.00",  "currency": "USD", "interval": "year"},
+    "single":  {"name": "Single export",  "price": "10.00", "currency": "USD", "interval": None},
+    "monthly": {"name": "Monthly plan",   "price": "30.00", "currency": "USD", "interval": "month"},
+    "yearly":  {"name": "Yearly plan",    "price": "99.00", "currency": "USD", "interval": "year"},
 }
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.provisio.site")
@@ -82,7 +81,10 @@ class CheckoutRequest(BaseModel):
 
 
 @router.post("/checkout/create")
-async def create_checkout(body: CheckoutRequest, request: Request):
+async def create_checkout(
+    body: CheckoutRequest,
+    user_id: str = Depends(get_current_user_id),
+):
     """
     Creates a Bachs checkout session and returns the URL to redirect to.
 
@@ -91,12 +93,6 @@ async def create_checkout(body: CheckoutRequest, request: Request):
     a hosted checkout URL. The user pays there; fulfilment happens via
     webhook.
     """
-    from app.core.deps import get_current_user_id
-    try:
-        user_id = await get_current_user_id(request)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     plan = PLAN_DETAILS.get(body.plan_id)
     if not plan:
         raise HTTPException(status_code=400, detail=f"Unknown plan '{body.plan_id}'")
@@ -105,22 +101,18 @@ async def create_checkout(body: CheckoutRequest, request: Request):
     if not product_id:
         raise HTTPException(status_code=503, detail=f"Product for plan '{body.plan_id}' is not configured yet.")
 
-    # Look up the user's email from user_flags so Bachs can pre-fill it.
     async with AsyncSessionLocal() as session:
         flags = await session.get(UserFlagsModel, user_id)
     user_email = (flags.email if flags else None) or ""
 
     async with httpx.AsyncClient(timeout=15) as client:
-        # Find or create a Bachs customer for this user.
         cust_id = await _get_or_create_customer(client, user_id, user_email)
 
-        # Create the checkout session.
         payload = {
             "customer_id": cust_id,
             "line_items": [{"product_id": product_id, "quantity": 1}],
             "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
             "cancel_url":  f"{FRONTEND_URL}?checkout=cancelled",
-            # Carry user_id through so the webhook knows who to activate.
             "metadata": {"user_id": user_id, "plan_id": body.plan_id},
         }
         res = await client.post(f"{BACHS_BASE}/v1/checkout-sessions", json=payload, headers=_headers())
@@ -140,7 +132,6 @@ async def create_checkout(body: CheckoutRequest, request: Request):
 
 async def _get_or_create_customer(client: httpx.AsyncClient, user_id: str, email: str) -> str:
     """Finds the Bachs customer for this user, creating one if needed."""
-    # Search by metadata user_id first.
     res = await client.get(
         f"{BACHS_BASE}/v1/customers",
         params={"metadata[user_id]": user_id, "limit": 1},
@@ -151,7 +142,6 @@ async def _get_or_create_customer(client: httpx.AsyncClient, user_id: str, email
         if items:
             return items[0]["id"]
 
-    # Create one.
     res = await client.post(
         f"{BACHS_BASE}/v1/customers",
         json={"email": email or f"{user_id}@provisio.internal", "metadata": {"user_id": user_id}},
@@ -194,7 +184,6 @@ async def bachs_webhook(request: Request):
     try:
         await _dispatch(event_type, event)
     except Exception as exc:
-        # Log but return 200 so Bachs doesn't keep retrying a logic error.
         log.exception("Webhook handler error for %s: %s", event_type, exc)
 
     return Response(status_code=200)
@@ -204,7 +193,7 @@ def _verify_signature(payload: bytes, header: str) -> bool:
     """HMAC-SHA256 verification against the endpoint signing secret."""
     if not BACHS_WEBHOOK_SECRET:
         log.warning("BACHS_WEBHOOK_SECRET not set — skipping signature check")
-        return True  # Allow through in dev; fail hard in prod via the else branch.
+        return True
 
     expected = hmac.new(
         BACHS_WEBHOOK_SECRET.encode(),
@@ -212,7 +201,6 @@ def _verify_signature(payload: bytes, header: str) -> bool:
         hashlib.sha256,
     ).hexdigest()
 
-    # Header may be "sha256=<hex>" or just "<hex>".
     actual = header.removeprefix("sha256=")
     return hmac.compare_digest(expected, actual)
 
@@ -223,25 +211,18 @@ async def _dispatch(event_type: str, event: dict) -> None:
 
     if event_type == "collection.succeeded":
         await _on_collection_succeeded(data)
-
     elif event_type == "customer.subscription.created":
         await _on_subscription_created(data)
-
     elif event_type == "customer.subscription.updated":
         await _on_subscription_updated(data)
-
     elif event_type == "customer.subscription.deleted":
         await _on_subscription_deleted(data)
-
     elif event_type == "invoice.paid":
         await _on_invoice_paid(data)
-
     elif event_type == "invoice.payment_failed":
         await _on_invoice_failed(data)
-
     elif event_type == "checkout.completed":
         await _on_checkout_completed(data)
-
     else:
         log.debug("Unhandled event type: %s", event_type)
 
@@ -251,29 +232,18 @@ async def _dispatch(event_type: str, event: dict) -> None:
 # ---------------------------------------------------------------------------
 
 async def _on_checkout_completed(data: dict) -> None:
-    """
-    Checkout completed. For one-time payments we activate here. For
-    recurring plans the subscription.created event is the authoritative
-    signal; this just logs.
-    """
     meta = data.get("metadata") or {}
     user_id = meta.get("user_id")
     plan_id = meta.get("plan_id")
     if not user_id or not plan_id:
         log.warning("checkout.completed missing metadata: %s", meta)
         return
-
     if plan_id == "single":
-        # One-time export credit — activate now.
         await _activate_plan(user_id, plan_id, provider_ref=data.get("id", ""))
         log.info("Single export activated for %s via checkout.completed", user_id)
 
 
 async def _on_collection_succeeded(data: dict) -> None:
-    """
-    A payment was collected. For one-time purchases this is the billing
-    confirmation; for subscriptions the subscription events are canonical.
-    """
     meta = data.get("metadata") or {}
     user_id = meta.get("user_id")
     plan_id = meta.get("plan_id")
@@ -290,7 +260,6 @@ async def _on_subscription_created(data: dict) -> None:
     sub_id = data.get("id", "")
 
     if not user_id:
-        # Fall back to customer lookup
         cust_id = data.get("customer_id") or (data.get("customer") or {}).get("id")
         user_id = await _user_id_from_customer(cust_id) if cust_id else None
     if not user_id:
@@ -305,13 +274,11 @@ async def _on_subscription_created(data: dict) -> None:
 
 
 async def _on_subscription_updated(data: dict) -> None:
-    """Plan change or renewal — keep the row current."""
     sub_id = data.get("id", "")
     status = data.get("status", "")
     if status in ("canceled", "cancelled", "expired"):
         await _deactivate_by_sub_id(sub_id)
     else:
-        # Renewal: reset the period so usage caps reset correctly.
         async with AsyncSessionLocal() as session:
             rows = (await session.execute(
                 select(SubscriptionModel).where(SubscriptionModel.provider_subscription_id == sub_id)
@@ -328,13 +295,10 @@ async def _on_subscription_deleted(data: dict) -> None:
 
 
 async def _on_invoice_paid(data: dict) -> None:
-    """Renewal invoice paid — subscription stays active, already handled above."""
     pass
 
 
 async def _on_invoice_failed(data: dict) -> None:
-    """Renewal failed. Bachs will retry; we leave the subscription active until
-    it reaches a terminal failure state and fires subscription.deleted."""
     sub_id = (data.get("subscription") or {}).get("id") or data.get("subscription_id", "")
     log.warning("invoice.payment_failed for subscription %s — Bachs will retry", sub_id)
 
@@ -349,10 +313,6 @@ async def _activate_plan(
     provider_ref: str = "",
     sub_id: str = "",
 ) -> None:
-    """
-    Creates or updates the subscription row. Idempotent: a duplicate call
-    with the same user_id + provider_ref does nothing.
-    """
     plan_map = {
         "single":  ("one_time", False),
         "monthly": ("monthly",  True),
@@ -361,7 +321,6 @@ async def _activate_plan(
     plan_key, is_recurring = plan_map.get(plan_id, ("monthly", True))
 
     async with AsyncSessionLocal() as session:
-        # Idempotency: skip if we already processed this exact event.
         if provider_ref:
             existing = (await session.execute(
                 select(SubscriptionModel).where(
@@ -372,7 +331,6 @@ async def _activate_plan(
             if existing:
                 return
 
-        # Deactivate any existing active subscription first.
         existing_rows = (await session.execute(
             select(SubscriptionModel).where(
                 SubscriptionModel.user_id == user_id,
@@ -393,7 +351,6 @@ async def _activate_plan(
         )
         session.add(sub)
 
-        # Ensure a usage row exists for this billing period.
         period = now.strftime("%Y-%m")
         existing_usage = (await session.execute(
             select(UsageModel).where(
@@ -422,7 +379,6 @@ async def _deactivate_by_sub_id(sub_id: str) -> None:
 
 
 async def _user_id_from_customer(cust_id: str) -> str | None:
-    """Looks up our user_id from a Bachs customer_id via the Bachs API."""
     async with httpx.AsyncClient(timeout=10) as client:
         res = await client.get(f"{BACHS_BASE}/v1/customers/{cust_id}", headers=_headers())
     if res.status_code != 200:
@@ -433,7 +389,6 @@ async def _user_id_from_customer(cust_id: str) -> str | None:
 
 
 def _infer_plan_from_product(data: dict) -> str | None:
-    """Guesses the plan from the product_id on a subscription object."""
     prod_id = (
         data.get("product_id")
         or (data.get("product") or {}).get("id")
