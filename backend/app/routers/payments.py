@@ -75,16 +75,15 @@ def _headers() -> dict[str, str]:
 
 def _email_from_request(request: Request) -> str | None:
     """
-    Pulls the user's email directly from the JWT claims on the incoming
-    request — no DB lookup needed. Supabase always embeds the email in
-    the token payload as the 'email' claim.
+    Pulls the user's email directly from the JWT claims — no DB lookup.
+    Supabase always embeds the email as the 'email' claim. We skip
+    re-verification since get_current_user_id already verified the token.
     """
     try:
         auth = request.headers.get("Authorization", "")
         token = auth.removeprefix("Bearer ").strip()
         if not token:
             return None
-        # Decode without verification — we already verified in get_current_user_id.
         claims = jose_jwt.get_unverified_claims(token)
         return claims.get("email") or None
     except Exception as exc:
@@ -109,10 +108,9 @@ async def create_checkout(
     """
     Creates a Bachs checkout session and returns the URL to redirect to.
 
-    Called by the frontend when a user picks a plan. We create (or find)
-    a real Bachs customer for this user using the email from the JWT,
-    attach the right product, and return a hosted checkout URL.
-    Fulfilment happens via webhook only.
+    We pass the user's email inside the `customer` object so Bachs creates
+    or matches a real (non-guest) durable customer record. This is required
+    for recurring plans. Fulfilment happens via webhook only.
     """
     plan = PLAN_DETAILS.get(body.plan_id)
     if not plan:
@@ -129,7 +127,7 @@ async def create_checkout(
             detail=f"Product for plan '{body.plan_id}' is not configured yet.",
         )
 
-    # Pull email from JWT first (fastest, no DB). Fall back to UserFlagsModel.
+    # Pull email from JWT first (no DB hit). Fall back to UserFlagsModel.
     user_email = _email_from_request(request)
     if not user_email:
         async with AsyncSessionLocal() as session:
@@ -138,22 +136,29 @@ async def create_checkout(
         log.debug("Email not in JWT claims, fell back to UserFlagsModel: %r", user_email)
 
     if not user_email:
-        log.warning("No email found for user %s — Bachs customer will use internal placeholder", user_id)
+        log.error("No email found for user %s — cannot create a durable Bachs customer", user_id)
+        raise HTTPException(
+            status_code=400,
+            detail="Your account email could not be resolved. Please contact support.",
+        )
+
+    # Per Bachs docs: pass customer as an object with email so Bachs creates
+    # or matches a real customer record. A customer object is required for
+    # recurring (subscription) checkouts.
+    payload = {
+        "customer": {"email": user_email},
+        "product_cart": [{"product_id": product_id, "quantity": 1}],
+        "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
+        "cancel_url":  f"{FRONTEND_URL}?checkout=cancelled",
+        "metadata": {"user_id": user_id, "plan_id": body.plan_id},
+    }
+
+    log.info(
+        "Creating Bachs checkout session — user=%s plan=%s product=%s email=%s",
+        user_id, body.plan_id, product_id, user_email,
+    )
 
     async with httpx.AsyncClient(timeout=15) as client:
-        cust_id = await _get_or_create_customer(client, user_id, user_email)
-
-        payload = {
-            "customer_id": cust_id,
-            "product_cart": [{"product_id": product_id, "quantity": 1}],
-            "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
-            "cancel_url":  f"{FRONTEND_URL}?checkout=cancelled",
-            "metadata": {"user_id": user_id, "plan_id": body.plan_id},
-        }
-        log.info(
-            "Creating Bachs checkout session — user=%s plan=%s product=%s customer=%s",
-            user_id, body.plan_id, product_id, cust_id,
-        )
         res = await client.post(
             f"{BACHS_BASE}/v1/checkout-sessions",
             json=payload,
@@ -166,10 +171,7 @@ async def create_checkout(
     )
 
     if res.status_code not in (200, 201):
-        log.error(
-            "Bachs checkout error %s: %s",
-            res.status_code, res.text[:500],
-        )
+        log.error("Bachs checkout error %s: %s", res.status_code, res.text[:500])
         raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
 
     data = res.json()
@@ -182,80 +184,6 @@ async def create_checkout(
         )
 
     return {"checkout_url": url}
-
-
-async def _get_or_create_customer(
-    client: httpx.AsyncClient,
-    user_id: str,
-    email: str,
-) -> str:
-    """
-    Looks up an existing real Bachs customer for this user, creating one
-    if none exists. Always uses a real email so Bachs treats it as a
-    durable identity rather than a guest record.
-
-    We log the full Bachs response at every step so failures are
-    immediately diagnosable in Render logs.
-    """
-    # --- Search ---
-    search_res = await client.get(
-        f"{BACHS_BASE}/v1/customers",
-        params={"metadata[user_id]": user_id, "limit": 1},
-        headers=_headers(),
-    )
-    log.info(
-        "Bachs customer search — status=%s body=%s",
-        search_res.status_code, search_res.text[:500],
-    )
-
-    if search_res.status_code == 200:
-        body = search_res.json()
-        items = body.get("data") or body.get("items") or body.get("customers") or []
-        if items:
-            found_id = items[0].get("id")
-            if found_id:
-                log.info("Found existing Bachs customer %s for user %s", found_id, user_id)
-                return found_id
-            log.warning("Bachs customer search returned an item with no id: %s", items[0])
-    else:
-        log.warning(
-            "Bachs customer search failed (non-200) — will attempt create. status=%s body=%s",
-            search_res.status_code, search_res.text[:500],
-        )
-
-    # --- Create ---
-    # Use the real email so Bachs creates a proper (non-guest) customer.
-    effective_email = email or f"{user_id}@provisio.internal"
-    create_res = await client.post(
-        f"{BACHS_BASE}/v1/customers",
-        json={
-            "email": effective_email,
-            "metadata": {"user_id": user_id},
-        },
-        headers=_headers(),
-    )
-    log.info(
-        "Bachs customer create — status=%s body=%s",
-        create_res.status_code, create_res.text[:500],
-    )
-
-    if create_res.status_code not in (200, 201):
-        log.error(
-            "Bachs customer creation failed %s: %s",
-            create_res.status_code, create_res.text[:500],
-        )
-        raise HTTPException(status_code=502, detail="Could not create payment customer.")
-
-    data = create_res.json()
-    # Bachs may wrap under "data" or return top-level
-    customer = data.get("data") or data
-    customer_id = customer.get("id") or customer.get("customer_id")
-    if not customer_id:
-        log.error("Bachs customer creation response missing id field: %s", data)
-        raise HTTPException(status_code=502, detail="Could not create payment customer.")
-
-    log.info("Created Bachs customer %s for user %s (email=%s)", customer_id, user_id, effective_email)
-    return customer_id
 
 
 # ---------------------------------------------------------------------------
