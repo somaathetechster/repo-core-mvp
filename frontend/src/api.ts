@@ -240,6 +240,45 @@ export async function askDeckCoach(
   return res.json();
 }
 
+/* ---------------------------------------------------------------- */
+/* Deck review — persisted finding actions                           */
+/* ---------------------------------------------------------------- */
+
+export type FindingActionKind = "done" | "ignored";
+
+export interface FindingAction {
+  finding_id: string;
+  action: FindingActionKind;
+}
+
+export async function getFindingActions(deckId: string): Promise<FindingAction[]> {
+  const res = await fetch(`${API_BASE}/review/${deckId}/finding-actions`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, `Failed to load finding actions: ${res.status}`);
+  return (await res.json()).actions ?? [];
+}
+
+export async function saveFindingAction(
+  deckId: string,
+  findingId: string,
+  action: FindingActionKind,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/review/findings/action`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_id: deckId, finding_id: findingId, action }),
+  });
+  if (!res.ok) await throwWithDetail(res, `Failed to save finding action: ${res.status}`);
+}
+
+export async function deleteFindingAction(deckId: string, findingId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/review/findings/action`, {
+    method: "DELETE",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_id: deckId, finding_id: findingId }),
+  });
+  if (!res.ok) await throwWithDetail(res, `Failed to remove finding action: ${res.status}`);
+}
+
 export async function addSlide(
   deckId: string,
   section: string,

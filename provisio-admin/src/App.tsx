@@ -111,6 +111,28 @@ function Overview({stats}:{stats:AdminStats|null}) {
 }
 
 /* ── Users ─────────────────────────────────────────────────── */
+function ConfirmModal({title,message,confirmLabel,onCancel,onConfirm}:{
+  title:string; message:string; confirmLabel:string; onCancel:()=>void; onConfirm:()=>void;
+}) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-box" onClick={e=>e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{title}</div>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="modal-body" style={{padding:"1rem 1.5rem",color:"var(--text2)",fontSize:".88rem",lineHeight:1.5}}>
+          {message}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GrantPlanModal({user,onClose,onGrant}:{user:AdminUser;onClose:()=>void;onGrant:(plan:string)=>void}) {
   const plans = [
     {id:"monthly",  name:"Monthly",      price:"$30/mo",  desc:"Unlimited exports, monthly billing"},
@@ -154,6 +176,7 @@ function Users({flash}:{flash:(m:string,e?:boolean)=>void}) {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [grantTarget, setGrantTarget] = useState<AdminUser|null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<AdminUser|null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (query?:string) => {
@@ -176,9 +199,19 @@ function Users({flash}:{flash:(m:string,e?:boolean)=>void}) {
   };
 
   const doRevoke = async (u:AdminUser) => {
-    if(!window.confirm(`Revoke ${u.email}'s plan?`)) return;
-    try { await api.revokePlan(u.user_id); flash("Plan revoked"); load(q||undefined); }
-    catch(e) { flash(e instanceof ApiError ? e.message : "Revoke failed", true); }
+    setRevokeTarget(null);
+    // Optimistic: drop the user to Free immediately, revert if the call fails.
+    const prevPlan = u.plan, prevPlanName = u.plan_name, prevCanExport = u.can_export;
+    setUsers(list => list.map(x => x.user_id===u.user_id
+      ? { ...x, plan:"free", plan_name:"Free", can_export:false } : x));
+    try {
+      await api.revokePlan(u.user_id);
+      flash(`${u.email}'s plan revoked`);
+    } catch(e) {
+      setUsers(list => list.map(x => x.user_id===u.user_id
+        ? { ...x, plan:prevPlan, plan_name:prevPlanName, can_export:prevCanExport } : x));
+      flash(e instanceof ApiError ? e.message : "Revoke failed", true);
+    }
   };
 
   const doToggleAdmin = async (u:AdminUser) => {
@@ -192,6 +225,15 @@ function Users({flash}:{flash:(m:string,e?:boolean)=>void}) {
   return (
     <>
       {grantTarget && <GrantPlanModal user={grantTarget} onClose={()=>setGrantTarget(null)} onGrant={doGrant}/>}
+      {revokeTarget && (
+        <ConfirmModal
+          title={`Revoke ${revokeTarget.email}'s plan`}
+          message="Are you sure you want to revoke this user's plan? This cannot be undone from here."
+          confirmLabel="Confirm"
+          onCancel={()=>setRevokeTarget(null)}
+          onConfirm={()=>doRevoke(revokeTarget)}
+        />
+      )}
       <div className="admin-table-wrap">
         <div className="admin-table-header">
           <span className="admin-table-title">Users ({users.length})</span>
@@ -224,7 +266,7 @@ function Users({flash}:{flash:(m:string,e?:boolean)=>void}) {
                   <td>
                     <div className="action-row">
                       <button className="btn btn-gold btn-sm" onClick={()=>setGrantTarget(u)}>Grant plan</button>
-                      {u.plan!=="free" && <button className="btn btn-ghost btn-sm" onClick={()=>doRevoke(u)}>Revoke plan</button>}
+                      {u.plan!=="free" && <button className="btn btn-ghost btn-sm" onClick={()=>setRevokeTarget(u)}>Revoke plan</button>}
                       <button className={`btn btn-sm ${u.is_admin?"btn-danger":"btn-ghost"}`} onClick={()=>doToggleAdmin(u)}>
                         {u.is_admin?"Revoke admin":"Make admin"}
                       </button>

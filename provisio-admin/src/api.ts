@@ -87,7 +87,7 @@ export const api = {
   grantPlan:   (userId: string, plan: string) =>
     req<void>("/admin/grant", { method:"POST", body:JSON.stringify({ target_user_id: userId, plan_id: plan, note: "admin grant" }) }),
   revokePlan:  (userId: string) =>
-    req<void>("/admin/revoke-plan", { method:"POST", body:JSON.stringify({ user_id: userId }) }),
+    req<{ success: boolean }>("/admin/revoke-plan", { method:"POST", body:JSON.stringify({ user_id: userId }) }),
   usage: () => req<AdminUsageRow[]>("/admin/usage"),
   createAdminUser: (email: string, password: string) =>
     req<{ user_id: string }>("/admin/create-admin", { method:"POST", body:JSON.stringify({ email, password }) }),

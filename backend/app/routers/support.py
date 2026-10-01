@@ -7,7 +7,7 @@ app, authenticated with the shared admin key, can read every thread and
 reply. The two paths are kept visibly separate so a founder can never reach
 an admin route by sending an unexpected header.
 """
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, File, Form, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select, update, func
 
@@ -16,11 +16,19 @@ from app.core.deps import get_current_user_id, get_current_user_id_optional
 from app.models.support import SupportMessageModel
 from app.models.billing import UserFlagsModel
 from app.routers.billing import _check_admin_key, require_admin
+from app.services.support_storage import upload_support_attachment
 
 router = APIRouter(tags=["support"])
 admin = APIRouter(prefix="/admin", tags=["support-admin"])
 
 MAX_BODY = 4000
+
+#: Attachment limits for support screenshots.
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5MB
+ALLOWED_ATTACHMENT_TYPES = {
+    "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp",
+    "application/pdf",
+}
 
 
 class SendMessage(BaseModel):
@@ -37,6 +45,7 @@ def _serialise(m: SupportMessageModel) -> dict:
         "id": m.id,
         "sender": m.sender,
         "body": m.body,
+        "attachment_path": m.attachment_path,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
 
@@ -82,18 +91,52 @@ async def my_unread(user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/support/messages")
-async def send_message(body: SendMessage, user_id: str = Depends(get_current_user_id)):
-    text = (body.body or "").strip()
+async def send_message(
+    message: str = Form(...),
+    screenshot: UploadFile | None = File(None),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Posts a support message, optionally with a screenshot/PDF attachment.
+
+    Accepts multipart/form-data: `message` (text) and optional `screenshot`
+    (file). A failed attachment upload never blocks the message — it's saved
+    without the attachment and the error is logged.
+    """
+    text = (message or "").strip()
     if not text:
         raise HTTPException(400, "Message is empty.")
     if len(text) > MAX_BODY:
         raise HTTPException(400, f"Message is too long (limit {MAX_BODY} characters).")
+
+    # Validate and read the attachment up front (before touching the DB), so a
+    # bad file is rejected cleanly rather than leaving a half-saved message.
+    attachment_bytes: bytes | None = None
+    attachment_name = ""
+    attachment_type = ""
+    if screenshot is not None and screenshot.filename:
+        attachment_type = (screenshot.content_type or "").lower()
+        if attachment_type not in ALLOWED_ATTACHMENT_TYPES:
+            raise HTTPException(400, "Attachment must be a PNG, JPG, GIF, WebP, or PDF.")
+        attachment_bytes = await screenshot.read()
+        if len(attachment_bytes) > MAX_ATTACHMENT_BYTES:
+            raise HTTPException(400, "Attachment is too large (limit 5MB).")
+        attachment_name = screenshot.filename
+
+    # Upload the attachment first so the stored path can be saved on the row.
+    # A failure returns None and is logged inside the service — never fatal.
+    attachment_path = None
+    if attachment_bytes is not None:
+        attachment_path = await upload_support_attachment(
+            user_id, attachment_name, attachment_type, attachment_bytes
+        )
 
     async with AsyncSessionLocal() as session:
         flags = await session.get(UserFlagsModel, user_id)
         msg = SupportMessageModel(
             user_id=user_id, sender="user", body=text,
             user_email=(flags.email if flags else None),
+            attachment_path=attachment_path,
             read_by_user=True, read_by_admin=False,
         )
         session.add(msg)

@@ -36,6 +36,12 @@ class SupportMessageModel(Base):
     #: join against auth.users on every poll.
     user_email: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    #: Storage path of an uploaded attachment (a screenshot or PDF), relative
+    #: to the Supabase Storage bucket, e.g. "support-attachments/<user>/<file>".
+    #: Null when the message had no attachment, or the upload failed (which
+    #: never blocks saving the message itself).
+    attachment_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
     #: Read receipts, tracked per side so each can show its own unread count.
     read_by_user: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     read_by_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

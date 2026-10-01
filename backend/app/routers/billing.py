@@ -418,17 +418,59 @@ async def revoke_user_plan(
     request: Request,
     user_id: str = Depends(get_current_user_id_optional),
 ):
+    """
+    Admin: revoke a user's plan immediately.
+
+    The previous version set status="revoked", a value evaluate_entitlement
+    doesn't recognise as terminating — so the plan kept granting access and
+    nothing actually changed. This sets the subscription to "cancelled" and,
+    because this is an admin action rather than a user-initiated cancel (which
+    keeps access until period end), makes it effective immediately: the paid
+    period is ended now and any one-time export credits are consumed, so the
+    entitlement drops to Free at once.
+    """
+    target = body.get("user_id")
+    if not target:
+        raise HTTPException(status_code=400, detail="user_id required")
+
     async with AsyncSessionLocal() as session:
         if not _check_admin_key(request):
             await require_admin(session, user_id)
-        target = body.get("user_id")
-        from sqlalchemy import update
-        await session.execute(
-            update(SubscriptionModel)
-            .where(SubscriptionModel.user_id == target, SubscriptionModel.status == "active")
-            .values(status="revoked")
-        )
+
+        # 404 if there's nothing to revoke, so the UI can report accurately.
+        ent = await load_entitlement(session, target)
+        if not ent.is_paid:
+            raise HTTPException(status_code=404, detail="User has no active plan to revoke.")
+
+        now = datetime.now(timezone.utc)
+        subs = (await session.execute(
+            select(SubscriptionModel).where(
+                SubscriptionModel.user_id == target,
+                SubscriptionModel.status.in_([
+                    SubscriptionStatus.ACTIVE.value,
+                    SubscriptionStatus.CANCELLED.value,
+                ]),
+            )
+        )).scalars().all()
+
+        for sub in subs:
+            sub.status = SubscriptionStatus.CANCELLED.value
+            sub.cancelled_at = now
+            # Take effect now, not at period end (this is an admin revoke).
+            sub.current_period_end = now
+            plan = PLANS.get(PlanId(sub.plan_id)) if sub.plan_id in {p.value for p in PlanId} else None
+            if plan and plan.deck_exports is not None:
+                sub.exports_used = plan.deck_exports
+            sub.note = (sub.note or "") + " | Plan revoked by admin"
+
+        # Record the cancellation in the usage log for the current period.
+        session.add(UsageModel(
+            id=str(uuid.uuid4()), user_id=target, event="plan_cancelled",
+            subscription_id=subs[0].id if subs else None, detail="admin_revoke",
+        ))
         await session.commit()
+
+    return {"success": True}
 
 
 @admin.post("/create-admin")

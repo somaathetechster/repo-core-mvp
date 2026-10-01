@@ -13,6 +13,9 @@ import {
   getDeck,
   listDecks,
   askDeckCoach,
+  getFindingActions,
+  saveFindingAction,
+  deleteFindingAction,
   type DeckCoachMessage,
   type CompanyProfile,
   type DeckSummary,
@@ -350,25 +353,32 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [typeFilter, setTypeFilter] = useState<FindingType | "all">("all");
-  const [approvedIds, setApprovedIds] = useState<Set<string>>(() => {
-    const stored = sessionStorage.getItem("provisio:review-approved");
-    return new Set(stored ? JSON.parse(stored) : []);
-  });
-  const [rejectedIds, setRejectedIds] = useState<Set<string>>(() => {
-    const stored = sessionStorage.getItem("provisio:review-rejected");
-    return new Set(stored ? JSON.parse(stored) : []);
-  });
+  // Done / Ignored findings, persisted per-user-per-deck on the backend so the
+  // state survives a reload (it used to live only in sessionStorage, which
+  // reset on every load and wasn't even deck-scoped).
+  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
+  const [rejectedIds, setRejectedIds] = useState<Set<string>>(new Set());
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInput, setCoachInput] = useState("");
   const [coachMessages, setCoachMessages] = useState<DeckCoachMessage[]>([]);
   const [coachLoading, setCoachLoading] = useState(false);
 
+  // Load saved finding actions whenever the deck changes. Clear first so one
+  // deck's actions never flash while another's load.
   useEffect(() => {
-    sessionStorage.setItem("provisio:review-approved", JSON.stringify([...approvedIds]));
-  }, [approvedIds]);
-  useEffect(() => {
-    sessionStorage.setItem("provisio:review-rejected", JSON.stringify([...rejectedIds]));
-  }, [rejectedIds]);
+    setApprovedIds(new Set());
+    setRejectedIds(new Set());
+    if (!deckId) return;
+    let cancelled = false;
+    getFindingActions(deckId)
+      .then((actions) => {
+        if (cancelled) return;
+        setApprovedIds(new Set(actions.filter((a) => a.action === "done").map((a) => a.finding_id)));
+        setRejectedIds(new Set(actions.filter((a) => a.action === "ignored").map((a) => a.finding_id)));
+      })
+      .catch(() => { /* non-fatal: the review still renders, just without saved actions */ });
+    return () => { cancelled = true; };
+  }, [deckId]);
 
   useEffect(() => {
     getCompanyProfile().then(setProfile).catch(() => setProfile(null));
@@ -481,18 +491,39 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
   const band = !scoredReview ? "mid" : scoredReview.score >= 80 ? "good" : scoredReview.score >= 50 ? "mid" : "low";
   const verdict = !scoredReview ? "" : scoredReview.score >= 80 ? "Ready to send" : scoredReview.score >= 50 ? "Close — fix the critical items first" : "Not ready — the argument has gaps";
 
+  // Fire-and-forget persistence: the UI updates immediately; a failed write is
+  // surfaced quietly without blocking the interaction.
+  function persistAction(id: string, action: "done" | "ignored") {
+    if (!deckId) return;
+    saveFindingAction(deckId, id, action).catch(() =>
+      setError("Couldn't save that action — it may not stick after a reload."));
+  }
+  function clearAction(id: string) {
+    if (!deckId) return;
+    deleteFindingAction(deckId, id).catch(() =>
+      setError("Couldn't update that action — it may not stick after a reload."));
+  }
+
   function markApproved(id: string) {
     setRejectedIds((previous) => { const next = new Set(previous); next.delete(id); return next; });
     setApprovedIds((previous) => new Set(previous).add(id));
+    persistAction(id, "done");
   }
 
   function markRejected(id: string) {
     setApprovedIds((previous) => { const next = new Set(previous); next.delete(id); return next; });
     setRejectedIds((previous) => new Set(previous).add(id));
+    persistAction(id, "ignored");
   }
 
   function undoRejected(id: string) {
     setRejectedIds((previous) => { const next = new Set(previous); next.delete(id); return next; });
+    clearAction(id);
+  }
+
+  function undoApproved(id: string) {
+    setApprovedIds((previous) => { const next = new Set(previous); next.delete(id); return next; });
+    clearAction(id);
   }
 
   async function sendCoachMessage(message: string) {
@@ -638,6 +669,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
                     return (
                       <article key={f.id} className="rvp-finding rvp-finding-collapsed rvp-approved">
                         <span className="rvp-collapsed-title"><span>✓</span>{f.title}</span>
+                        <button className="rvp-undo-btn" onClick={() => undoApproved(f.id)}>Undo</button>
                       </article>
                     );
                   }
