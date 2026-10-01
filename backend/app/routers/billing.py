@@ -453,15 +453,20 @@ async def revoke_user_plan(
             )
         )).scalars().all()
 
+        bachs_refs: list[str] = []
         for sub in subs:
             sub.status = SubscriptionStatus.CANCELLED.value
             sub.cancelled_at = now
             # Take effect now, not at period end (this is an admin revoke).
             sub.current_period_end = now
+            # Mark as admin-terminated so a provider webhook can't resurrect it.
+            sub.admin_revoked = True
             plan = PLANS.get(PlanId(sub.plan_id)) if sub.plan_id in {p.value for p in PlanId} else None
             if plan and plan.deck_exports is not None:
                 sub.exports_used = plan.deck_exports
             sub.note = (sub.note or "") + " | Plan revoked by admin"
+            if sub.provider == "bachs" and sub.provider_reference:
+                bachs_refs.append(sub.provider_reference)
 
         # Record the cancellation in the usage log for the current period.
         session.add(UsageModel(
@@ -469,6 +474,14 @@ async def revoke_user_plan(
             subscription_id=subs[0].id if subs else None, detail="admin_revoke",
         ))
         await session.commit()
+
+    # Cancel at the provider too, so it stops billing and stops emitting the
+    # update events that used to reactivate the plan. Best-effort and after the
+    # commit: the local revoke stands even if the provider call fails.
+    if bachs_refs:
+        from app.routers.payments import cancel_bachs_subscription
+        for ref in bachs_refs:
+            await cancel_bachs_subscription(ref)
 
     return {"success": True}
 

@@ -139,6 +139,11 @@ class SubscriptionModel(Base):
     granted_by: Mapped[str | None] = mapped_column(String, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    #: Set when an admin revokes the plan. A terminated row must never be
+    #: resurrected by a provider webhook (the external subscription may still
+    #: be live and emitting updates), so the webhook handlers skip these.
+    admin_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -226,8 +231,15 @@ def evaluate_entitlement(subscriptions: list[SubscriptionModel]) -> Entitlement:
     usable_recurring: list[SubscriptionModel] = []
     usable_one_time: list[SubscriptionModel] = []
 
+    # Allowlist, not denylist: only ACTIVE and CANCELLED can grant (cancelled
+    # keeps access until its period ends / its credit is spent). Any other
+    # status — expired, pending, refunded, or an ad-hoc value a webhook or an
+    # old code path wrote like "revoked"/"superseded" — never grants. A
+    # denylist here is how a stale row with an unrecognised status quietly kept
+    # a revoked user on a paid plan.
+    granting = {SubscriptionStatus.ACTIVE.value, SubscriptionStatus.CANCELLED.value}
     for sub in sorted(subscriptions, key=lambda s: s.created_at or now, reverse=True):
-        if sub.status in (SubscriptionStatus.PENDING.value, SubscriptionStatus.REFUNDED.value, SubscriptionStatus.EXPIRED.value):
+        if sub.status not in granting:
             continue
         plan = PLANS.get(PlanId(sub.plan_id)) if sub.plan_id in {p.value for p in PlanId} else None
         if not plan:

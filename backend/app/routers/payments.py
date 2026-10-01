@@ -26,6 +26,7 @@ import hmac
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 
 import httpx
@@ -36,7 +37,9 @@ from sqlalchemy import select
 
 from app.core.db import AsyncSessionLocal
 from app.core.deps import get_current_user_id
-from app.models.billing import SubscriptionModel, UsageModel, UserFlagsModel
+from app.models.billing import (
+    SubscriptionModel, UsageModel, UserFlagsModel, PLANS, PlanId, period_end_for,
+)
 
 log = logging.getLogger(__name__)
 
@@ -314,17 +317,27 @@ async def _on_subscription_updated(data: dict) -> None:
     status = data.get("status", "")
     if status in ("canceled", "cancelled", "expired"):
         await _deactivate_by_sub_id(sub_id)
-    else:
-        async with AsyncSessionLocal() as session:
-            rows = (await session.execute(
-                select(SubscriptionModel).where(
-                    SubscriptionModel.provider_subscription_id == sub_id
-                )
-            )).scalars().all()
-            for row in rows:
-                row.status = "active"
-                row.current_period_start = datetime.now(timezone.utc)
-            await session.commit()
+        return
+
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(
+            select(SubscriptionModel).where(
+                SubscriptionModel.provider_reference == sub_id
+            )
+        )).scalars().all()
+        for row in rows:
+            # Never resurrect a plan an admin deliberately revoked. The external
+            # subscription may still be live and emitting updates, but the admin
+            # decision wins until the user actively re-subscribes (a new row).
+            if row.admin_revoked:
+                log.info("Ignoring subscription.updated for admin-revoked row %s", row.id)
+                continue
+            row.status = "active"
+            row.current_period_start = datetime.now(timezone.utc)
+            # Extend the period from the event when provided, so entitlement
+            # stays accurate instead of relying on a stale end date.
+            row.current_period_end = _period_end_from_event(data, row.plan_id)
+        await session.commit()
 
 
 async def _on_subscription_deleted(data: dict) -> None:
@@ -358,15 +371,21 @@ async def _activate_plan(
     }
     plan_key, is_recurring = plan_map.get(plan_id, ("monthly", True))
 
+    ref = sub_id or provider_ref
     async with AsyncSessionLocal() as session:
-        if provider_ref:
+        if ref:
             existing = (await session.execute(
                 select(SubscriptionModel).where(
                     SubscriptionModel.user_id == user_id,
-                    SubscriptionModel.provider_subscription_id == provider_ref,
+                    SubscriptionModel.provider_reference == ref,
                 )
             )).scalars().first()
             if existing:
+                # Idempotent: already fulfilled this provider reference. Don't
+                # reactivate it if an admin has since revoked it.
+                if not existing.admin_revoked and existing.status != "active":
+                    existing.status = "active"
+                    await session.commit()
                 return
 
         existing_rows = (await session.execute(
@@ -379,25 +398,27 @@ async def _activate_plan(
             row.status = "superseded"
 
         now = datetime.now(timezone.utc)
+        plan = PLANS.get(PlanId(plan_key)) if plan_key in {p.value for p in PlanId} else None
         sub = SubscriptionModel(
+            id=str(uuid.uuid4()),
             user_id=user_id,
             plan_id=plan_key,
             status="active",
             provider="bachs",
-            provider_subscription_id=sub_id or provider_ref,
+            provider_reference=ref,
             current_period_start=now,
+            # Recurring plans need an end date or entitlement never grants them;
+            # one-time plans are gated by exports_used, so None is correct there.
+            current_period_end=period_end_for(plan, now) if plan else None,
         )
         session.add(sub)
 
-        period = now.strftime("%Y-%m")
-        existing_usage = (await session.execute(
-            select(UsageModel).where(
-                UsageModel.user_id == user_id,
-                UsageModel.period == period,
-            )
-        )).scalars().first()
-        if not existing_usage:
-            session.add(UsageModel(user_id=user_id, period=period))
+        # An append-only marker that a plan was activated (the usage log has no
+        # per-period row concept — it's an event stream).
+        session.add(UsageModel(
+            id=str(uuid.uuid4()), user_id=user_id, event="plan_activated",
+            subscription_id=sub.id, detail=plan_key,
+        ))
 
         await session.commit()
 
@@ -408,12 +429,43 @@ async def _deactivate_by_sub_id(sub_id: str) -> None:
     async with AsyncSessionLocal() as session:
         rows = (await session.execute(
             select(SubscriptionModel).where(
-                SubscriptionModel.provider_subscription_id == sub_id
+                SubscriptionModel.provider_reference == sub_id
             )
         )).scalars().all()
         for row in rows:
             row.status = "cancelled"
         await session.commit()
+
+
+async def cancel_bachs_subscription(provider_reference: str) -> bool:
+    """
+    Cancels a subscription at Bachs so it stops billing *and* stops emitting
+    update events that would otherwise resurrect the local row.
+
+    Best-effort: returns True on success, False otherwise, and never raises —
+    an admin revoke must still neutralise the local entitlement even if the
+    provider call fails (the local row is also marked admin_revoked, so a
+    later webhook won't reactivate it regardless).
+    """
+    if not provider_reference or not BACHS_SECRET:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            res = await client.delete(
+                f"{BACHS_BASE}/v1/subscriptions/{provider_reference}",
+                headers=_headers(),
+            )
+        if res.status_code in (200, 202, 204):
+            log.info("Bachs subscription %s cancelled", provider_reference)
+            return True
+        log.error(
+            "Bachs cancel for %s returned %s: %s",
+            provider_reference, res.status_code, res.text[:300],
+        )
+        return False
+    except Exception as exc:
+        log.error("Bachs cancel error for %s: %r", provider_reference, exc)
+        return False
 
 
 async def _user_id_from_customer(cust_id: str) -> str | None:
@@ -425,6 +477,24 @@ async def _user_id_from_customer(cust_id: str) -> str | None:
     data = res.json()
     cust = data.get("data") or data
     return (cust.get("metadata") or {}).get("user_id")
+
+
+def _period_end_from_event(data: dict, plan_id: str) -> datetime:
+    """
+    The subscription's period end, taken from the webhook payload when present
+    (unix seconds or ISO-8601), else derived from the plan interval.
+    """
+    raw = data.get("current_period_end") or data.get("period_end")
+    if raw:
+        try:
+            if isinstance(raw, (int, float)):
+                return datetime.fromtimestamp(raw, tz=timezone.utc)
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except (ValueError, OSError, OverflowError):
+            pass
+    now = datetime.now(timezone.utc)
+    plan = PLANS.get(PlanId(plan_id)) if plan_id in {p.value for p in PlanId} else None
+    return (period_end_for(plan, now) if plan else None) or now
 
 
 def _infer_plan_from_product(data: dict) -> str | None:
