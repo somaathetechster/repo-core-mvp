@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listDecks, createDeck, deleteDeck, type DeckSummary, type AnalyzeResult } from "./api";
+import { listDecks, createDeck, deleteDeck, renameDeck, type DeckSummary, type AnalyzeResult } from "./api";
 import DeckEditor from "./DeckEditor";
 import { DownloadMenu } from "./DeckViewer";
 import "./theme.css";
@@ -11,9 +11,40 @@ interface DecksHomeProps {
 
 export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
-  const [openDeckId, setOpenDeckId] = useState<string | null>(null);
+  // Restore the deck that was open before a refresh (the editor is only
+  // mounted under the Deck tab, so this only reopens there).
+  const [openDeckId, setOpenDeckId] = useState<string | null>(
+    () => sessionStorage.getItem("provisio:open-deck-id"),
+  );
   const [showWizard, setShowWizard] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline rename state for the deck cards.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  function startRename(d: DeckSummary) {
+    setEditingId(d.id);
+    setEditName(d.name);
+  }
+
+  async function commitRename(id: string) {
+    const name = editName.trim();
+    const current = decks?.find((d) => d.id === id);
+    setEditingId(null);
+    if (!current || !name || name === current.name) return;
+    // Optimistic: show the new name immediately, revert on failure.
+    setDecks((prev) => prev?.map((d) => (d.id === id ? { ...d, name } : d)) ?? prev);
+    setSavingId(id);
+    try {
+      await renameDeck(id, name);
+    } catch (e) {
+      setDecks((prev) => prev?.map((d) => (d.id === id ? { ...d, name: current.name } : d)) ?? prev);
+      setError(e instanceof Error ? e.message : "Couldn't rename this deck.");
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   async function loadDecks() {
     try {
@@ -26,6 +57,12 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
   useEffect(() => {
     loadDecks();
   }, []);
+
+  // Keep the open deck id in sessionStorage so a browser refresh reopens it.
+  useEffect(() => {
+    if (openDeckId) sessionStorage.setItem("provisio:open-deck-id", openDeckId);
+    else sessionStorage.removeItem("provisio:open-deck-id");
+  }, [openDeckId]);
 
   // The Data Studio dispatches this after stashing a chart, so the deck
   // opens straight to the placement prompt instead of the founder having to
@@ -110,7 +147,29 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
                   <div className="deck-card-header-row">
                     <div className="deck-card-icon">{initials}</div>
                     <div>
-                      <div className="deck-card-name">{d.name}</div>
+                      {editingId === d.id ? (
+                        <input
+                          className="deck-card-name-input"
+                          value={editName}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onBlur={() => commitRename(d.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                            else if (e.key === "Escape") { setEditingId(null); }
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="deck-card-name deck-card-name-editable"
+                          title="Click to rename"
+                          onClick={(e) => { e.stopPropagation(); startRename(d); }}
+                        >
+                          {d.name}
+                          {savingId === d.id && <span className="deck-card-saving"> · Saving…</span>}
+                        </div>
+                      )}
                       <div className="deck-card-meta">{relAgo ? `Edited ${relAgo}` : "—"}</div>
                     </div>
                   </div>

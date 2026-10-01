@@ -141,3 +141,7 @@
   .home-metrics { grid-template-columns:1fr 1fr; }
   .home-greeting { font-size:2.2rem; }
 }
+
+/* Current-plan pill in the hero eyebrow */
+.home-plan-pill { display:inline-block; margin-left:.6rem; padding:.12rem .55rem; border-radius:999px; font:.6rem var(--font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); background:var(--ink-raised-2); border:1px solid var(--ink-border); vertical-align:middle; }
+.home-plan-pill.paid { color:var(--gold); background:var(--gold-faint); border-color:rgba(196,154,40,.25); }

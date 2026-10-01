@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getCompanyProfile, listRepos, listDecks, type CompanyProfile, type DeckSummary } from "./api";
+import { getCompanyProfile, listRepos, listDecks, getMyBilling, type CompanyProfile, type DeckSummary } from "./api";
 import "./home-dashboard.css";
 
 interface HomeDashboardProps {
@@ -30,15 +30,17 @@ export default function HomeDashboard({ userName, onNavigate, onOpenDeck }: Home
   const [repoCount, setRepoCount] = useState<number|null>(null);
   const [githubConnected, setGithubConnected] = useState<boolean|null>(null);
   const [decks, setDecks] = useState<DeckSummary[]|null>(null);
+  const [planName, setPlanName] = useState<string|null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let c = false;
-    Promise.allSettled([getCompanyProfile(), listRepos(), listDecks()]).then(([pR,rR,dR]) => {
+    Promise.allSettled([getCompanyProfile(), listRepos(), listDecks(), getMyBilling()]).then(([pR,rR,dR,bR]) => {
       if (c) return;
       if (pR.status==="fulfilled") setProfile(pR.value);
       if (rR.status==="fulfilled") { setGithubConnected(true); setRepoCount(rR.value.length); } else setGithubConnected(false);
       if (dR.status==="fulfilled") setDecks(dR.value);
+      if (bR.status==="fulfilled") setPlanName(bR.value.entitlement.plan.name);
       setLoading(false);
     });
     return () => { c=true; };
@@ -86,7 +88,10 @@ export default function HomeDashboard({ userName, onNavigate, onOpenDeck }: Home
         <div className="home-hero-glow"/>
         <div className="home-hero-top">
           <div>
-            <div className="home-eyebrow">Provisio workspace</div>
+            <div className="home-eyebrow">
+              Provisio workspace
+              {planName && <span className={`home-plan-pill${planName === "Free" ? "" : " paid"}`}>{planName} plan</span>}
+            </div>
             <div className="home-greeting">{greet()}<br/><span className="home-name">{firstName}.</span></div>
             {mostRecent && <div className="home-subline">{mostRecent.name} · {mostRecent.slide_count} slides · last edited {relTime(mostRecent.updated_at)}</div>}
           </div>

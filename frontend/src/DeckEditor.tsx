@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  getDeck, saveDeckEditorState, regenerateDeck, updateDeckProfile,
+  getDeck, saveDeckEditorState, regenerateDeck, updateDeckProfile, renameDeck,
   type DeckTheme, type CompanyProfile, type AnalyzeResult,
 } from "./api";
 import DeckStudio from "./DeckStudio";
@@ -29,6 +29,19 @@ const DEFAULT_THEME: ThemeSettings = {
   fontPairing: "fraunces-inter",
   typeScale: 1,
 };
+
+/**
+ * One undo/redo entry covers the whole editable surface: the slides *and* the
+ * theme (colour, font, type scale) and the active template. They live in one
+ * history snapshot so undo after a theme or template change reverts it,
+ * instead of the stack being thrown away (template) or the change going
+ * unrecorded (colour/font).
+ */
+interface EditorState {
+  slides: ElementSlide[];
+  themeSettings: ThemeSettings;
+  templateId: string;
+}
 
 /**
  * Listens for data dropped from the Data Studio.
@@ -72,12 +85,36 @@ export default function DeckEditor({
 }) {
   const [view, setView] = useState<View>("studio");
   const [deckName, setDeckName] = useState("");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleSaving, setTitleSaving] = useState(false);
+  // The last name successfully persisted, so an empty/failed edit can revert.
+  const lastSavedName = useRef("");
   const [stored, setStored] = useState<StoredSlide[]>([]);
-  const history = useHistory<ElementSlide[]>([]);
-  const slides = history.state;
-  const setSlides = history.set;
-  const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
-  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(DEFAULT_THEME);
+  const history = useHistory<EditorState>({
+    slides: [], themeSettings: DEFAULT_THEME, templateId: DEFAULT_TEMPLATE_ID,
+  });
+  const { slides, themeSettings, templateId } = history.state;
+  // Update only the slides field, leaving theme/template untouched. `label`
+  // coalesces rapid edits (one drag = one undo), same as before.
+  const setSlides = useCallback(
+    (next: ElementSlide[] | ((prev: ElementSlide[]) => ElementSlide[]), label = "edit") =>
+      history.set(
+        (prev) => ({
+          ...prev,
+          slides: typeof next === "function"
+            ? (next as (p: ElementSlide[]) => ElementSlide[])(prev.slides)
+            : next,
+        }),
+        label,
+      ),
+    [history.set],
+  );
+  // Theme/font/colour changes push a history entry (label "theme" coalesces a
+  // slider sweep into one undo) rather than clearing the stack.
+  const setThemeSettings = useCallback(
+    (next: ThemeSettings) => history.set((prev) => ({ ...prev, themeSettings: next }), "theme"),
+    [history.set],
+  );
   const [deckTheme, setDeckTheme] = useState<DeckTheme | null>(null);
   const [deckProfile, setDeckProfile] = useState<CompanyProfile | null>(null);
   // The image library lives on the deck so it survives a reload. Adding an
@@ -119,6 +156,28 @@ export default function DeckEditor({
     setTimeout(() => setNotice(null), 3000);
   }
 
+  // Persist the deck title via PATCH (its own save, separate from the slide
+  // autosave). Reverts to the last saved name on an empty or failed edit.
+  async function commitDeckName() {
+    setEditingTitle(false);
+    const name = deckName.trim();
+    if (!name || name === lastSavedName.current) {
+      setDeckName(lastSavedName.current);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      await renameDeck(deckId, name);
+      lastSavedName.current = name;
+      setDeckName(name);
+    } catch (e) {
+      setDeckName(lastSavedName.current);
+      setError(e instanceof Error ? e.message : "Couldn't rename this deck.");
+    } finally {
+      setTitleSaving(false);
+    }
+  }
+
   /* ---------------- load ---------------- */
 
   useEffect(() => {
@@ -146,11 +205,14 @@ export default function DeckEditor({
         );
         const storedSlides = restored.slides as unknown as StoredSlide[];
         setDeckName(d.name);
+        lastSavedName.current = d.name;
         setDeckTheme(d.theme);
-        setTemplateId(tpl);
-        setThemeSettings(settings);
         setStored(storedSlides);
-        history.reset(toElementSlides(storedSlides, tpl, { companyName: d.name }));
+        history.reset({
+          slides: toElementSlides(storedSlides, tpl, { companyName: d.name }),
+          themeSettings: settings,
+          templateId: tpl,
+        });
         setDeckProfile(d.profile_snapshot as unknown as CompanyProfile);
 
         // Seed the library from images already saved on the deck, falling
@@ -299,13 +361,21 @@ export default function DeckEditor({
   /* ---------------- template switching ---------------- */
 
   function applyTemplate(nextId: string) {
-    setTemplateId(nextId);
     const customized = slides.filter((s) => s.customized).length;
     // Recompose from the stored content, which preserves hand-edited slides
     // because toElementSlide honours the customized flag.
     const nextStored = toStoredSlides(slides, stored);
     setStored(nextStored);
-    history.reset(toElementSlides(nextStored, nextId, { companyName: deckName }));
+    // Push the template switch (and the recomposed slides) as one undo entry
+    // rather than resetting the history, so the change can be undone.
+    history.set(
+      (prev) => ({
+        ...prev,
+        templateId: nextId,
+        slides: toElementSlides(nextStored, nextId, { companyName: deckName }),
+      }),
+      "template",
+    );
     markDirty();
     flash(
       customized > 0
@@ -388,7 +458,14 @@ export default function DeckEditor({
       const d = await regenerateDeck(deckId, analyzedRepos as unknown as Record<string, unknown>[]);
       const storedSlides = d.slides as unknown as StoredSlide[];
       setStored(storedSlides);
-      history.reset(toElementSlides(storedSlides, templateId, { companyName: d.name }));
+      // Regenerate rewrites every slide from scratch (the user confirmed losing
+      // layouts), so the history starts fresh here — but keeps the current
+      // theme and template.
+      history.reset({
+        slides: toElementSlides(storedSlides, templateId, { companyName: d.name }),
+        themeSettings,
+        templateId,
+      });
       setCurrent(0);
       flash("Regenerated.");
     } catch (e) {
@@ -464,11 +541,28 @@ export default function DeckEditor({
         <header className="deck-toolbar">
           <div className="deck-toolbar-left">
             <button className="p-btn p-btn-ghost" onClick={onBack}>&lt; Decks</button>
-          <input
-            className="p-input deck-name-input"
-            value={deckName}
-            onChange={(e) => { setDeckName(e.target.value); markDirty(); }}
-          />
+          {editingTitle ? (
+            <input
+              className="p-input deck-name-input"
+              value={deckName}
+              autoFocus
+              onChange={(e) => setDeckName(e.target.value)}
+              onBlur={commitDeckName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                else if (e.key === "Escape") { setDeckName(lastSavedName.current); setEditingTitle(false); }
+              }}
+            />
+          ) : (
+            <button
+              className="deck-name-title"
+              title="Click to rename"
+              onClick={() => setEditingTitle(true)}
+            >
+              {deckName || "Untitled deck"}
+              {titleSaving && <span className="deck-name-saving"> · Saving…</span>}
+            </button>
+          )}
         </div>
 
         <div className="deck-toolbar-right">

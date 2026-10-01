@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DeckImport from "./DeckImport";
+import WordCount from "./WordCount";
 import { getCompanyProfile, saveCompanyProfile, type CompanyProfile, type TeamMember, type TaggedImage } from "./api";
 import { fileToDataUrl, extractDominantColor, MAX_IMAGE_BYTES } from "./fileUtils";
 import "./theme.css";
@@ -479,13 +480,16 @@ export default function CompanyProfileForm({
               >
                 <span>{field.label}</span>
                 {field.multiline ? (
-                  <textarea
-                    className="p-input"
-                    rows={3}
-                    placeholder={field.placeholder}
-                    value={profile[field.key] as string}
-                    onChange={(e) => update(field.key, e.target.value)}
-                  />
+                  <>
+                    <textarea
+                      className="p-input"
+                      rows={3}
+                      placeholder={field.placeholder}
+                      value={profile[field.key] as string}
+                      onChange={(e) => update(field.key, e.target.value)}
+                    />
+                    <WordCount text={(profile[field.key] as string) ?? ""} />
+                  </>
                 ) : (
                   <input
                     className="p-input"
@@ -550,6 +554,7 @@ export default function CompanyProfileForm({
                 value={member.bio}
                 onChange={(e) => updateTeamMember(i, "bio", e.target.value)}
               />
+              <WordCount text={member.bio ?? ""} />
               <input
                 className="p-input"
                 type="url"
@@ -627,6 +632,7 @@ export default function CompanyProfileForm({
               value={profile.program_questions}
               onChange={(e) => update("program_questions", e.target.value)}
             />
+            <WordCount text={profile.program_questions ?? ""} />
             <small className="profile-hint">Becomes a checklist: every question gets matched to a slide.</small>
           </label>
           <label className="profile-field">
@@ -638,6 +644,7 @@ export default function CompanyProfileForm({
               value={profile.why_this_program}
               onChange={(e) => update("why_this_program", e.target.value)}
             />
+            <WordCount text={profile.why_this_program ?? ""} />
             <small className="profile-hint">Becomes a dedicated "Why {profile.program_name || "this program"}" slide.</small>
           </label>
           <label className="profile-field">
@@ -649,6 +656,7 @@ export default function CompanyProfileForm({
               value={profile.program_requirements}
               onChange={(e) => update("program_requirements", e.target.value)}
             />
+            <WordCount text={profile.program_requirements ?? ""} />
           </label>
         </div>
       </div>

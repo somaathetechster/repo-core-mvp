@@ -52,3 +52,7 @@
   z-index: 200;
   pointer-events: none;
 }
+
+/* Group/multi-selection resize handles live inside the (non-interactive)
+   selection box, so they must re-enable pointer events. */
+.cv-group-handle { pointer-events: auto; z-index: 200; }

@@ -26,6 +26,7 @@ import type { FixAction } from "./deck/fixActions";
 import { reviewDeck, unansweredQuestions, type Finding, type ProgramBrief } from "./deck/review";
 import { planVariants } from "./deck/variants";
 import SlideCanvas from "./deck/SlideCanvas";
+import WordCount from "./WordCount";
 import type { ElementSlide, SlideKind } from "./deck/elements";
 import "./deck-review.css";
 import "./fix-button.css";
@@ -739,6 +740,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
               }
             }}
           />
+          <WordCount text={coachInput} />
           <button type="submit" disabled={coachLoading || !coachInput.trim()}>Send</button>
         </form>
       </aside>

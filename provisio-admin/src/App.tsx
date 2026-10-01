@@ -244,12 +244,20 @@ function Users({flash}:{flash:(m:string,e?:boolean)=>void}) {
 function Usage() {
   const [rows, setRows] = useState<AdminUsageRow[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(()=>{ api.usage().then(setRows).catch(console.error).finally(()=>setLoading(false)); },[]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(()=>{
+    api.usage()
+      .then((r)=>setRows(Array.isArray(r) ? r : []))
+      .catch((e)=>{ console.error(e); setError(e instanceof Error ? e.message : "Couldn't load usage."); })
+      .finally(()=>setLoading(false));
+  },[]);
   const maxE = Math.max(1,...rows.map(r=>r.exports_used));
   return (
     <div className="admin-table-wrap">
       <div className="admin-table-header"><span className="admin-table-title">Usage by period</span></div>
-      {loading ? <div className="loading-row"><div className="spinner"/></div> : (
+      {loading ? <div className="loading-row"><div className="spinner"/></div> : error ? (
+        <div className="admin-empty" style={{padding:"1.5rem"}}>{error}</div>
+      ) : (
         <table>
           <thead><tr><th>Email</th><th>Period</th><th>Plan</th><th>Decks</th><th>Exports</th></tr></thead>
           <tbody>

@@ -20,9 +20,12 @@ import "./canvas.css";
  * identical at any zoom and in export.
  */
 
+type Box = { left: number; top: number; right: number; bottom: number };
+
 type DragState =
   | { mode: "move"; ids: string[]; startX: number; startY: number; origins: Record<string, Frame> }
   | { mode: "resize"; id: string; handle: string; startX: number; startY: number; origin: Frame }
+  | { mode: "resize-group"; handle: string; startX: number; startY: number; box: Box; origins: Record<string, Frame> }
   | null;
 
 type Marquee = { startX: number; startY: number; currentX: number; currentY: number } | null;
@@ -111,6 +114,14 @@ export default function SlideCanvas({
     }
     setSelection(next, next.has(id ?? "") ? id : [...next].at(-1) ?? null);
   }, [selectedIds, setSelection]);
+
+  // All element ids in the same group as `id` (itself if ungrouped). Grouped
+  // elements select and drag as one unit.
+  const groupMembers = useCallback((id: string): string[] => {
+    const el = slide.elements.find((e) => e.id === id);
+    if (!el?.groupId) return [id];
+    return slide.elements.filter((e) => e.groupId === el.groupId).map((e) => e.id);
+  }, [slide]);
 
   const canvasPoint = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -201,7 +212,7 @@ export default function SlideCanvas({
               : item;
           }),
         }, `move:${drag!.ids.join(",")}`);
-      } else {
+      } else if (drag!.mode === "resize") {
         const h = drag!.handle;
         let { x, y, w, hgt } = {
           x: drag!.origin.x, y: drag!.origin.y,
@@ -212,6 +223,40 @@ export default function SlideCanvas({
         if (h.includes("w")) { x = drag!.origin.x + dx; w = drag!.origin.w - dx; }
         if (h.includes("n")) { y = drag!.origin.y + dy; hgt = drag!.origin.h - dy; }
         updateElement(drag!.id, { frame: clampFrame({ ...drag!.origin, x, y, w, h: hgt }) }, `resize:${drag!.id}`);
+      } else {
+        // resize-group: scale every member's frame relative to the selection
+        // box, so a group (or multi-selection) resizes as one unit.
+        const h = drag!.handle;
+        const b = drag!.box;
+        let left = b.left, top = b.top, right = b.right, bottom = b.bottom;
+        if (h.includes("e")) right = b.right + dx;
+        if (h.includes("s")) bottom = b.bottom + dy;
+        if (h.includes("w")) left = b.left + dx;
+        if (h.includes("n")) top = b.top + dy;
+        const oldW = b.right - b.left || 1;
+        const oldH = b.bottom - b.top || 1;
+        const newW = Math.max(40, right - left);
+        const newH = Math.max(40, bottom - top);
+        const sx = newW / oldW;
+        const sy = newH / oldH;
+        onChange({
+          ...slide,
+          customized: true,
+          elements: slide.elements.map((item) => {
+            const origin = drag!.origins[item.id];
+            if (!origin) return item;
+            return {
+              ...item,
+              frame: {
+                ...origin,
+                x: left + (origin.x - b.left) * sx,
+                y: top + (origin.y - b.top) * sy,
+                w: Math.max(24, origin.w * sx),
+                h: Math.max(20, origin.h * sy),
+              },
+            };
+          }),
+        }, "resize-group");
       }
     }
 
@@ -375,13 +420,19 @@ export default function SlideCanvas({
                 // collapsing to the one clicked. That is what makes "select
                 // several, then drag" actually move all of them.
                 const inGroup = selectedIds.has(el.id) && selectedIds.size > 1;
-                const nextIds: Set<string> = e.shiftKey
-                  ? new Set([...selectedIds, el.id])
-                  : inGroup
-                    ? new Set(selectedIds)
-                    : new Set([el.id]);
-
-                if (e.shiftKey || !inGroup) select(el.id, e.shiftKey);
+                // Clicking any member of a group selects the whole group, so it
+                // drags as one unit.
+                const clickedGroup = groupMembers(el.id);
+                let nextIds: Set<string>;
+                if (e.shiftKey) {
+                  nextIds = new Set([...selectedIds, ...clickedGroup]);
+                  setSelection(nextIds, el.id);
+                } else if (inGroup) {
+                  nextIds = new Set(selectedIds); // keep the current selection and drag it
+                } else {
+                  nextIds = new Set(clickedGroup);
+                  setSelection(nextIds, el.id);
+                }
                 // Selecting a different element ends any in-progress text edit,
                 // so a group drag moves rather than editing.
                 setEditingId((prev) => (prev === el.id ? prev : null));
@@ -393,14 +444,12 @@ export default function SlideCanvas({
                 setDrag({ mode: "move", ids, startX: e.clientX, startY: e.clientY, origins });
               }}
               onDoubleClick={(e) => {
-                if (!interactive || el.locked || !isTextEl(el)) return;
-                // Pointer tool: double-click edits a text element, but only
-                // when it is the sole selection — never mid multi-select.
-                const canEditText = toolMode === "text" || selectedIds.size <= 1;
-                if (!canEditText) return;
+                if (!interactive || el.locked) return;
                 e.stopPropagation();
+                // Double-click isolates a single element — even one inside a
+                // group or multi-selection — so it can be edited on its own.
                 setSelection(new Set([el.id]), el.id);
-                setEditingId(el.id);
+                if (isTextEl(el)) setEditingId(el.id);
               }}
             >
               <div style={{ position: "absolute", inset: 0 }}>
@@ -421,7 +470,7 @@ export default function SlideCanvas({
                 <span className="cv-lock-badge" aria-hidden="true">🔒</span>
               )}
 
-              {interactive && isSelected && !el.locked && (
+              {interactive && isSelected && !el.locked && selectedIds.size <= 1 && (
                 <>
                   {["nw", "ne", "sw", "se", "n", "s", "e", "w"].map((h) => (
                     <span
@@ -448,7 +497,29 @@ export default function SlideCanvas({
               width: selectionBounds.right - selectionBounds.left,
               height: selectionBounds.bottom - selectionBounds.top,
             }}
-          />
+          >
+            {/* Resize the whole selection/group as one unit. */}
+            {interactive && selectedIds.size > 1 && ["nw", "ne", "sw", "se", "n", "s", "e", "w"].map((h) => (
+              <span
+                key={h}
+                className={`cv-handle cv-group-handle cv-handle-${h}`}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  const origins = Object.fromEntries(
+                    selectedElements.filter((el) => !el.locked).map((el) => [el.id, el.frame]),
+                  ) as Record<string, Frame>;
+                  setDrag({
+                    mode: "resize-group",
+                    handle: h,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    box: selectionBounds,
+                    origins,
+                  });
+                }}
+              />
+            ))}
+          </div>
         )}
 
         {marquee && (

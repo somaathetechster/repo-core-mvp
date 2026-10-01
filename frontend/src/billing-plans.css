@@ -20,3 +20,8 @@
 .bp-cta { width: 100%; justify-content: center; }
 .bp-note { text-align: center; font-size: .74rem; color: var(--text-muted); margin-top: 1.5rem; line-height: 1.5; }
 @media (max-width: 680px) { .bp-grid { grid-template-columns: 1fr; } }
+
+/* Current-plan state */
+.bp-card.is-current { border-color: var(--success); background: linear-gradient(160deg, var(--ink-raised) 60%, rgba(60,170,110,.06)); }
+.bp-badge-current { background: var(--success); color: #0d0c0a; }
+.bp-current-badge { display: flex; align-items: center; justify-content: center; gap: .4rem; font: 600 .82rem var(--font-body); color: var(--success); background: rgba(60,170,110,.1); border: 1px solid rgba(60,170,110,.25); border-radius: 10px; padding: .55rem .75rem; }

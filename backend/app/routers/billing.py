@@ -249,23 +249,66 @@ async def revoke(request: Request, body: RevokeRequest, user_id: str = Depends(g
 
 
 @admin.get("/usage")
-async def recent_usage(request: Request, limit: int = 100, user_id: str = Depends(get_current_user_id_optional)):
+async def usage_by_period(request: Request, limit: int = 500, user_id: str = Depends(get_current_user_id_optional)):
+    """
+    Per-user, per-month usage for the admin Usage tab.
+
+    Returns a flat array of rows — one per (user, month) — each carrying the
+    decks created and exports used in that month plus the user's current plan.
+    The admin frontend renders this directly as a table, so the response is an
+    array, not an envelope. (It previously returned a raw {events: [...]} log,
+    which the Usage tab couldn't render — it expects these aggregated rows.)
+    """
     async with AsyncSessionLocal() as session:
         if not _check_admin_key(request):
             await require_admin(session, user_id)
-        rows = (await session.execute(
-            select(UsageModel).order_by(desc(UsageModel.created_at)).limit(limit)
-        )).scalars().all()
-        return {
-            "events": [
-                {
-                    "id": r.id, "user_id": r.user_id, "event": r.event,
-                    "deck_id": r.deck_id, "detail": r.detail,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-                for r in rows
-            ]
-        }
+
+        decks = (await session.execute(
+            select(DeckModel.user_id, DeckModel.created_at)
+        )).all()
+        exports = (await session.execute(
+            select(UsageModel.user_id, UsageModel.created_at)
+            .where(UsageModel.event == "deck_export")
+        )).all()
+
+        # Bucket activity by (user, YYYY-MM).
+        buckets: dict[tuple[str, str], dict] = {}
+
+        def bucket(uid: str, created_at) -> dict:
+            period = created_at.strftime("%Y-%m") if created_at else "—"
+            key = (uid, period)
+            if key not in buckets:
+                buckets[key] = {"user_id": uid, "period": period, "decks_created": 0, "exports_used": 0}
+            return buckets[key]
+
+        for uid, created_at in decks:
+            bucket(uid, created_at)["decks_created"] += 1
+        for uid, created_at in exports:
+            bucket(uid, created_at)["exports_used"] += 1
+
+        # Email and current plan are per-user, not per-period.
+        flags = (await session.execute(select(UserFlagsModel))).scalars().all()
+        email_by_user = {f.user_id: (f.email or "") for f in flags}
+        all_subs = (await session.execute(select(SubscriptionModel))).scalars().all()
+        subs_by_user: dict[str, list[SubscriptionModel]] = {}
+        for s in all_subs:
+            subs_by_user.setdefault(s.user_id, []).append(s)
+
+        rows = []
+        for (uid, _period), agg in buckets.items():
+            ent = evaluate_entitlement(subs_by_user.get(uid, []))
+            rows.append({
+                "user_id": uid,
+                "email": email_by_user.get(uid, ""),
+                "period": agg["period"],
+                "decks_created": agg["decks_created"],
+                "exports_used": agg["exports_used"],
+                "plan": ent.plan.id.value,
+            })
+
+        # Most recent period first, then by email for a stable order.
+        rows.sort(key=lambda r: (r["period"], r["email"]), reverse=True)
+        return rows[:limit]
 
 import os as _os
 _ADMIN_KEY = _os.environ.get("ADMIN_CONTROLLER_KEY", "")

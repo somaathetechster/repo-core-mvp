@@ -294,6 +294,16 @@ export async function regenerateDeck(
   return res.json();
 }
 
+export async function renameDeck(deckId: string, name: string): Promise<DeckSummary> {
+  const res = await fetch(`${API_BASE}/decks/${deckId}`, {
+    method: "PATCH",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) await throwWithDetail(res, `Failed to rename deck: ${res.status}`);
+  return res.json();
+}
+
 export async function deleteDeck(deckId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/decks/${deckId}`, {
     method: "DELETE",

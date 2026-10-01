@@ -110,6 +110,9 @@ export interface SlideElement {
   attachedTo?: string | null;
   /** Locked elements resist accidental dragging (page numbers, logos). */
   locked?: boolean;
+  /** Group membership. Elements sharing a groupId select and move as one
+   *  unit; a double-click isolates a single member for editing. */
+  groupId?: string | null;
   /** Presentation opacity, independent of the style token values. */
   opacity?: number;
   /** Hidden elements remain in the layer stack but are not rendered. */

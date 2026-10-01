@@ -204,6 +204,30 @@ async def save_deck_editor_state(deck_id: str, body: SaveDeckEditorRequest, user
     return {"status": "saved"}
 
 
+class PatchDeckRequest(BaseModel):
+    name: str
+
+
+@router.patch("/{deck_id}")
+async def patch_deck(deck_id: str, body: PatchDeckRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Partial update of a deck's metadata — currently just its name.
+
+    Kept separate from the PUT editor-state save so renaming a deck doesn't
+    require sending its whole slide/theme payload back.
+    """
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Deck name can't be empty.")
+    async with AsyncSessionLocal() as session:
+        deck = await session.get(DeckModel, deck_id)
+        if not deck or deck.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        deck.name = name
+        await session.commit()
+        return _deck_summary(deck)
+
+
 @router.put("/{deck_id}/profile")
 async def update_deck_profile(deck_id: str, body: CompanyProfileIn, user_id: str = Depends(get_current_user_id)):
     async with AsyncSessionLocal() as session:

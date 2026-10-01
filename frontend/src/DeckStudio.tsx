@@ -179,6 +179,88 @@ export default function DeckStudio({
     });
   }
 
+  // ---- Group / ungroup / align / distribute ------------------------------
+  // All of these go through updateSlide, so they land on the undo history
+  // (useHistory pushes the before-state) like every other edit.
+
+  function groupSelected() {
+    const ids = [...selectedIds];
+    if (ids.length < 2) return;
+    const groupId = `grp-${Date.now().toString(36)}`;
+    updateSlide(
+      { ...slide, customized: true, elements: slide.elements.map((e) => (selectedIds.has(e.id) ? { ...e, groupId } : e)) },
+      "group",
+    );
+  }
+
+  function ungroupSelected() {
+    updateSlide(
+      { ...slide, customized: true, elements: slide.elements.map((e) => (selectedIds.has(e.id) ? { ...e, groupId: null } : e)) },
+      "ungroup",
+    );
+  }
+
+  type AlignOp = "left" | "hcenter" | "right" | "top" | "vmiddle" | "bottom";
+  function alignSelected(op: AlignOp) {
+    const sel = slide.elements.filter((e) => selectedIds.has(e.id));
+    if (sel.length < 1) return;
+    // One element aligns to the canvas; several align to their shared bounds.
+    const single = sel.length === 1;
+    const left = single ? 0 : Math.min(...sel.map((e) => e.frame.x));
+    const right = single ? CANVAS_W : Math.max(...sel.map((e) => e.frame.x + e.frame.w));
+    const top = single ? 0 : Math.min(...sel.map((e) => e.frame.y));
+    const bottom = single ? CANVAS_H : Math.max(...sel.map((e) => e.frame.y + e.frame.h));
+    const cx = (left + right) / 2;
+    const cy = (top + bottom) / 2;
+    const place = (e: SlideElement): SlideElement => {
+      const f = { ...e.frame };
+      if (op === "left") f.x = left;
+      else if (op === "right") f.x = right - f.w;
+      else if (op === "hcenter") f.x = cx - f.w / 2;
+      else if (op === "top") f.y = top;
+      else if (op === "bottom") f.y = bottom - f.h;
+      else if (op === "vmiddle") f.y = cy - f.h / 2;
+      return { ...e, frame: f };
+    };
+    updateSlide(
+      { ...slide, customized: true, elements: slide.elements.map((e) => (selectedIds.has(e.id) ? place(e) : e)) },
+      `align-${op}`,
+    );
+  }
+
+  function distributeSelected(axis: "h" | "v") {
+    const sel = slide.elements.filter((e) => selectedIds.has(e.id));
+    if (sel.length < 3) return;
+    const sorted = [...sel].sort((a, b) => (axis === "h" ? a.frame.x - b.frame.x : a.frame.y - b.frame.y));
+    const sizeOf = (e: SlideElement) => (axis === "h" ? e.frame.w : e.frame.h);
+    const startOf = (e: SlideElement) => (axis === "h" ? e.frame.x : e.frame.y);
+    const start = startOf(sorted[0]);
+    const last = sorted[sorted.length - 1];
+    const end = startOf(last) + sizeOf(last);
+    const totalSize = sorted.reduce((sum, e) => sum + sizeOf(e), 0);
+    const gap = (end - start - totalSize) / (sorted.length - 1);
+    const posById = new Map<string, number>();
+    let cursor = start;
+    for (const e of sorted) { posById.set(e.id, cursor); cursor += sizeOf(e) + gap; }
+    updateSlide(
+      {
+        ...slide,
+        customized: true,
+        elements: slide.elements.map((e) =>
+          posById.has(e.id)
+            ? { ...e, frame: axis === "h" ? { ...e.frame, x: posById.get(e.id)! } : { ...e.frame, y: posById.get(e.id)! } }
+            : e,
+        ),
+      },
+      `distribute-${axis}`,
+    );
+  }
+
+  const selectedList = slide ? slide.elements.filter((e) => selectedIds.has(e.id)) : [];
+  const selGroupIds = new Set(selectedList.map((e) => e.groupId ?? null));
+  const isOneGroup = selectedList.length >= 2 && selGroupIds.size === 1 && !selGroupIds.has(null);
+  const canGroup = selectedList.length >= 2 && !isOneGroup;
+
   function reorderLayers(sourceId: string, targetId: string) {
     const order = [...slide.elements].sort((a, b) => (b.frame.z ?? 10) - (a.frame.z ?? 10));
     const sourceIndex = order.findIndex((item) => item.id === sourceId);
@@ -300,6 +382,93 @@ export default function DeckStudio({
             <span aria-hidden="true">T</span> Text
           </button>
         </div>
+
+        {selectedIds.size >= 1 && (
+          <div className="dst-arrange" role="toolbar" aria-label="Arrange elements">
+            {canGroup && (
+              <button className="dst-arrange-btn" title="Group" aria-label="Group" onClick={groupSelected}>
+                <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                  <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" strokeDasharray="2.5 2" />
+                  <rect x="3.5" y="3.5" width="4" height="4" fill="currentColor" />
+                  <rect x="8.5" y="8.5" width="4" height="4" fill="currentColor" />
+                </svg>
+              </button>
+            )}
+            {isOneGroup && (
+              <button className="dst-arrange-btn" title="Ungroup" aria-label="Ungroup" onClick={ungroupSelected}>
+                <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                  <rect x="2" y="2" width="4.5" height="4.5" fill="none" stroke="currentColor" />
+                  <rect x="9.5" y="9.5" width="4.5" height="4.5" fill="none" stroke="currentColor" />
+                </svg>
+              </button>
+            )}
+            {(canGroup || isOneGroup) && <span className="dst-arrange-sep" />}
+
+            <button className="dst-arrange-btn" title="Align left" aria-label="Align left" onClick={() => alignSelected("left")}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <line x1="2" y1="1.5" x2="2" y2="14.5" stroke="currentColor" />
+                <rect x="3.5" y="3" width="9" height="3" fill="currentColor" />
+                <rect x="3.5" y="10" width="6" height="3" fill="currentColor" />
+              </svg>
+            </button>
+            <button className="dst-arrange-btn" title="Align centre" aria-label="Align centre" onClick={() => alignSelected("hcenter")}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <line x1="8" y1="1.5" x2="8" y2="14.5" stroke="currentColor" />
+                <rect x="3.5" y="3" width="9" height="3" fill="currentColor" />
+                <rect x="5" y="10" width="6" height="3" fill="currentColor" />
+              </svg>
+            </button>
+            <button className="dst-arrange-btn" title="Align right" aria-label="Align right" onClick={() => alignSelected("right")}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <line x1="14" y1="1.5" x2="14" y2="14.5" stroke="currentColor" />
+                <rect x="3.5" y="3" width="9" height="3" fill="currentColor" />
+                <rect x="6.5" y="10" width="6" height="3" fill="currentColor" />
+              </svg>
+            </button>
+            <button className="dst-arrange-btn" title="Align top" aria-label="Align top" onClick={() => alignSelected("top")}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <line x1="1.5" y1="2" x2="14.5" y2="2" stroke="currentColor" />
+                <rect x="3" y="3.5" width="3" height="9" fill="currentColor" />
+                <rect x="10" y="3.5" width="3" height="6" fill="currentColor" />
+              </svg>
+            </button>
+            <button className="dst-arrange-btn" title="Align middle" aria-label="Align middle" onClick={() => alignSelected("vmiddle")}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <line x1="1.5" y1="8" x2="14.5" y2="8" stroke="currentColor" />
+                <rect x="3" y="3.5" width="3" height="9" fill="currentColor" />
+                <rect x="10" y="5" width="3" height="6" fill="currentColor" />
+              </svg>
+            </button>
+            <button className="dst-arrange-btn" title="Align bottom" aria-label="Align bottom" onClick={() => alignSelected("bottom")}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <line x1="1.5" y1="14" x2="14.5" y2="14" stroke="currentColor" />
+                <rect x="3" y="3.5" width="3" height="9" fill="currentColor" />
+                <rect x="10" y="6.5" width="3" height="6" fill="currentColor" />
+              </svg>
+            </button>
+
+            {selectedIds.size >= 3 && (
+              <>
+                <span className="dst-arrange-sep" />
+                <button className="dst-arrange-btn" title="Distribute horizontally" aria-label="Distribute horizontally" onClick={() => distributeSelected("h")}>
+                  <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                    <rect x="1" y="4" width="3" height="8" fill="currentColor" />
+                    <rect x="6.5" y="4" width="3" height="8" fill="currentColor" />
+                    <rect x="12" y="4" width="3" height="8" fill="currentColor" />
+                  </svg>
+                </button>
+                <button className="dst-arrange-btn" title="Distribute vertically" aria-label="Distribute vertically" onClick={() => distributeSelected("v")}>
+                  <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                    <rect x="4" y="1" width="8" height="3" fill="currentColor" />
+                    <rect x="4" y="6.5" width="8" height="3" fill="currentColor" />
+                    <rect x="4" y="12" width="8" height="3" fill="currentColor" />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div
           className="dst-canvas-hold"
           onDragOver={(e) => {

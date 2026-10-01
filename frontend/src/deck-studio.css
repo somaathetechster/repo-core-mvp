@@ -228,3 +228,10 @@
 }
 .dst-ind-chips button:hover { border-color: var(--border-strong); color: var(--text); }
 .dst-ind-chips button.is-active { border-color: var(--gold); color: var(--gold); background: var(--gold-faint); }
+
+/* Contextual arrange toolbar (group/ungroup + alignment), shown above the
+   canvas when one or more elements are selected. */
+.dst-arrange { display: flex; align-items: center; gap: .15rem; flex-wrap: wrap; margin: 0 0 .5rem; padding: .3rem .4rem; background: var(--ink-raised-2); border: 1px solid var(--ink-border); border-radius: 8px; width: fit-content; }
+.dst-arrange-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: none; border: 1px solid transparent; border-radius: 6px; color: var(--text-dim); cursor: pointer; }
+.dst-arrange-btn:hover { background: var(--gold-faint); color: var(--text); border-color: var(--ink-border); }
+.dst-arrange-sep { width: 1px; height: 18px; background: var(--ink-border); margin: 0 .25rem; }

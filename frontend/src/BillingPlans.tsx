@@ -5,7 +5,7 @@
  * to the hosted checkout page. Fulfilment happens via webhook — the redirect
  * back to the site is cosmetic only.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./billing-plans.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE as string;
@@ -14,6 +14,18 @@ interface Props {
   accessToken: string;
   currentPlan?: string;
 }
+
+/**
+ * The entitlement endpoint reports plan ids from the backend's PlanId enum
+ * (free | one_time | monthly | yearly); the cards here use their own ids
+ * (single | monthly | yearly). This maps the former to the latter so the
+ * right card gets the "Current plan" badge.
+ */
+const PLAN_ID_TO_CARD: Record<string, string> = {
+  one_time: "single",
+  monthly: "monthly",
+  yearly: "yearly",
+};
 
 const PLANS = [
   {
@@ -42,9 +54,28 @@ const PLANS = [
   },
 ];
 
-export default function BillingPlans({ accessToken, currentPlan = "free" }: Props) {
+export default function BillingPlans({ accessToken, currentPlan }: Props) {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Resolved from /billing/me on mount. A prop, if passed, is the initial
+  // value; the fetch is authoritative.
+  const [planId, setPlanId] = useState<string>(currentPlan ?? "free");
+  const [planName, setPlanName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/billing/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.entitlement?.plan) return;
+        setPlanId(data.entitlement.plan.id);
+        setPlanName(data.entitlement.plan.name);
+      })
+      .catch(() => { /* leave the default; the plans still render */ });
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
   const checkout = async (planId: string) => {
     setError(null);
@@ -70,7 +101,9 @@ export default function BillingPlans({ accessToken, currentPlan = "free" }: Prop
     }
   };
 
-  const isPaid = currentPlan !== "free";
+  const isPaid = planId !== "free";
+  const currentCardId = PLAN_ID_TO_CARD[planId] ?? null;
+  const displayPlanName = planName ?? (isPaid ? planId.replace("_", " ") : "Free");
 
   return (
     <div className="bp-wrap">
@@ -78,38 +111,44 @@ export default function BillingPlans({ accessToken, currentPlan = "free" }: Prop
         <div className="bp-eyebrow">Billing</div>
         <h2>Choose your plan</h2>
         <p>Export your deck to PDF or PowerPoint. Pay once or subscribe — no lock-in.</p>
-        {isPaid && (
-          <div className="bp-current">
-            Current plan: <strong>{currentPlan.replace("_", " ")}</strong>
-          </div>
-        )}
+        <div className="bp-current">
+          You're on the <strong>{displayPlanName}</strong> plan
+        </div>
       </div>
 
       {error && <p className="p-error bp-error">{error}</p>}
 
       <div className="bp-grid">
-        {PLANS.map((plan) => (
-          <div key={plan.id} className={`bp-card ${plan.highlight ? "is-featured" : ""}`}>
-            {plan.highlight && <div className="bp-badge">Most popular</div>}
-            <div className="bp-plan-name">{plan.name}</div>
-            <div className="bp-price">
-              <span className="bp-amount">{plan.price}</span>
-              <span className="bp-period">{plan.period}</span>
+        {PLANS.map((plan) => {
+          const isCurrent = plan.id === currentCardId;
+          return (
+            <div key={plan.id} className={`bp-card ${plan.highlight ? "is-featured" : ""} ${isCurrent ? "is-current" : ""}`}>
+              {plan.highlight && !isCurrent && <div className="bp-badge">Most popular</div>}
+              {isCurrent && <div className="bp-badge bp-badge-current">Current plan</div>}
+              <div className="bp-plan-name">{plan.name}</div>
+              <div className="bp-price">
+                <span className="bp-amount">{plan.price}</span>
+                <span className="bp-period">{plan.period}</span>
+              </div>
+              <ul className="bp-features">
+                {plan.features.map((f) => (
+                  <li key={f}><span>✓</span>{f}</li>
+                ))}
+              </ul>
+              {isCurrent ? (
+                <div className="bp-cta bp-current-badge">✓ Current plan</div>
+              ) : (
+                <button
+                  className={`p-btn ${plan.highlight ? "p-btn-primary" : "p-btn-ghost"} bp-cta`}
+                  onClick={() => checkout(plan.id)}
+                  disabled={!!loading}
+                >
+                  {loading === plan.id ? "Opening checkout…" : `Get ${plan.name}`}
+                </button>
+              )}
             </div>
-            <ul className="bp-features">
-              {plan.features.map((f) => (
-                <li key={f}><span>✓</span>{f}</li>
-              ))}
-            </ul>
-            <button
-              className={`p-btn ${plan.highlight ? "p-btn-primary" : "p-btn-ghost"} bp-cta`}
-              onClick={() => checkout(plan.id)}
-              disabled={!!loading}
-            >
-              {loading === plan.id ? "Opening checkout…" : `Get ${plan.name}`}
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <p className="bp-note">

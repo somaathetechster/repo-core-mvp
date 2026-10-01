@@ -144,10 +144,27 @@ export default function App() {
 
 type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "review" | "data" | "billing";
 
+const DASH_TABS: DashTab[] = ["home", "evidence", "profile", "security", "deck", "review", "data", "billing"];
+const ACTIVE_TAB_KEY = "provisio:active-tab";
+
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
-  const [tab, setTab] = useState<DashTab>("home");
+  // Restore the tab the user was on before a refresh. Guarded against stale or
+  // invalid stored values.
+  const [tab, setTab] = useState<DashTab>(() => {
+    try {
+      const stored = sessionStorage.getItem(ACTIVE_TAB_KEY);
+      if (stored && (DASH_TABS as string[]).includes(stored)) return stored as DashTab;
+    } catch { /* sessionStorage unavailable */ }
+    return "home";
+  });
+
+  // Persist the active tab so a refresh lands back on it.
+  useEffect(() => {
+    try { sessionStorage.setItem(ACTIVE_TAB_KEY, tab); } catch { /* ignore */ }
+  }, [tab]);
   const [analyzedRepos, setAnalyzedRepos] = useState<AnalyzeResult[]>([]);
   const [profileFocusField, setProfileFocusField] = useState<string | null>(null);
+  const [welcome, setWelcome] = useState<string | null>(null);
 
   // Returning from the GitHub install flow lands here with ?status=success.
   // Clear the param and open the Evidence tab, which handles loading repos
@@ -159,6 +176,28 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
       setTab("evidence");
     }
   }, []);
+
+  // Returning from a successful checkout lands here with ?checkout=success.
+  // Open the Billing tab so the user sees their new plan, and show a welcome
+  // banner naming it. Fulfilment is via webhook, so the plan may take a moment
+  // to appear — we read /billing/me for the name, falling back to a generic
+  // message if it hasn't landed yet.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return;
+    window.history.replaceState({}, "", window.location.pathname);
+    setTab("billing");
+    setWelcome("Welcome! Your account has been upgraded.");
+    fetch(`${import.meta.env.VITE_API_BASE}/billing/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const name = data?.entitlement?.plan?.name;
+        if (name && name !== "Free") setWelcome(`Welcome to ${name}! Your account has been upgraded.`);
+      })
+      .catch(() => { /* keep the generic welcome */ });
+  }, [accessToken]);
 
   // Stash first (the Decks page is lazy and may not be mounted yet), then
   // notify it in case it already is.
@@ -217,6 +256,14 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           </button>
         </div>
       </div>
+
+      {welcome && (
+        <div className="checkout-welcome" role="status">
+          <span className="checkout-welcome-icon">✦</span>
+          <span className="checkout-welcome-msg">{welcome}</span>
+          <button className="checkout-welcome-close" onClick={() => setWelcome(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
 
       <NotificationBanner accessToken={accessToken} />
       <SupportWidget accessToken={accessToken} />
