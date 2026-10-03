@@ -506,6 +506,10 @@ async function captureElementSlideImages(deck: any, chartImages: Record<string, 
       await new Promise((resolve) => setTimeout(resolve, 120));
       if (document.fonts?.ready) await document.fonts.ready;
       try {
+        // The editor canvas has a drop shadow for screen presentation. It is
+        // outside the slide artwork and must not be baked into exports.
+        const editorCanvas = slideDiv.querySelector<HTMLElement>(".cv-canvas");
+        if (editorCanvas) editorCanvas.style.boxShadow = "none";
         const canvas = await html2canvas(slideDiv, { width: 1280, height: 720, scale: 1, backgroundColor: null });
         results[slide.id] = canvas.toDataURL("image/png");
       } catch {
