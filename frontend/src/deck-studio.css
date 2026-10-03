@@ -27,6 +27,17 @@
 .dst-tool span { font-weight: 700; width: 1em; text-align: center; }
 .dst-tool:hover { color: var(--text); }
 .dst-tool.is-active { background: var(--accent, #b8860b); color: #fff; }
+.dst-text-actions {
+  display: flex; gap: .35rem; align-items: center; margin-bottom: .55rem; flex-shrink: 0;
+}
+.dst-text-action {
+  border: 1px solid var(--ink-border); border-radius: 6px; background: var(--ink-raised);
+  color: var(--text-dim); padding: .35rem .65rem; font: .76rem var(--font-body); cursor: pointer;
+}
+.dst-text-action:hover:not(:disabled) { border-color: var(--gold); color: var(--text); }
+.dst-text-action-primary { border-color: var(--gold-dim); color: var(--gold); }
+.dst-text-action-danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.dst-text-action:disabled { opacity: .4; cursor: default; }
 
 .dst-filmstrip { display: flex; gap: 0.4rem; overflow-x: auto; padding: 0.5rem 1rem 0.75rem; flex-shrink: 0; border-top: 1px solid var(--ink-border); background: var(--ink-raised); }
 .dst-filmstrip::-webkit-scrollbar { height: 4px; }

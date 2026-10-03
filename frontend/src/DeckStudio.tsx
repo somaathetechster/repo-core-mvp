@@ -145,6 +145,38 @@ export default function DeckStudio({
     }
   }
 
+  function addTextElement() {
+    const el = makeElement(
+      "text",
+      { x: 170, y: 270, w: 940, h: 90, z: 30 },
+      { color: "ink", fontFamily: "body", fontSize: 28, lineHeight: 1.35 },
+      { text: "Type your text here" },
+    );
+    addElements([el]);
+    setPanel("element");
+  }
+
+  const selectedTextIds = new Set(
+    [...selectedIds].filter((id) => slide?.elements.find((el) => el.id === id)?.text !== undefined),
+  );
+
+  function editSelectedText() {
+    if (!selectedTextIds.size) return;
+    setPanel("element");
+    setToolMode("text");
+  }
+
+  function deleteSelectedText() {
+    if (!selectedTextIds.size || !slide) return;
+    updateSlide({
+      ...slide,
+      customized: true,
+      elements: slide.elements.filter((el) => !selectedTextIds.has(el.id)),
+    }, "delete-text");
+    setSelectedId(null);
+    setSelectedIds(new Set());
+  }
+
   /**
    * Places an image, sized from its own aspect ratio rather than dropped
    * into a fixed box. A 3:1 banner and a 1:1 headshot forced into the same
@@ -429,6 +461,17 @@ export default function DeckStudio({
             aria-pressed={toolMode === "text"}
           >
             <span aria-hidden="true">T</span> Text
+          </button>
+        </div>
+        <div className="dst-text-actions" role="toolbar" aria-label="Text actions">
+          <button className="dst-text-action dst-text-action-primary" onClick={addTextElement}>
+            + Text
+          </button>
+          <button className="dst-text-action" onClick={editSelectedText} disabled={!selectedTextIds.size}>
+            Edit text
+          </button>
+          <button className="dst-text-action dst-text-action-danger" onClick={deleteSelectedText} disabled={!selectedTextIds.size}>
+            Delete text
           </button>
         </div>
 
