@@ -7,7 +7,7 @@ import DeckStudio from "./DeckStudio";
 import CompanyProfileForm from "./CompanyProfileForm";
 import ChartRenderer, { type ColumnMeta } from "./viz/ChartRenderer";
 import {
-  toElementSlides, toStoredSlides, blankSlide, resetToTemplate, type StoredSlide,
+  toElementSlides, toStoredSlides, blankSlide, resetToTemplate, syncContentsSlides, type StoredSlide,
 } from "./deck/migrate";
 import { compose } from "./deck/composers";
 import { type ThemeSettings } from "./deck/theme";
@@ -94,6 +94,10 @@ export default function DeckEditor({
     slides: [], themeSettings: DEFAULT_THEME, templateId: DEFAULT_TEMPLATE_ID,
   });
   const { slides, themeSettings, templateId } = history.state;
+  const withSyncedContents = useCallback(
+    (next: ElementSlide[]) => syncContentsSlides(next, templateId, { companyName: deckName }),
+    [templateId, deckName],
+  );
   // Update only the slides field, leaving theme/template untouched. `label`
   // coalesces rapid edits (one drag = one undo), same as before.
   const setSlides = useCallback(
@@ -101,13 +105,13 @@ export default function DeckEditor({
       history.set(
         (prev) => ({
           ...prev,
-          slides: typeof next === "function"
+          slides: withSyncedContents(typeof next === "function"
             ? (next as (p: ElementSlide[]) => ElementSlide[])(prev.slides)
-            : next,
+            : next),
         }),
         label,
       ),
-    [history.set],
+    [history.set, withSyncedContents],
   );
   // Theme/font/colour changes push a history entry (label "theme" coalesces a
   // slider sweep into one undo) rather than clearing the stack.
@@ -209,7 +213,7 @@ export default function DeckEditor({
         setDeckTheme(d.theme);
         setStored(storedSlides);
         history.reset({
-          slides: toElementSlides(storedSlides, tpl, { companyName: d.name }),
+          slides: syncContentsSlides(toElementSlides(storedSlides, tpl, { companyName: d.name }), tpl, { companyName: d.name }),
           themeSettings: settings,
           templateId: tpl,
         });
@@ -378,7 +382,7 @@ export default function DeckEditor({
       (prev) => ({
         ...prev,
         templateId: nextId,
-        slides: toElementSlides(nextStored, nextId, { companyName: deckName }),
+        slides: syncContentsSlides(toElementSlides(nextStored, nextId, { companyName: deckName }), nextId, { companyName: deckName }),
       }),
       "template",
     );
@@ -468,7 +472,7 @@ export default function DeckEditor({
       // a text, slide, theme, or template change.
       history.set((prev) => ({
         ...prev,
-        slides: toElementSlides(storedSlides, templateId, { companyName: d.name }),
+        slides: syncContentsSlides(toElementSlides(storedSlides, templateId, { companyName: d.name }), templateId, { companyName: d.name }),
       }), "regenerate");
       markDirty();
       setCurrent(0);
@@ -495,7 +499,9 @@ export default function DeckEditor({
   }
 
   function addSlide() {
-    const fresh = blankSlide(templateId);
+    const requested = window.prompt("Name this slide", "New slide");
+    if (requested === null) return;
+    const fresh = blankSlide(templateId, requested.trim() || "New slide");
     setSlides((prev) => {
       const next = [...prev];
       next.splice(current + 1, 0, fresh);

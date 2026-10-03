@@ -25,6 +25,37 @@ export interface StoredSlide extends LegacySlide {
   customized?: boolean;
 }
 
+/** Rebuilds the contents slide from the current slide order and names. */
+export function syncContentsSlides(
+  slides: ElementSlide[],
+  templateId: string,
+  context: { companyName?: string } = {},
+): ElementSlide[] {
+  const contentsIndex = slides.findIndex((slide) => slide.kind === "contents");
+  if (contentsIndex < 0) return slides;
+  const contents = slides[contentsIndex];
+  const entries = slides
+    .filter((slide) => slide.kind !== "cover" && slide.kind !== "contents")
+    .map((slide) => ({ title: slide.title.trim() || "Untitled slide" }));
+  const composed = compose(templateId, {
+    kind: "contents",
+    title: contents.title,
+    paragraphs: [],
+    contents: entries,
+    companyName: context.companyName,
+    pageNumber: contentsIndex + 1,
+    totalPages: slides.length,
+  });
+  const next = [...slides];
+  next[contentsIndex] = {
+    ...contents,
+    elements: composed.elements,
+    background: contents.background ?? composed.background,
+    customized: false,
+  };
+  return next;
+}
+
 /**
  * Turns a stored slide into an element slide.
  *
@@ -160,7 +191,13 @@ export function toStoredSlide(slide: ElementSlide, previous?: StoredSlide): Stor
 
 export function toStoredSlides(slides: ElementSlide[], previous: StoredSlide[]): StoredSlide[] {
   const byId = new Map(previous.map((p) => [p.id, p]));
-  return slides.map((s) => toStoredSlide(s, byId.get(s.id)));
+  const entries = slides
+    .filter((slide) => slide.kind !== "cover" && slide.kind !== "contents")
+    .map((slide) => ({ title: slide.title.trim() || "Untitled slide" }));
+  return slides.map((s) => {
+    const stored = toStoredSlide(s, byId.get(s.id));
+    return s.kind === "contents" ? { ...stored, toc_entries: entries } : stored;
+  });
 }
 
 function legacyTypeFor(kind: SlideKind): string {

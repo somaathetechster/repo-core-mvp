@@ -333,7 +333,9 @@ export default function DeckStudio({
   }
 
   function insertSlideAt(index: number) {
-    const fresh = blankSlide(templateId);
+    const requested = window.prompt("Name this slide", "New slide");
+    if (requested === null) return;
+    const fresh = blankSlide(templateId, requested.trim() || "New slide");
     const next = [...slides];
     next.splice(index, 0, fresh);
     onSlidesChange(next, "insert-slide");
@@ -345,11 +347,13 @@ export default function DeckStudio({
   function duplicateSlide(index: number) {
     const source = slides[index];
     if (!source) return;
+    const requested = window.prompt("Name the duplicated slide", `${source.title || "Slide"} copy`);
+    if (requested === null) return;
     const idMap = new Map(source.elements.map((el) => [el.id, elementId(el.type)]));
     const copy: ElementSlide = {
       ...source,
       id: elementId("slide"),
-      title: `${source.title || "Slide"} copy`,
+      title: requested.trim() || `${source.title || "Slide"} copy`,
       elements: source.elements.map((el) => ({
         ...el,
         id: idMap.get(el.id)!,
@@ -368,6 +372,21 @@ export default function DeckStudio({
     const target = index + direction;
     if (target < 0 || target >= slides.length) return;
     moveSlide(index, target);
+  }
+
+  function renameCurrentSlide(title: string) {
+    if (!slide) return;
+    const nextTitle = title;
+    const oldTitle = slide.title.trim().toLowerCase();
+    const titleTypes = new Set(["heading", "statement", "eyebrow", "quote", "text"]);
+    const elements = slide.elements.map((el) => {
+      const text = el.text?.trim().toLowerCase();
+      const matchesTitle = text === oldTitle;
+      return matchesTitle && titleTypes.has(el.type)
+        ? { ...el, text: nextTitle }
+        : el;
+    });
+    updateSlide({ ...slide, title: nextTitle, elements }, "rename-slide");
   }
 
   const insertButton = (at: number) => (
@@ -606,6 +625,15 @@ export default function DeckStudio({
 
         {panel === "template" && (
           <section className="dst-section">
+            <label className="dst-field">
+              <span>Slide name</span>
+              <input
+                className="p-input"
+                value={slide.title}
+                placeholder="Name this slide"
+                onChange={(e) => renameCurrentSlide(e.target.value)}
+              />
+            </label>
             <p className="dst-hint">
               Each template arranges every slide differently: different grid, different anchor points,
               different amount of the canvas used. Switching recomposes slides you haven't hand-edited.
@@ -888,6 +916,15 @@ export default function DeckStudio({
 
         {panel === "element" && selected && (
           <section className="dst-section">
+            <label className="dst-field">
+              <span>Slide name</span>
+              <input
+                className="p-input"
+                value={slide.title}
+                placeholder="Name this slide"
+                onChange={(e) => renameCurrentSlide(e.target.value)}
+              />
+            </label>
             <h4>{selected.type}</h4>
 
             {selected.text !== undefined && (
