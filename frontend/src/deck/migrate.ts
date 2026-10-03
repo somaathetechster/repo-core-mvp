@@ -34,10 +34,6 @@ export function syncContentsSlides(
 ): ElementSlide[] {
   const contentsIndex = slides.findIndex((slide) => slide.kind === "contents");
   if (contentsIndex < 0) return slides;
-  // A deliberately customized contents page should survive a reload. It is
-  // still rebuilt if the user later changes the slide list, but opening the
-  // deck must not erase manually added text or layout work.
-  if (!previous && slides[contentsIndex].customized) return slides;
   // Editing an element on the contents page is still a normal editor action.
   // Only rebuild its generated entries when the actual slide list or a slide
   // name changed; otherwise a new text box on the TOC would be overwritten on
@@ -90,10 +86,18 @@ export function toElementSlide(
     totalPages?: number;
   } = {},
 ): ElementSlide {
+  // A previous editor version could persist the canonical TOC slide with
+  // kind="custom" after it was rebuilt. The id and structured TOC field are
+  // stronger signals than that stale kind value.
+  const kind: SlideKind =
+    stored.id === "toc" || stored.type === "toc" || stored.toc_entries?.length
+      ? "contents"
+      : stored.kind ?? inferKind(stored);
+
   if (stored.customized && stored.elements && stored.elements.length > 0) {
     return {
       id: stored.id,
-      kind: stored.kind ?? inferKind(stored),
+      kind,
       title: stored.title,
       elements: stored.elements,
       background: stored.background ?? "paper",
@@ -102,7 +106,7 @@ export function toElementSlide(
   }
 
   const content: SlideContentInput = {
-    kind: stored.kind ?? inferKind(stored),
+    kind,
     title: stored.title,
     paragraphs: (stored.blocks ?? []).map((b) => ({ text: b.text, source: b.source })),
     image: stored.image_data_url,

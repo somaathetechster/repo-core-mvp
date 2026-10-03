@@ -208,13 +208,24 @@ export default function DeckEditor({
           savedLibrary as unknown as { data_url: string }[],
           imageMap,
         );
-        const storedSlides = restored.slides as unknown as StoredSlide[];
+        const rawStoredSlides = restored.slides as unknown as StoredSlide[];
+        // Normalize the TOC snapshot on load without rebuilding a customized
+        // contents page. This repairs older decks while preserving any text
+        // or layout the user added directly to the TOC.
+        const tocEntries = rawStoredSlides
+          .filter((slide) => slide.id !== "toc" && slide.type !== "toc" && slide.kind !== "contents")
+          .map((slide) => ({ title: slide.title.trim() || "Untitled slide" }));
+        const storedSlides = rawStoredSlides.map((slide) =>
+          slide.id === "toc" || slide.type === "toc" || slide.kind === "contents"
+            ? { ...slide, toc_entries: tocEntries }
+            : slide,
+        );
         setDeckName(d.name);
         lastSavedName.current = d.name;
         setDeckTheme(d.theme);
         setStored(storedSlides);
         history.reset({
-          slides: syncContentsSlides(toElementSlides(storedSlides, tpl, { companyName: d.name }), tpl, { companyName: d.name }),
+          slides: toElementSlides(storedSlides, tpl, { companyName: d.name }),
           themeSettings: settings,
           templateId: tpl,
         });
