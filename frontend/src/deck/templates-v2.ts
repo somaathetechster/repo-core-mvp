@@ -67,6 +67,40 @@ export const composeGallery: Composer = (c) => {
     return { elements: els, background: "ink" };
   }
 
+  if (c.kind === "contents") {
+    // Gallery needs its own contents composition. Without this branch the
+    // slide fell through to the normal image-grid body layout, which had no
+    // use for c.contents and produced an empty, miscoloured TOC page.
+    const header = cell(1, 13, 1, 2);
+    els.push(makeElement("shape", { ...header, z: 4 }, { background: "ink", shape: "rect" }));
+    els.push(makeElement("heading", { x: 44, y: 28, w: 760, h: 48, z: 12 },
+      { color: "inverse", fontFamily: "display", fontSize: 34, fontWeight: 600 },
+      { text: c.title }));
+
+    const entries = c.contents ?? [];
+    const columns = entries.length > 6 ? 2 : 1;
+    const perColumn = Math.max(1, Math.ceil(entries.length / columns));
+    entries.forEach((entry, i) => {
+      const column = Math.floor(i / perColumn);
+      const row = i % perColumn;
+      const start = column === 0 ? 1 : 7;
+      const end = column === 0 ? 7 : 13;
+      const card = cell(start, end, 2 + row, 3 + row);
+      els.push(makeElement("shape", { ...card, z: 4 }, { background: "accentSoft", shape: "rect" }));
+      els.push(makeElement("pageNumber", {
+        x: card.x + 18, y: card.y + 16, w: 54, h: 30, z: 12,
+      }, {
+        color: "accent", fontFamily: "display", fontSize: 25, fontWeight: 700,
+      }, { text: String(i + 3).padStart(2, "0") }));
+      els.push(makeElement("text", {
+        x: card.x + 82, y: card.y + 17, w: card.w - 102, h: 30, z: 12,
+      }, {
+        color: "ink", fontFamily: "body", fontSize: 17, fontWeight: 600,
+      }, { text: entry.title }));
+    });
+    return { elements: els, background: "paper" };
+  }
+
   if (c.kind === "team" && c.team?.length) {
     // Portraits fill the grid; names sit in a band beneath each.
     const n = Math.min(c.team.length, 4);
