@@ -474,6 +474,13 @@ async function captureElementSlideImages(deck: any, chartImages: Record<string, 
   const elementSlides = toElementSlides(restored.slides as unknown as StoredSlide[], themeRaw.template_id ?? "editorial", {
     companyName: deck.name,
   });
+  // Confidentiality labels are template chrome, not slide content. Remove
+  // them from older saved decks as well as newly composed slides, so changing
+  // the template is not required just to get a clean export.
+  const exportSlides = elementSlides.map((slide) => ({
+    ...slide,
+    elements: slide.elements.filter((el) => !(el.locked && /\bconfidential\b/i.test(el.text ?? ""))),
+  }));
   const theme = buildTheme({
     ink: themeRaw.secondary_color || "#161412",
     paper: "#faf8f3",
@@ -487,7 +494,7 @@ async function captureElementSlideImages(deck: any, chartImages: Record<string, 
   document.body.appendChild(container);
   const results: Record<string, string> = {};
   try {
-    for (const slide of elementSlides) {
+    for (const slide of exportSlides) {
       const chartElements = slide.elements.filter((el) => el.type === "chart");
       if (chartElements.some((el) => !chartImages[el.id])) continue;
       const slideDiv = document.createElement("div");

@@ -307,7 +307,7 @@ export const composeTechnical: Composer = (c) => {
     // A metadata strip, the kind an engineering document carries.
     const meta = [["DATE", new Date().toLocaleDateString(undefined, { month: "short", year: "numeric" })],
                   ["PAGES", String(c.totalPages ?? "—")],
-                  ["STATUS", "CONFIDENTIAL"]];
+                  ["STATUS", ""]];
     meta.forEach(([k, v], i) => {
       const x = m + i * 220;
       els.push(makeElement("caption", { x, y: CANVAS_H - 120, w: 200, h: 16, z: 10 },

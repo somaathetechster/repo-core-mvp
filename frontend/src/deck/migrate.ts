@@ -106,7 +106,11 @@ export function toElementSlide(
       id: stored.id,
       kind,
       title: stored.title,
-      elements: stored.elements,
+      // Remove the old auto-generated confidentiality footer from decks that
+      // were saved before the template stopped adding it.
+      elements: stored.elements.filter((element) =>
+        !(element.locked && /\bconfidential\b/i.test(element.text ?? "")),
+      ),
       background: stored.background ?? "paper",
       customized: true,
     };

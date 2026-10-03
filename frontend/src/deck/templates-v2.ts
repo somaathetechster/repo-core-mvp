@@ -204,7 +204,7 @@ export const composeDossier: Composer = (c) => {
     { text: (c.kind === "cover" ? (c.companyName ?? "") : c.title).toUpperCase() }));
   els.push(makeElement("caption", { x: CANVAS_W - DM - 420, y: 48, w: 420, h: 18, z: 10 },
     { color: "muted", fontFamily: "label", fontSize: 12, align: "right" },
-    { text: `${(c.companyName ?? "").toUpperCase()} · §${String(c.pageNumber ?? 1).padStart(2, "0")} · CONFIDENTIAL`, locked: true }));
+    { text: `${(c.companyName ?? "").toUpperCase()} · §${String(c.pageNumber ?? 1).padStart(2, "0")}`, locked: true }));
   els.push(makeElement("rule", { x: DM, y: 80, w: CANVAS_W - DM * 2, h: 1.5, z: 10 },
     { background: "ink" }));
   els.push(makeElement("rule", { x: DM, y: CANVAS_H - 60, w: CANVAS_W - DM * 2, h: 1, z: 10 },

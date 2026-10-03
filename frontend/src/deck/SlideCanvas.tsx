@@ -466,7 +466,7 @@ export default function SlideCanvas({
                 />
               </div>
 
-              {el.locked && (
+              {interactive && el.locked && (
                 <span className="cv-lock-badge" aria-hidden="true">🔒</span>
               )}
 
