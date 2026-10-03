@@ -45,6 +45,7 @@ class ExportRequest(BaseModel):
     format: str  # "pptx" | "pdf"
     chart_images: dict[str, str] = {}  # slide_id -> PNG data URL, captured client-side
     asset_images: dict[str, str] = {}  # element asset key -> PNG data URL
+    slide_images: dict[str, str] = {}  # element slide id -> browser-rendered PNG
 
 
 @router.post("/{deck_id}/export")
@@ -81,7 +82,7 @@ async def export_deck(
 
         if body.format == "pptx":
             content = (
-                build_pptx_from_elements(deck.name, slides, theme, body.chart_images, body.asset_images)
+                build_pptx_from_elements(deck.name, slides, theme, body.chart_images, body.asset_images, body.slide_images)
                 if use_elements
                 else build_pptx(deck.name, slides, theme, body.chart_images)
             )
@@ -100,7 +101,7 @@ async def export_deck(
             filename = f"{safe_name}.pptx"
         else:
             content = (
-                build_pdf_from_elements(deck.name, slides, theme, body.chart_images, body.asset_images)
+                build_pdf_from_elements(deck.name, slides, theme, body.chart_images, body.asset_images, body.slide_images)
                 if use_elements
                 else build_pdf(deck.name, slides, theme, body.chart_images)
             )

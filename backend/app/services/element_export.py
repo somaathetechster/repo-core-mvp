@@ -258,9 +258,11 @@ def build_pptx_from_elements(
     theme_raw: dict,
     chart_images: dict[str, str] | None = None,
     asset_images: dict[str, str] | None = None,
+    slide_images: dict[str, str] | None = None,
 ) -> bytes:
     chart_images = chart_images or {}
     asset_images = asset_images or {}
+    slide_images = slide_images or {}
     theme = Theme(theme_raw or {})
 
     prs = Presentation()
@@ -270,6 +272,11 @@ def build_pptx_from_elements(
 
     for slide_data in slides:
         slide = prs.slides.add_slide(blank)
+
+        rendered = _data_url_bytes(slide_images.get(slide_data.get("id", "")))
+        if rendered:
+            slide.shapes.add_picture(io.BytesIO(rendered), 0, 0, prs.slide_width, prs.slide_height)
+            continue
 
         # Background as a full-bleed rectangle, since python-pptx has no
         # direct per-slide background colour on a blank layout.
@@ -370,7 +377,10 @@ def _add_pptx_element(
             return
         box = slide.shapes.add_textbox(x, y, w, h)
         tf = box.text_frame
-        tf.word_wrap = True
+        # Metric values and page numbers are single-line labels. Allowing
+        # PowerPoint to wrap them can make the value overflow into the label
+        # underneath, even though the editor keeps it on one line.
+        tf.word_wrap = etype not in {"metric", "pageNumber"}
         # Preserve all text even when the editor's frame is smaller than the
         # final line height. PowerPoint otherwise clips the lower lines.
         tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
@@ -411,9 +421,11 @@ def build_pdf_from_elements(
     theme_raw: dict,
     chart_images: dict[str, str] | None = None,
     asset_images: dict[str, str] | None = None,
+    slide_images: dict[str, str] | None = None,
 ) -> bytes:
     chart_images = chart_images or {}
     asset_images = asset_images or {}
+    slide_images = slide_images or {}
     theme = Theme(theme_raw or {})
 
     page_w = CANVAS_W * PT_PER_PX
@@ -422,6 +434,14 @@ def build_pdf_from_elements(
     c = pdfcanvas.Canvas(buf, pagesize=(page_w, page_h))
 
     for slide_data in slides:
+        rendered = _data_url_bytes(slide_images.get(slide_data.get("id", "")))
+        if rendered:
+            try:
+                c.drawImage(ImageReader(io.BytesIO(rendered)), 0, 0, page_w, page_h, mask="auto")
+                c.showPage()
+                continue
+            except Exception:
+                pass
         bg = _slide_background(slide_data, theme)
         c.setFillColor(HexColor(bg))
         c.rect(0, 0, page_w, page_h, stroke=0, fill=1)
@@ -534,12 +554,18 @@ def _draw_pdf_element_body(
         bold = (style.get("fontWeight", 400) or 400) >= 600
         family = style.get("fontFamily", "body")
         font_name = _pdf_font(family, bold)
-        c.setFont(font_name, size)
         color = theme.color(style.get("color"), "ink")
         c.setFillColor(HexColor(color or theme.ink))
 
-        leading = size * (style.get("lineHeight") or 1.4)
+        line_scale = style.get("lineHeight") or 1.4
         lines = _wrap(text, w, font_name, size, c)
+        # Match the editor's usable frame: shrink long content until every
+        # line fits instead of drawing beyond the frame into the next element.
+        while len(lines) * size * line_scale > h and size > 5:
+            size = max(5, size - 0.5)
+            lines = _wrap(text, w, font_name, size, c)
+        c.setFont(font_name, size)
+        leading = size * line_scale
         align = style.get("align", "left")
 
         ty = y + h - size

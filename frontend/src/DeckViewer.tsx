@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import html2canvas from "html2canvas";
 import {
   DndContext,
   closestCenter,
@@ -27,6 +29,10 @@ import FreeformCanvas from "./FreeformCanvas";
 import CompanyProfileForm from "./CompanyProfileForm";
 import { defaultLayoutForSlide, type LayoutElement } from "./layoutTypes";
 import { ASSETS, assetToSvg } from "./deck/assets";
+import SlideCanvas from "./deck/SlideCanvas";
+import { buildTheme, loadFontPairing } from "./deck/theme";
+import { toElementSlides, type StoredSlide } from "./deck/migrate";
+import { inlineImages } from "./deck/imageStore";
 import "./theme.css";
 import "./deck.css";
 
@@ -438,10 +444,10 @@ async function captureAssetImages(deck: any): Promise<Record<string, string>> {
           const ctx = canvas.getContext("2d");
           if (ctx) {
             ctx.clearRect(0, 0, width, height);
-            const scale = Math.min(width / image.width, height / image.height);
-            const w = image.width * scale;
-            const h = image.height * scale;
-            ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+            // The SVG itself uses preserveAspectRatio="xMidYMid meet". Give
+            // it the exact export frame so the browser performs the same
+            // contain calculation as the editor's inline SVG renderer.
+            ctx.drawImage(image, 0, 0, width, height);
             out[key] = canvas.toDataURL("image/png");
           }
           resolve();
@@ -453,6 +459,65 @@ async function captureAssetImages(deck: any): Promise<Record<string, string>> {
   }
   await Promise.all(jobs);
   return out;
+}
+
+/** Captures the actual element canvas so exports match the editor pixel-for-pixel. */
+async function captureElementSlideImages(deck: any, chartImages: Record<string, string>): Promise<Record<string, string>> {
+  const rawSlides = deck.slides as StoredSlide[];
+  if (!rawSlides.some((slide) => Array.isArray(slide.elements) && slide.elements.length > 0)) return {};
+  const themeRaw = deck.theme ?? {};
+  const restored = inlineImages(
+    rawSlides as unknown as { elements?: { src?: string | null }[] }[],
+    (themeRaw.library_images ?? []) as { data_url: string }[],
+    themeRaw.images,
+  );
+  const elementSlides = toElementSlides(restored.slides as unknown as StoredSlide[], themeRaw.template_id ?? "editorial", {
+    companyName: deck.name,
+  });
+  const theme = buildTheme({
+    ink: themeRaw.secondary_color || "#161412",
+    paper: "#faf8f3",
+    accent: themeRaw.primary_color || "#b8860b",
+    fontPairing: themeRaw.font_pairing || "fraunces-inter",
+    typeScale: themeRaw.type_scale || 1,
+  });
+  loadFontPairing(themeRaw.font_pairing || "fraunces-inter");
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;left:-99999px;top:-99999px;width:1280px;height:720px;";
+  document.body.appendChild(container);
+  const results: Record<string, string> = {};
+  try {
+    for (const slide of elementSlides) {
+      const chartElements = slide.elements.filter((el) => el.type === "chart");
+      if (chartElements.some((el) => !chartImages[el.id])) continue;
+      const slideDiv = document.createElement("div");
+      slideDiv.style.cssText = "width:1280px;height:720px;background:transparent;";
+      container.appendChild(slideDiv);
+      const root = createRoot(slideDiv);
+      root.render(
+        <SlideCanvas
+          slide={slide}
+          theme={theme}
+          interactive={false}
+          onChange={() => undefined}
+          renderChart={(el) => chartImages[el.id] ? <img src={chartImages[el.id]} alt="" style={{ width: "100%", height: "100%" }} /> : null}
+        />,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      if (document.fonts?.ready) await document.fonts.ready;
+      try {
+        const canvas = await html2canvas(slideDiv, { width: 1280, height: 720, scale: 1, backgroundColor: null });
+        results[slide.id] = canvas.toDataURL("image/png");
+      } catch {
+        // Fall back to the vector exporter for this slide.
+      }
+      root.unmount();
+      container.removeChild(slideDiv);
+    }
+  } finally {
+    document.body.removeChild(container);
+  }
+  return results;
 }
 
 export function DownloadMenu({ deckId }: { deckId: string }) {
@@ -475,6 +540,7 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
       setDownloadStage("Rendering charts...");
       const chartImages = await captureChartImages(deck.slides);
       const assetImages = await captureAssetImages(deck);
+      const slideImages = await captureElementSlideImages(deck, chartImages);
 
       setDownloadStage("Generating file...");
       const { data } = await supabase.auth.getSession();
@@ -486,7 +552,7 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ format, chart_images: chartImages, asset_images: assetImages }),
+        body: JSON.stringify({ format, chart_images: chartImages, asset_images: assetImages, slide_images: slideImages }),
       });
       if (res.status === 402) {
         // Payment required: hand the plans back so the caller can show the
