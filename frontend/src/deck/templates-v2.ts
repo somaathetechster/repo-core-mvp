@@ -244,6 +244,29 @@ export const composeDossier: Composer = (c) => {
     return { elements: els };
   }
 
+  if (c.kind === "contents") {
+    // Dossier is a ruled document, so the TOC must use the same masthead and
+    // table rhythm as the rest of the template instead of falling through to
+    // the finding/body layout.
+    els.push(makeElement("heading", { x: DM, y: 118, w: 500, h: 58, z: 10 },
+      { color: "ink", fontFamily: "display", fontSize: 38, fontWeight: 600 },
+      { text: c.title }));
+    const entries = c.contents ?? [];
+    const rowH = Math.min(62, Math.floor(470 / Math.max(entries.length, 1)));
+    entries.forEach((entry, i) => {
+      const y = 205 + i * rowH;
+      els.push(makeElement("caption", { x: DM, y: y + 18, w: 42, h: 18, z: 10 },
+        { color: "accent", fontFamily: "label", fontSize: 12, fontWeight: 700 },
+        { text: String(i + 3).padStart(2, "0") }));
+      els.push(makeElement("text", { x: DM + 58, y: y + 12, w: CANVAS_W - DM * 2 - 58, h: rowH - 18, z: 10 },
+        { color: "ink", fontFamily: "body", fontSize: 18, lineHeight: 1.3 },
+        { text: entry.title }));
+      els.push(makeElement("rule", { x: DM, y: y + rowH - 1, w: CANVAS_W - DM * 2, h: 1, z: 10 },
+        { background: "rule" }));
+    });
+    return { elements: els };
+  }
+
   // Body: a narrow left rail carrying the question and a verdict, and a
   // wide ruled table of findings on the right. This is the shape a real
   // diligence memo takes.
@@ -300,6 +323,21 @@ export const composeDossier: Composer = (c) => {
 
 export const composeEdition: Composer = (c) => {
   const els: SlideElement[] = [];
+  if (c.kind === "contents") {
+    els.push(makeElement("shape", { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H, z: 0 }, { background: "paper", shape: "rect" }));
+    els.push(makeElement("heading", { x: 64, y: 70, w: 720, h: 70, z: 10 },
+      { color: "ink", fontFamily: "display", fontSize: 48, fontWeight: 700 }, { text: c.title }));
+    (c.contents ?? []).forEach((entry, i) => {
+      const y = 170 + i * 48;
+      els.push(makeElement("caption", { x: 64, y, w: 48, h: 20, z: 10 },
+        { color: "accent", fontFamily: "label", fontSize: 12, fontWeight: 700 },
+        { text: String(i + 3).padStart(2, "0") }));
+      els.push(makeElement("text", { x: 128, y: y - 2, w: 900, h: 28, z: 10 },
+        { color: "ink", fontFamily: "body", fontSize: 19 }, { text: entry.title }));
+      els.push(makeElement("rule", { x: 64, y: y + 30, w: 1060, h: 1, z: 10 }, { background: "rule" }));
+    });
+    return { elements: els };
+  }
   const splitAt = Math.round(CANVAS_W * 0.52);
   const imageLeft = (c.pageNumber ?? 0) % 2 === 1;
   const imgX = imageLeft ? 0 : splitAt;
@@ -363,6 +401,20 @@ export const composeSignal: Composer = (c) => {
     makeElement("shape", { x: 0, y: 0, w: CANVAS_W, h: CANVAS_H, z: 0 },
       { background: c.kind === "cover" ? "ink" : "accent", shape: "rect" }),
   ];
+
+  if (c.kind === "contents") {
+    els.push(makeElement("heading", { x: SM, y: 110, w: 900, h: 70, z: 10 },
+      { color: "inverse", fontFamily: "display", fontSize: 58, fontWeight: 700 }, { text: c.title }));
+    (c.contents ?? []).forEach((entry, i) => {
+      const y = 220 + i * 48;
+      els.push(makeElement("caption", { x: SM, y, w: 52, h: 20, z: 10 },
+        { color: "inverse", fontFamily: "label", fontSize: 12, opacity: 0.7 },
+        { text: String(i + 3).padStart(2, "0") }));
+      els.push(makeElement("text", { x: SM + 72, y: y - 2, w: 900, h: 28, z: 10 },
+        { color: "inverse", fontFamily: "body", fontSize: 19 }, { text: entry.title }));
+    });
+    return { elements: els, background: "accent" };
+  }
 
   els.push(makeElement("caption", { x: SM, y: 56, w: 340, h: 18, z: 10 },
     { color: "inverse", fontFamily: "label", fontSize: 11, letterSpacing: "0.2em", opacity: 0.65 },
