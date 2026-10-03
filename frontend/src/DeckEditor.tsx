@@ -94,10 +94,6 @@ export default function DeckEditor({
     slides: [], themeSettings: DEFAULT_THEME, templateId: DEFAULT_TEMPLATE_ID,
   });
   const { slides, themeSettings, templateId } = history.state;
-  const withSyncedContents = useCallback(
-    (next: ElementSlide[]) => syncContentsSlides(next, templateId, { companyName: deckName }),
-    [templateId, deckName],
-  );
   // Update only the slides field, leaving theme/template untouched. `label`
   // coalesces rapid edits (one drag = one undo), same as before.
   const setSlides = useCallback(
@@ -105,13 +101,18 @@ export default function DeckEditor({
       history.set(
         (prev) => ({
           ...prev,
-          slides: withSyncedContents(typeof next === "function"
-            ? (next as (p: ElementSlide[]) => ElementSlide[])(prev.slides)
-            : next),
+          slides: syncContentsSlides(
+            typeof next === "function"
+              ? (next as (p: ElementSlide[]) => ElementSlide[])(prev.slides)
+              : next,
+            templateId,
+            { companyName: deckName },
+            prev.slides,
+          ),
         }),
         label,
       ),
-    [history.set, withSyncedContents],
+    [history.set, templateId, deckName],
   );
   // Theme/font/colour changes push a history entry (label "theme" coalesces a
   // slider sweep into one undo) rather than clearing the stack.

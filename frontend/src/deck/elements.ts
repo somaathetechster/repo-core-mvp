@@ -305,7 +305,10 @@ const KIND_BY_TITLE: [RegExp, SlideKind][] = [
 
 export function inferKind(legacy: LegacySlide): SlideKind {
   if (legacy.type === "cover") return "cover";
-  if (legacy.type === "toc") return "contents";
+  // Older/imported decks can carry TOC data while still labelling the slide
+  // as a generic text slide. Treat the structured field as authoritative so
+  // the contents page is not mistaken for an ordinary body slide.
+  if (legacy.type === "toc" || legacy.toc_entries?.length) return "contents";
   if (legacy.type === "team") return "team";
   if (legacy.type === "chart") return "data";
   for (const [pattern, kind] of KIND_BY_TITLE) {

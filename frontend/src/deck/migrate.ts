@@ -30,9 +30,25 @@ export function syncContentsSlides(
   slides: ElementSlide[],
   templateId: string,
   context: { companyName?: string } = {},
+  previous?: ElementSlide[],
 ): ElementSlide[] {
   const contentsIndex = slides.findIndex((slide) => slide.kind === "contents");
   if (contentsIndex < 0) return slides;
+  // A deliberately customized contents page should survive a reload. It is
+  // still rebuilt if the user later changes the slide list, but opening the
+  // deck must not erase manually added text or layout work.
+  if (!previous && slides[contentsIndex].customized) return slides;
+  // Editing an element on the contents page is still a normal editor action.
+  // Only rebuild its generated entries when the actual slide list or a slide
+  // name changed; otherwise a new text box on the TOC would be overwritten on
+  // the next state update.
+  if (previous) {
+    const signature = (items: ElementSlide[]) => items
+      .filter((slide) => slide.kind !== "contents")
+      .map((slide) => `${slide.id}\u0000${slide.title}`)
+      .join("\u0001");
+    if (signature(previous) === signature(slides)) return slides;
+  }
   const contents = slides[contentsIndex];
   const entries = slides
     .filter((slide) => slide.kind !== "cover" && slide.kind !== "contents")
