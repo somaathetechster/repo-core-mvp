@@ -94,7 +94,14 @@ export function toElementSlide(
       ? "contents"
       : stored.kind ?? inferKind(stored);
 
-  if (stored.customized && stored.elements && stored.elements.length > 0) {
+  const contentsEntries = stored.toc_entries ?? [];
+  const contentsHasSavedEntries = kind !== "contents"
+    || contentsEntries.length === 0
+    || contentsEntries.every((entry) =>
+      stored.elements?.some((element) => element.text?.toLowerCase().includes(entry.title.toLowerCase())),
+    );
+
+  if (stored.customized && stored.elements && stored.elements.length > 0 && contentsHasSavedEntries) {
     return {
       id: stored.id,
       kind,
