@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 /**
  * Undo/redo for the deck editor.
@@ -28,76 +28,79 @@ export interface HistoryApi<T> {
 }
 
 export function useHistory<T>(initial: T): HistoryApi<T> {
-  const [state, setState] = useState<T>(initial);
-  const past = useRef<T[]>([]);
-  const future = useRef<T[]>([]);
-  const lastLabel = useRef<string | null>(null);
-  const lastAt = useRef(0);
-  const [, force] = useState(0);
+  interface HistoryState {
+    present: T;
+    past: T[];
+    future: T[];
+    lastLabel: string | null;
+    lastAt: number;
+  }
+  const [history, setHistory] = useState<HistoryState>({
+    present: initial, past: [], future: [], lastLabel: null, lastAt: 0,
+  });
 
   const set = useCallback((next: T | ((prev: T) => T), label = "edit") => {
-    setState((prev) => {
-      const resolved = typeof next === "function" ? (next as (p: T) => T)(prev) : next;
-      if (Object.is(resolved, prev)) return prev;
-
+    setHistory((current) => {
+      const resolved = typeof next === "function"
+        ? (next as (p: T) => T)(current.present)
+        : next;
+      if (Object.is(resolved, current.present)) return current;
       const now = Date.now();
-      const sameGesture = label === lastLabel.current && now - lastAt.current < COALESCE_MS;
-
-      if (!sameGesture) {
-        past.current = [...past.current.slice(-(MAX_HISTORY - 1)), prev];
-        future.current = [];
-      }
-      lastLabel.current = label;
-      lastAt.current = now;
-      return resolved;
+      const sameGesture = label === current.lastLabel && now - current.lastAt < COALESCE_MS;
+      return {
+        present: resolved,
+        past: sameGesture ? current.past : [...current.past.slice(-(MAX_HISTORY - 1)), current.present],
+        future: sameGesture ? current.future : [],
+        lastLabel: label,
+        lastAt: now,
+      };
     });
-    force((n) => n + 1);
   }, []);
 
   const reset = useCallback((next: T) => {
-    past.current = [];
-    future.current = [];
-    lastLabel.current = null;
-    setState(next);
-    force((n) => n + 1);
+    setHistory({ present: next, past: [], future: [], lastLabel: null, lastAt: 0 });
   }, []);
 
   const undo = useCallback(() => {
-    setState((prev) => {
-      const previous = past.current[past.current.length - 1];
-      if (previous === undefined) return prev;
-      past.current = past.current.slice(0, -1);
-      future.current = [prev, ...future.current];
-      lastLabel.current = null;
-      return previous;
+    setHistory((current) => {
+      const previous = current.past.at(-1);
+      if (previous === undefined) return current;
+      return {
+        present: previous,
+        past: current.past.slice(0, -1),
+        future: [current.present, ...current.future],
+        lastLabel: null,
+        lastAt: 0,
+      };
     });
-    force((n) => n + 1);
   }, []);
 
   const redo = useCallback(() => {
-    setState((prev) => {
-      const next = future.current[0];
-      if (next === undefined) return prev;
-      future.current = future.current.slice(1);
-      past.current = [...past.current, prev];
-      lastLabel.current = null;
-      return next;
+    setHistory((current) => {
+      const next = current.future[0];
+      if (next === undefined) return current;
+      return {
+        present: next,
+        past: [...current.past, current.present],
+        future: current.future.slice(1),
+        lastLabel: null,
+        lastAt: 0,
+      };
     });
-    force((n) => n + 1);
   }, []);
 
   const commit = useCallback(() => {
-    lastLabel.current = null;
+    setHistory((current) => ({ ...current, lastLabel: null, lastAt: 0 }));
   }, []);
 
   return {
-    state,
+    state: history.present,
     set,
     reset,
     undo,
     redo,
-    canUndo: past.current.length > 0,
-    canRedo: future.current.length > 0,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
     commit,
   };
 }

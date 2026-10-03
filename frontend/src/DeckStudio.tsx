@@ -11,11 +11,13 @@ import {
   CANVAS_W, CANVAS_H, makeElement,
   type ElementSlide, type SlideElement,
 } from "./deck/elements";
+import { elementId } from "./deck/elements";
 import { COMPOSERS } from "./deck/composers";
 import { planVariants, type LayoutVariant } from "./deck/variants";
 import ImageLibrary from "./ImageLibrary";
 import { DEFAULT_CROP, type BrandImage } from "./deck/images";
 import { ASSET_CATEGORIES, searchAssets, assetToSvg, type AssetCategory } from "./deck/assets";
+import WordCount from "./WordCount";
 import "./deck-studio.css";
 
 const SCHEME_PRESETS: { id: string; name: string; ink: string; paper: string; accent: string }[] = [
@@ -321,9 +323,9 @@ export default function DeckStudio({
   function moveSlide(from: number, to: number) {
     const next = [...slides];
     const [moved] = next.splice(from, 1);
-    // Removing the source shifts everything after it left by one, so the
-    // insertion point moves back when dragging a slide forward.
-    const insertAt = from < to ? to - 1 : to;
+    // `to` is the final zero-based position, which makes the same operation
+    // usable by both the drag target and the per-slide move buttons.
+    const insertAt = Math.min(to, next.length);
     if (insertAt === from) return; // dropped in its own position
     next.splice(insertAt, 0, moved);
     onSlidesChange(next, "reorder-slides");
@@ -338,6 +340,34 @@ export default function DeckStudio({
     onCurrentChange(index); // open the editor on the new slide
     setSelectedId(null);
     setSelectedIds(new Set());
+  }
+
+  function duplicateSlide(index: number) {
+    const source = slides[index];
+    if (!source) return;
+    const idMap = new Map(source.elements.map((el) => [el.id, elementId(el.type)]));
+    const copy: ElementSlide = {
+      ...source,
+      id: elementId("slide"),
+      title: `${source.title || "Slide"} copy`,
+      elements: source.elements.map((el) => ({
+        ...el,
+        id: idMap.get(el.id)!,
+        attachedTo: el.attachedTo ? (idMap.get(el.attachedTo) ?? null) : el.attachedTo,
+      })),
+    };
+    const next = [...slides];
+    next.splice(index + 1, 0, copy);
+    onSlidesChange(next, "duplicate-slide");
+    onCurrentChange(index + 1);
+    setSelectedId(null);
+    setSelectedIds(new Set());
+  }
+
+  function moveSlideBy(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= slides.length) return;
+    moveSlide(index, target);
   }
 
   const insertButton = (at: number) => (
@@ -521,7 +551,7 @@ export default function DeckStudio({
           {slides.map((s, i) => (
             <Fragment key={s.id}>
               {insertButton(i)}
-              <button
+              <div
                 className={`dst-thumb ${i === current ? "is-active" : ""} ${dragOverIndex === i ? "dst-thumb-drag-over" : ""}`}
                 draggable
                 onDragStart={(e) => {
@@ -548,7 +578,12 @@ export default function DeckStudio({
                 <span className="dst-thumb-num">{i + 1}</span>
                 <span className="dst-thumb-title">{s.title}</span>
                 {s.customized && <span className="dst-thumb-dot" title="Hand-edited" />}
-              </button>
+                <span className="dst-thumb-actions" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" title="Move left" aria-label={`Move slide ${i + 1} left`} disabled={i === 0} onClick={() => moveSlideBy(i, -1)}>←</button>
+                  <button type="button" title="Move right" aria-label={`Move slide ${i + 1} right`} disabled={i === slides.length - 1} onClick={() => moveSlideBy(i, 1)}>→</button>
+                  <button type="button" title="Duplicate slide" aria-label={`Duplicate slide ${i + 1}`} onClick={() => duplicateSlide(i)}>⧉</button>
+                </span>
+              </div>
             </Fragment>
           ))}
           {insertButton(slides.length)}
@@ -863,6 +898,7 @@ export default function DeckStudio({
                   value={selected.text}
                   onChange={(e) => patchSelected({ text: e.target.value })}
                 />
+                <WordCount text={selected.text} />
               </label>
             )}
 

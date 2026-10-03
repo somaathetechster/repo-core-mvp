@@ -341,6 +341,7 @@ export default function DeckEditor({
       const t = e.target as HTMLElement;
       if (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      if (e.shiftKey ? !history.canRedo : !history.canUndo) return;
       e.preventDefault();
       if (e.shiftKey) history.redo();
       else history.undo();
@@ -361,7 +362,12 @@ export default function DeckEditor({
   /* ---------------- template switching ---------------- */
 
   function applyTemplate(nextId: string) {
+    if (nextId === templateId) return;
     const customized = slides.filter((s) => s.customized).length;
+    if (customized > 0 && !window.confirm(
+      `Changing the template may reflow ${customized} hand-edited slide${customized === 1 ? "" : "s"}. ` +
+      "You can undo the template change afterwards. Continue?",
+    )) return;
     // Recompose from the stored content, which preserves hand-edited slides
     // because toElementSlide honours the customized flag.
     const nextStored = toStoredSlides(slides, stored);
@@ -458,14 +464,13 @@ export default function DeckEditor({
       const d = await regenerateDeck(deckId, analyzedRepos as unknown as Record<string, unknown>[]);
       const storedSlides = d.slides as unknown as StoredSlide[];
       setStored(storedSlides);
-      // Regenerate rewrites every slide from scratch (the user confirmed losing
-      // layouts), so the history starts fresh here — but keeps the current
-      // theme and template.
-      history.reset({
+      // Regeneration is a normal history entry, so it can be undone just like
+      // a text, slide, theme, or template change.
+      history.set((prev) => ({
+        ...prev,
         slides: toElementSlides(storedSlides, templateId, { companyName: d.name }),
-        themeSettings,
-        templateId,
-      });
+      }), "regenerate");
+      markDirty();
       setCurrent(0);
       flash("Regenerated.");
     } catch (e) {

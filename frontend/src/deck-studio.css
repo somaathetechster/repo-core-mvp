@@ -47,6 +47,13 @@
   position: absolute; top: 6px; right: 6px; width: 5px; height: 5px;
   border-radius: 50%; background: var(--gold);
 }
+.dst-thumb-actions { display: flex; gap: .2rem; margin-top: .2rem; }
+.dst-thumb-actions button {
+  border: 1px solid var(--ink-border); border-radius: 4px; background: var(--ink);
+  color: var(--text-dim); padding: .12rem .3rem; font: .68rem var(--font-body); cursor: pointer;
+}
+.dst-thumb-actions button:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.dst-thumb-actions button:disabled { opacity: .3; cursor: default; }
 .dst-thumb[draggable="true"] { cursor: grab; }
 .dst-thumb[draggable="true"]:active { cursor: grabbing; }
 /* Gold insertion indicator shown while dragging a slide over a target. */
