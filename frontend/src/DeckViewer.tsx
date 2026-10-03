@@ -26,6 +26,7 @@ import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
 import FreeformCanvas from "./FreeformCanvas";
 import CompanyProfileForm from "./CompanyProfileForm";
 import { defaultLayoutForSlide, type LayoutElement } from "./layoutTypes";
+import { ASSETS, assetToSvg } from "./deck/assets";
 import "./theme.css";
 import "./deck.css";
 
@@ -399,6 +400,61 @@ export default function DeckViewer({ deckId, analyzedRepos, onBack }: DeckViewer
 
 import { captureChartImages } from "./chartCapture";
 
+function assetColor(token: string | undefined, theme: DeckTheme): string {
+  if (token?.startsWith("#")) return token;
+  if (token === "ink") return theme.secondary_color || "#161412";
+  if (token === "inverse") return theme.primary_color || "#faf8f3";
+  return theme.primary_color || "#b8860b";
+}
+
+/** Rasterises library SVGs once for the Python PPTX/PDF exporters. */
+async function captureAssetImages(deck: any): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const slides = (deck.slides ?? []) as { elements?: Record<string, unknown>[] }[];
+  const theme = (deck.theme ?? {}) as DeckTheme;
+  const jobs: Promise<void>[] = [];
+
+  for (const slide of slides) {
+    for (const el of slide.elements ?? []) {
+      if (el.type !== "asset") continue;
+      const style = (el.style ?? {}) as Record<string, string>;
+      const asset = ASSETS.find((item) => item.id === style.assetId);
+      if (!asset) continue;
+      const frame = (el.frame ?? {}) as { w?: number; h?: number };
+      const ratio = Math.max(0.1, (frame.w ?? asset.size.w) / Math.max(frame.h ?? asset.size.h, 1));
+      const color = assetColor(style.color, theme);
+      const assetStyle = (style.assetStyle as "solid" | "outline" | undefined)
+        ?? asset.defaultStyle ?? "solid";
+      const key = `${asset.id}:${assetStyle}:${style.color ?? "accent"}:${Math.round(ratio * 1000)}`;
+      if (out[key]) continue;
+      jobs.push(new Promise<void>((resolve) => {
+        const image = new Image();
+        image.onload = () => {
+          const width = 800;
+          const height = Math.max(80, Math.round(width / ratio));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.clearRect(0, 0, width, height);
+            const scale = Math.min(width / image.width, height / image.height);
+            const w = image.width * scale;
+            const h = image.height * scale;
+            ctx.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+            out[key] = canvas.toDataURL("image/png");
+          }
+          resolve();
+        };
+        image.onerror = () => resolve();
+        image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(assetToSvg(asset, color, assetStyle))}`;
+      }));
+    }
+  }
+  await Promise.all(jobs);
+  return out;
+}
+
 export function DownloadMenu({ deckId }: { deckId: string }) {
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -418,6 +474,7 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
 
       setDownloadStage("Rendering charts...");
       const chartImages = await captureChartImages(deck.slides);
+      const assetImages = await captureAssetImages(deck);
 
       setDownloadStage("Generating file...");
       const { data } = await supabase.auth.getSession();
@@ -429,7 +486,7 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ format, chart_images: chartImages }),
+        body: JSON.stringify({ format, chart_images: chartImages, asset_images: assetImages }),
       });
       if (res.status === 402) {
         // Payment required: hand the plans back so the caller can show the

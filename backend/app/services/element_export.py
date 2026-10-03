@@ -17,7 +17,7 @@ import io
 from pptx import Presentation
 from pptx.util import Emu, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import landscape
 from reportlab.lib.utils import ImageReader
@@ -257,8 +257,10 @@ def build_pptx_from_elements(
     slides: list[dict],
     theme_raw: dict,
     chart_images: dict[str, str] | None = None,
+    asset_images: dict[str, str] | None = None,
 ) -> bytes:
     chart_images = chart_images or {}
+    asset_images = asset_images or {}
     theme = Theme(theme_raw or {})
 
     prs = Presentation()
@@ -279,14 +281,23 @@ def build_pptx_from_elements(
         bg.shadow.inherit = False
 
         for el in _sorted_elements(slide_data):
-            _add_pptx_element(slide, el, theme, chart_images)
+            _add_pptx_element(slide, el, theme, chart_images, asset_images)
 
     buf = io.BytesIO()
     prs.save(buf)
     return buf.getvalue()
 
 
-def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str]) -> None:
+def _asset_key(el: dict) -> str:
+    frame = el.get("frame") or {}
+    style = el.get("style") or {}
+    ratio = round((frame.get("w", 100) / max(frame.get("h", 40), 1)) * 1000)
+    return f"{style.get('assetId', '')}:{style.get('assetStyle', 'solid')}:{style.get('color', 'accent')}:{ratio}"
+
+
+def _add_pptx_element(
+    slide, el: dict, theme: Theme, chart_images: dict[str, str], asset_images: dict[str, str]
+) -> None:
     frame = el.get("frame") or {}
     style = el.get("style") or {}
     etype = el.get("type")
@@ -304,6 +315,12 @@ def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str
         shp.line.fill.background()
         shp.shadow.inherit = False
         _pptx_fill_alpha(shp.fill, _element_opacity(el))
+        return
+
+    if etype == "asset":
+        img = _data_url_bytes(asset_images.get(_asset_key(el)))
+        if img:
+            slide.shapes.add_picture(io.BytesIO(img), x, y, w, h)
         return
 
     if etype == "chart":
@@ -354,6 +371,9 @@ def _add_pptx_element(slide, el: dict, theme: Theme, chart_images: dict[str, str
         box = slide.shapes.add_textbox(x, y, w, h)
         tf = box.text_frame
         tf.word_wrap = True
+        # Preserve all text even when the editor's frame is smaller than the
+        # final line height. PowerPoint otherwise clips the lower lines.
+        tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
         tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
         valign = style.get("verticalAlign")
         tf.vertical_anchor = {
@@ -390,8 +410,10 @@ def build_pdf_from_elements(
     slides: list[dict],
     theme_raw: dict,
     chart_images: dict[str, str] | None = None,
+    asset_images: dict[str, str] | None = None,
 ) -> bytes:
     chart_images = chart_images or {}
+    asset_images = asset_images or {}
     theme = Theme(theme_raw or {})
 
     page_w = CANVAS_W * PT_PER_PX
@@ -405,7 +427,7 @@ def build_pdf_from_elements(
         c.rect(0, 0, page_w, page_h, stroke=0, fill=1)
 
         for el in _sorted_elements(slide_data):
-            _draw_pdf_element(c, el, theme, chart_images, page_h)
+            _draw_pdf_element(c, el, theme, chart_images, asset_images, page_h)
 
         c.showPage()
 
@@ -413,7 +435,9 @@ def build_pdf_from_elements(
     return buf.getvalue()
 
 
-def _draw_pdf_element(c, el: dict, theme: Theme, chart_images: dict[str, str], page_h: float) -> None:
+def _draw_pdf_element(
+    c, el: dict, theme: Theme, chart_images: dict[str, str], asset_images: dict[str, str], page_h: float
+) -> None:
     # Element opacity: images bake it into their own alpha channel (see
     # _prepare_image), so only the vector/text elements need the canvas-level
     # alpha, and applying it to images too would fade them twice.
@@ -425,13 +449,15 @@ def _draw_pdf_element(c, el: dict, theme: Theme, chart_images: dict[str, str], p
         c.setFillAlpha(opacity)
         c.setStrokeAlpha(opacity)
     try:
-        _draw_pdf_element_body(c, el, theme, chart_images, page_h)
+        _draw_pdf_element_body(c, el, theme, chart_images, asset_images, page_h)
     finally:
         if faded:
             c.restoreState()
 
 
-def _draw_pdf_element_body(c, el: dict, theme: Theme, chart_images: dict[str, str], page_h: float) -> None:
+def _draw_pdf_element_body(
+    c, el: dict, theme: Theme, chart_images: dict[str, str], asset_images: dict[str, str], page_h: float
+) -> None:
     frame = el.get("frame") or {}
     style = el.get("style") or {}
     etype = el.get("type")
@@ -450,6 +476,15 @@ def _draw_pdf_element_body(c, el: dict, theme: Theme, chart_images: dict[str, st
                 c.ellipse(x, y, x + w, y + h, stroke=0, fill=1)
             else:
                 c.rect(x, y, w, h, stroke=0, fill=1)
+        return
+
+    if etype == "asset":
+        img = _data_url_bytes(asset_images.get(_asset_key(el)))
+        if img:
+            try:
+                c.drawImage(ImageReader(io.BytesIO(img)), x, y, w, h, mask="auto")
+            except Exception:
+                pass
         return
 
     if etype == "chart":
@@ -509,8 +544,6 @@ def _draw_pdf_element_body(c, el: dict, theme: Theme, chart_images: dict[str, st
 
         ty = y + h - size
         for line in lines:
-            if ty < y - leading:
-                break
             if align == "center":
                 c.drawCentredString(x + w / 2, ty, line)
             elif align == "right":
