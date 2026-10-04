@@ -106,7 +106,7 @@ async def create_crypto_checkout(body: CheckoutRequest, request: Request, user_i
     log.info("Crypto checkout starting — user=%s plan=%s email=%s", user_id, body.plan_id, email)
     order_id = f"provisio-{user_id}-{body.plan_id}-{int(datetime.now(timezone.utc).timestamp())}"
     payload = {
-        "price_amount": plan["amount"], "price_currency": "usd", "pay_currency": "usdt",
+        "price_amount": plan["amount"], "price_currency": "usd",
         "order_id": order_id, "order_description": f"{plan['name']} — Provisio",
         "ipn_callback_url": f"{BACKEND_URL}/webhooks/nowpayments",
         "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
