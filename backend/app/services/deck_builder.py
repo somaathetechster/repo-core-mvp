@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from app.services.narrative import build_technology_slide_content
 from app.services.github_extract import RepoSummary
 from app.services.program_intelligence import DeckBrief, build_brief
+from app.services.deck_structures import DeckStructure, SlideRole, get_structure
 
 
 @dataclass
@@ -74,6 +75,7 @@ def build_deck_from_narrative(
     profile: dict,
     narrative,
     repo_summaries: list[RepoSummary],
+    structure: DeckStructure | None = None,
 ) -> tuple[list[Slide], DeckTheme, list[str]]:
     """
     Builds a deck from written narrative copy rather than from raw profile
@@ -127,9 +129,11 @@ def build_deck_from_narrative(
             team_members=team,
         ))
 
-    MAX_SLIDES = 13   # +1 for the contents page inserted below
-    if len(slides) > MAX_SLIDES:
-        slides = slides[:MAX_SLIDES]
+    # Slide count comes from the chosen structure rather than a hardcoded cap,
+    # so the narrative path and the structure agree on length.
+    max_slides = structure.max_slides if structure else 13
+    if len(slides) > max_slides:
+        slides = slides[:max_slides]
 
     toc = Slide(
         id="toc", type="toc", title="Contents", blocks=[],
@@ -140,24 +144,49 @@ def build_deck_from_narrative(
     return slides, theme, list(narrative.warnings)
 
 
+def _role_blocks(profile: dict, role: SlideRole) -> list[SlideBlock]:
+    """
+    Turns a role's declared source fields into slide blocks, pulling text
+    straight from the profile. TAM/SAM/SOM are labelled rather than dumped
+    bare, since a lone number means nothing without its tier.
+    """
+    out: list[SlideBlock] = []
+    labels = {"tam": "TAM", "sam": "SAM", "som": "SOM"}
+    for key in role.source_fields:
+        if key in ("company_name", "one_liner", "team_members", "company_image_data_urls"):
+            continue
+        value = (profile.get(key) or "").strip() if isinstance(profile.get(key), str) else ""
+        if not value:
+            continue
+        if key in labels:
+            out.append(SlideBlock(text=f"{labels[key]}: {value}", source=PROFILE_SOURCE))
+        else:
+            out.append(SlideBlock(text=value, source=PROFILE_SOURCE))
+    return out
+
+
 def build_deck(
     profile: dict,
     repo_summaries: list[RepoSummary],
     brief: DeckBrief | None = None,
+    structure: DeckStructure | None = None,
 ) -> tuple[list[Slide], DeckTheme]:
     """
-    Assembles the deck for a specific reader.
+    Assembles the deck deterministically, driven by a chosen DeckStructure.
 
-    Slides are built as a pool of candidates keyed by section, then ordered,
-    filtered and trimmed according to the brief. That matters because the
-    right slides in the wrong order is still the wrong deck: a grant committee
-    reading market sizing before impact has already formed a view.
+    Slides are built as a pool of candidates keyed by the structure's role keys,
+    then ordered and trimmed according to that same structure. This is the
+    fallback path when the narrative engine can't run, so it reads from the one
+    source of truth the LLM path reads from — the structure decides order, slide
+    set and length, not a list duplicated here.
 
     The old version had a fixed order and trimmed by slicing the end, which
     silently dropped the ask — the one slide every deck needs.
     """
     if brief is None:
         brief = build_brief(profile)
+    if structure is None:
+        structure = get_structure(brief.structure_id)
 
     images_by_tag = _images_by_tag(profile)
 
@@ -167,14 +196,17 @@ def build_deck(
         font_style=profile.get("brand_font_style") or "serif",
     )
 
-    def blocks_from(*keys: str) -> list[SlideBlock]:
-        out: list[SlideBlock] = []
-        for k in keys:
-            out += _block_if_present(profile.get(k, ""))
-        return out
+    # Images matched to the role they were tagged for.
+    tag_for_role = {
+        "solution": "product", "product": "product", "solution_demo": "product",
+        "technology": "diagram", "moat": "diagram",
+        "problem": "customer", "problem_insight": "customer",
+        "traction": "press", "progress": "press", "traction_snapshot": "press",
+        "market": "background", "market_opportunity": "background",
+    }
 
-    # ── Candidate slides, one per section. A section with no content is
-    # simply absent, so nothing is ever invented to fill an outline. ──
+    # ── Candidate slides, one per role that has content. A role with no
+    # material is simply absent, so nothing is invented to fill an outline. ──
     candidates: dict[str, Slide] = {}
 
     cover_image = (images_by_tag.get("cover") or [None])[0] or (profile.get("logo_data_url") or None)
@@ -185,77 +217,63 @@ def build_deck(
         image_data_url=cover_image,
     )
 
-    def add(section: str, title: str, blocks: list[SlideBlock], **kw) -> None:
-        if blocks or kw.get("team_members"):
-            candidates[section] = Slide(id=section, type=kw.pop("type", "text"),
-                                        title=title, blocks=blocks, **kw)
+    team_members = profile.get("team_members") or []
 
-    add("problem", "Problem", blocks_from("problem"))
-    add("solution", "Solution", blocks_from("solution"))
-    add("why_now", "Why now", blocks_from("why_now"))
-    add("technology", "Why this is defensible",
-        blocks_from("evidence_of_innovation", "differentiation", "patents_or_ip"))
+    for role in structure.content_roles:
+        if "team_members" in role.source_fields and team_members:
+            candidates[role.key] = Slide(
+                id=role.key, type="team", title=role.label, team_members=team_members)
+            continue
+        blocks = _role_blocks(profile, role)
+        if not blocks:
+            continue
+        image = (images_by_tag.get(tag_for_role.get(role.key, "")) or [None])[0]
+        candidates[role.key] = Slide(
+            id=role.key, type="text", title=role.label, blocks=blocks, image_data_url=image)
 
-    market_blocks = blocks_from("market_opportunity", "customer_segment")
-    for label, key in [("TAM", "tam"), ("SAM", "sam"), ("SOM", "som")]:
-        if profile.get(key):
-            market_blocks.append(SlideBlock(text=f"{label}: {profile[key]}", source=PROFILE_SOURCE))
-    add("market", "Market", market_blocks,
-        image_data_url=(images_by_tag.get("market") or [None])[0])
-
-    add("competition", "Competition", blocks_from("competitive_landscape"))
-    add("traction", "Traction", blocks_from("traction", "key_metrics"),
-        image_data_url=(images_by_tag.get("traction") or [None])[0])
-    add("business_model", "Business model", blocks_from("business_model", "pricing_model", "unit_economics"))
-    add("impact", "Impact", blocks_from("impact_outcomes"))
-    add("milestones", "Milestones", blocks_from("milestones_next_12m", "go_to_market"))
-    add("use_of_funds", "Use of funds", blocks_from("use_of_funds"))
-    add("risks", "Risks and mitigations", blocks_from("risks_and_mitigations"))
-    add("fit", f"Why {brief.programme}", blocks_from("why_this_program"))
-    add("ask", "The ask", blocks_from("funding_ask")
-        or blocks_from("use_of_funds"))
-
-    if team_members := (profile.get("team_members") or []):
-        candidates["team"] = Slide(id="team", type="team", title="Team", team_members=team_members)
-
-    # One technology slide per analysed repository, appended to the section
-    # rather than replacing the founder's own differentiation copy.
+    # One technology slide per analysed repository. Attach the evidence to the
+    # product/moat/solution slide if the structure has one, otherwise stand it
+    # up as its own slide so the independent evidence is never lost.
+    attach_to = next((k for k in ("product", "moat", "solution", "technology")
+                      if k in candidates), None)
     for i, summary in enumerate(repo_summaries):
-        key = "technology" if "technology" not in candidates else f"technology-{i}"
         content = build_technology_slide_content(summary)
         block = SlideBlock(text=content, source=f"GitHub: {summary.full_name}")
-        if key in candidates:
-            candidates[key].blocks = candidates[key].blocks + [block]
+        if attach_to and i == 0:
+            candidates[attach_to].blocks = candidates[attach_to].blocks + [block]
         else:
-            candidates[key] = Slide(id=key, type="text",
-                                    title=f"Technology: {summary.full_name}", blocks=[block])
+            candidates[f"technology-{i}"] = Slide(
+                id=f"technology-{i}", type="text",
+                title=f"Technology: {summary.full_name}", blocks=[block])
 
     for i, image_url in enumerate(images_by_tag.get("product", [])):
         candidates[f"product-image-{i}"] = Slide(
             id=f"product-image-{i}", type="image", title="Product", image_data_url=image_url)
 
-    # ── Order by the brief; anything it doesn't mention keeps a stable place
-    # at the end so nothing the founder wrote silently disappears. ──
-    ordered_keys = [k for k in brief.section_order if k in candidates]
+    # ── Order by the structure; the title role is the cover. Extra slides the
+    # structure doesn't name (repo evidence, product images) keep a stable
+    # place at the end so nothing the founder supplied disappears. ──
+    ordered_keys = ["cover"]
+    for role in structure.content_roles:
+        if role.key in candidates and role.key not in ordered_keys:
+            ordered_keys.append(role.key)
     ordered_keys += [k for k in candidates if k not in ordered_keys and k != "contents"]
 
-    slides = [candidates[k] for k in ordered_keys]
-
-    # ── Trim to a length that gets read, dropping the least important first
-    # and never dropping a section the programme requires. ──
-    MAX_SLIDES = 13   # +1 for the contents page inserted below
-    if len(slides) > MAX_SLIDES:
-        protected = set(brief.required_sections) | {"cover", "ask"}
-        droppable = [k for k in reversed(ordered_keys)
-                     if k not in protected and k in brief.deprioritised]
-        droppable += [k for k in reversed(ordered_keys) if k not in protected and k not in droppable]
+    # ── Trim to the structure's max, dropping the least important first and
+    # never dropping a required role, the cover, or the ask. ──
+    max_slides = structure.max_slides
+    if len(ordered_keys) > max_slides:
+        ask_keys = {r.key for r in structure.roles if r.key.startswith("ask")}
+        protected = set(structure.required_roles) | {"cover"} | ask_keys
+        droppable = [k for k in reversed(ordered_keys) if k not in protected]
         to_drop: set[str] = set()
         for k in droppable:
-            if len(slides) - len(to_drop) <= MAX_SLIDES:
+            if len(ordered_keys) - len(to_drop) <= max_slides:
                 break
             to_drop.add(k)
         ordered_keys = [k for k in ordered_keys if k not in to_drop]
-        slides = [candidates[k] for k in ordered_keys]
+
+    slides = [candidates[k] for k in ordered_keys]
 
     if len(slides) > 1:
         slides.insert(1, Slide(id="toc", type="toc", title="Contents",

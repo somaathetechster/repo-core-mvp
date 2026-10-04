@@ -44,6 +44,9 @@ class DeckBrief:
     audience_label: str
     programme: str
 
+    #: The deck structure driving this brief's order and slide set.
+    structure_id: str
+
     #: Slide kinds in the order they should appear.
     section_order: list[str]
     #: Sections that must exist. Missing ones are flagged by the review.
@@ -67,18 +70,15 @@ class DeckBrief:
 # Audience models
 #
 # Each entry encodes how that reader actually reads, not a generic best
-# practice. The orders differ because the first three slides are where the
-# decision usually starts to form, and they should not be the same three.
+# practice: what they select on, how to write for them, and which sections
+# they always need. The *order* and slide set are no longer kept here — they
+# come from the deck structure this audience maps to (see deck_structures.py),
+# so there is one source of truth for deck shape.
 # ---------------------------------------------------------------------------
 
 _AUDIENCES: dict[Audience, dict] = {
     "vc": {
         "label": "Venture fund",
-        "order": [
-            "cover", "contents", "problem", "solution", "why_now", "market",
-            "business_model", "traction", "competition", "technology",
-            "team", "ask",
-        ],
         "required": ["problem", "solution", "market", "traction", "business_model", "team", "ask"],
         "deprioritised": ["impact"],
         "criteria": [
@@ -96,10 +96,6 @@ _AUDIENCES: dict[Audience, dict] = {
     },
     "accelerator": {
         "label": "Accelerator",
-        "order": [
-            "cover", "problem", "solution", "traction", "why_now", "team",
-            "fit", "market", "business_model", "technology", "competition", "ask",
-        ],
         "required": ["problem", "solution", "traction", "team", "why_now"],
         "deprioritised": ["competition", "impact"],
         "criteria": [
@@ -117,10 +113,6 @@ _AUDIENCES: dict[Audience, dict] = {
     },
     "grant": {
         "label": "Grant programme",
-        "order": [
-            "cover", "problem", "impact", "solution", "technology",
-            "milestones", "team", "use_of_funds", "fit", "market", "traction", "ask",
-        ],
         "required": ["problem", "solution", "impact", "use_of_funds", "milestones", "team"],
         "deprioritised": ["competition", "business_model"],
         "criteria": [
@@ -140,10 +132,6 @@ _AUDIENCES: dict[Audience, dict] = {
     },
     "competition": {
         "label": "Pitch competition",
-        "order": [
-            "cover", "problem", "solution", "technology", "traction",
-            "market", "competition", "team", "business_model", "ask",
-        ],
         "required": ["problem", "solution", "technology", "traction", "team"],
         "deprioritised": ["use_of_funds"],
         "criteria": [
@@ -160,10 +148,6 @@ _AUDIENCES: dict[Audience, dict] = {
     },
     "corporate": {
         "label": "Corporate programme",
-        "order": [
-            "cover", "problem", "solution", "technology", "fit",
-            "traction", "team", "business_model", "market", "ask",
-        ],
         "required": ["problem", "solution", "technology", "fit", "traction"],
         "deprioritised": ["market"],
         "criteria": [
@@ -180,10 +164,6 @@ _AUDIENCES: dict[Audience, dict] = {
     },
     "bank": {
         "label": "Lender",
-        "order": [
-            "cover", "business_model", "traction", "use_of_funds",
-            "risks", "team", "market", "solution", "ask",
-        ],
         "required": ["business_model", "traction", "use_of_funds", "risks", "ask"],
         "deprioritised": ["technology", "competition"],
         "criteria": [
@@ -198,10 +178,6 @@ _AUDIENCES: dict[Audience, dict] = {
     },
     "general": {
         "label": "Investors",
-        "order": [
-            "cover", "contents", "problem", "solution", "market",
-            "business_model", "traction", "competition", "technology", "team", "ask",
-        ],
         "required": ["problem", "solution", "market", "traction", "team", "ask"],
         "deprioritised": [],
         "criteria": [
@@ -407,6 +383,12 @@ def build_brief(profile: dict) -> DeckBrief:
     audience = classify_audience(program_type, program_name, requirements)
     spec = _AUDIENCES[audience]
 
+    # The order and slide set come from the deck structure this audience maps
+    # to — the single source of truth — not from a list duplicated here.
+    from app.services.deck_structures import structure_for_audience
+    structure = structure_for_audience(audience)
+    base_order = ["cover"] + [r.key for r in structure.content_roles]
+
     explicit = detect_requirements(requirements)
     question_map = map_questions(questions)
     from_questions = [m["section"] for m in question_map if m["section"]]
@@ -418,7 +400,7 @@ def build_brief(profile: dict) -> DeckBrief:
         if section not in required:
             required.append(section)
 
-    order = _order_with(list(spec["order"]), explicit + from_questions)
+    order = _order_with(base_order, explicit + from_questions)
 
     tone = list(spec["tone"])
     if program_name:
@@ -434,6 +416,7 @@ def build_brief(profile: dict) -> DeckBrief:
         audience=audience,
         audience_label=spec["label"],
         programme=program_name or spec["label"],
+        structure_id=structure.id,
         section_order=order,
         required_sections=required,
         deprioritised=list(spec["deprioritised"]),

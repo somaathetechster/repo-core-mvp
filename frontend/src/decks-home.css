@@ -45,7 +45,7 @@
 
 /* Wizard */
 .wizard-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1.5rem; backdrop-filter: blur(4px); }
-.wizard-modal { background: var(--ink-raised); border: 1px solid var(--border-strong); border-radius: 14px; padding: 2rem; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
+.wizard-modal { background: var(--ink-raised); border: 1px solid var(--border-strong); border-radius: 14px; padding: 2rem; max-width: 760px; width: 100%; max-height: 85vh; overflow-y: auto; }
 .wizard-modal h2 { font: 600 1.3rem var(--font-display); margin: 0 0 1.5rem; letter-spacing: -0.01em; }
 .wizard-section { margin: 1.25rem 0; }
 .wizard-section-label { font: 0.67rem var(--font-mono); letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem; display: block; }
@@ -53,6 +53,31 @@
 .wizard-repo-list { max-height: 160px; overflow-y: auto; padding-right: 0.25rem; }
 .wizard-note { color: var(--text-dim); font-size: 0.83rem; line-height: 1.55; }
 .wizard-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--ink-border); }
+
+/* Structure picker */
+.wizard-structure-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+.wizard-structure-head .wizard-section-label { margin-bottom: 0; }
+.wizard-recommend-btn { font: 0.74rem var(--font-mono); letter-spacing: 0.04em; color: var(--gold); background: var(--gold-faint); border: 1px solid var(--gold-dim); border-radius: 7px; padding: 0.35rem 0.7rem; cursor: pointer; transition: background 0.15s; }
+.wizard-recommend-btn:hover:not(:disabled) { background: var(--gold-soft); }
+.wizard-recommend-btn:disabled { opacity: 0.6; cursor: default; }
+.wizard-recommend-reason { font-size: 0.8rem; color: var(--gold); background: var(--gold-faint); border-left: 2px solid var(--gold-dim); padding: 0.5rem 0.75rem; border-radius: 0 6px 6px 0; margin: 0 0 0.85rem; line-height: 1.5; }
+
+.wizard-structure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 0.75rem; }
+.structure-card { text-align: left; background: transparent; border: 1px solid var(--ink-border); border-radius: 10px; padding: 0.85rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.4rem; transition: border-color 0.15s, background 0.15s; color: var(--text); }
+.structure-card:hover { border-color: var(--gold-dim); }
+.structure-card.selected { border-color: var(--gold); background: var(--gold-faint); }
+.structure-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.structure-card-name { font: 600 0.95rem var(--font-display); letter-spacing: -0.01em; }
+.structure-card-count { font: 0.66rem var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+.structure-card-audience { font-size: 0.74rem; color: var(--gold); line-height: 1.4; }
+.structure-card-desc { font-size: 0.76rem; color: var(--text-dim); line-height: 1.45; }
+.structure-card-roles { list-style: none; margin: 0.35rem 0 0; padding: 0; max-height: 168px; overflow-y: auto; counter-reset: role; display: flex; flex-direction: column; gap: 0.3rem; }
+.structure-card-roles li { position: relative; padding-left: 1.3rem; counter-increment: role; line-height: 1.35; }
+.structure-card-roles li::before { content: counter(role); position: absolute; left: 0; top: 0; font: 0.6rem var(--font-mono); color: var(--text-muted); width: 1rem; text-align: right; }
+.structure-role-name { display: block; font-size: 0.74rem; font-weight: 600; color: var(--text); }
+.structure-role-purpose { display: block; font-size: 0.68rem; color: var(--text-dim); line-height: 1.35; }
+.structure-card-roles li.role-optional .structure-role-name { color: var(--text-muted); font-weight: 500; }
+.structure-card-roles li.role-optional .structure-role-name::after { content: " · optional"; font: 0.6rem var(--font-mono); color: var(--text-muted); }
 
 /* Upgraded deck cards */
 .decks-home-loading { display:flex; align-items:center; gap:.75rem; padding:3rem 2.5rem; color:var(--text-dim); font-size:.88rem; }

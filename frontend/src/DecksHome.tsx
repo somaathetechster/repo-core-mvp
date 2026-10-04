@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { listDecks, createDeck, deleteDeck, renameDeck, type DeckSummary, type AnalyzeResult } from "./api";
+import {
+  listDecks, createDeck, deleteDeck, renameDeck, listStructures, recommendStructure,
+  type DeckSummary, type AnalyzeResult, type DeckStructureInfo,
+} from "./api";
 import DeckEditor from "./DeckEditor";
 import { DownloadMenu } from "./DeckViewer";
 import "./theme.css";
@@ -228,6 +231,24 @@ function NewDeckWizard({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The deck structure: which named shape to generate against. Loaded from the
+  // backend so the picker and generation share one source of truth.
+  const [structures, setStructures] = useState<DeckStructureInfo[] | null>(null);
+  const [structureId, setStructureId] = useState<string>("seed");
+  const [recommending, setRecommending] = useState(false);
+  const [recommendReason, setRecommendReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    listStructures()
+      .then((s) => {
+        setStructures(s);
+        // Default the selection to the first structure that exists, keeping
+        // seed if it is present (the baseline).
+        if (s.length && !s.some((x) => x.id === "seed")) setStructureId(s[0].id);
+      })
+      .catch(() => setStructures([]));
+  }, []);
+
   function toggleRepo(fullName: string) {
     setSelectedRepoNames((prev) => {
       const next = new Set(prev);
@@ -235,6 +256,20 @@ function NewDeckWizard({
       else next.add(fullName);
       return next;
     });
+  }
+
+  async function handleAutoRecommend() {
+    setRecommending(true);
+    setError(null);
+    try {
+      const { structure_id, reason } = await recommendStructure({ useSharedProfile });
+      setStructureId(structure_id);
+      setRecommendReason(reason);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't recommend a structure.");
+    } finally {
+      setRecommending(false);
+    }
   }
 
   async function handleCreate() {
@@ -248,6 +283,7 @@ function NewDeckWizard({
         name: name.trim() || "Untitled deck",
         useSharedProfile,
         repoSummaries: selectedSummaries,
+        structureId,
       });
       onCreated(deck.id);
     } catch (e) {
@@ -284,6 +320,60 @@ function NewDeckWizard({
             <input type="radio" checked={!useSharedProfile} onChange={() => setUseSharedProfile(false)} />
             Start blank for this deck
           </label>
+        </div>
+
+        <div className="wizard-section">
+          <div className="wizard-structure-head">
+            <span className="wizard-section-label">Deck structure</span>
+            <button
+              type="button"
+              className="wizard-recommend-btn"
+              onClick={handleAutoRecommend}
+              disabled={recommending}
+            >
+              {recommending ? "Thinking…" : "✦ Auto-recommend"}
+            </button>
+          </div>
+          {recommendReason && (
+            <p className="wizard-recommend-reason">{recommendReason}</p>
+          )}
+          {structures === null ? (
+            <p className="wizard-note">Loading structures…</p>
+          ) : (
+            <div className="wizard-structure-grid">
+              {structures.map((s) => {
+                const selected = s.id === structureId;
+                return (
+                  <button
+                    type="button"
+                    key={s.id}
+                    className={`structure-card${selected ? " selected" : ""}`}
+                    onClick={() => { setStructureId(s.id); setRecommendReason(null); }}
+                    aria-pressed={selected}
+                  >
+                    <div className="structure-card-head">
+                      <span className="structure-card-name">{s.name}</span>
+                      <span className="structure-card-count">
+                        {s.min_slides === s.max_slides
+                          ? `${s.max_slides} slides`
+                          : `${s.min_slides}–${s.max_slides} slides`}
+                      </span>
+                    </div>
+                    <div className="structure-card-audience">{s.target_audience}</div>
+                    <div className="structure-card-desc">{s.description}</div>
+                    <ol className="structure-card-roles">
+                      {s.roles.map((role) => (
+                        <li key={role.key} className={`role-${role.requirement}`}>
+                          <span className="structure-role-name">{role.label}</span>
+                          <span className="structure-role-purpose">{role.purpose}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="wizard-section">

@@ -18,6 +18,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.services.ai_provider import generate, GenerateRequest
+from app.services.deck_structures import DeckStructure, SlideRole, get_structure, GLOBAL_BARS
 
 
 @dataclass
@@ -71,26 +72,37 @@ Return valid JSON only, no markdown fences:
 }"""
 
 
-# The spine of a deck. Each entry says what the slide must accomplish, which
-# is more useful to the model than a bare label.
-SLIDE_PLAN: list[tuple[str, str, list[str]]] = [
-    ("problem", "Establish that a real, expensive problem exists and who has it.", ["problem", "market_opportunity"]),
-    ("solution", "Explain what the company does, concretely enough to picture it.", ["solution", "one_liner"]),
-    ("technology", "Show why this is hard to build and hard to copy.", ["evidence_of_innovation"]),
-    ("market", "Size the opportunity and explain why now.", ["market_opportunity"]),
-    ("traction", "Present evidence that it is working.", ["traction", "key_metrics"]),
-    ("business_model", "Explain how it makes money.", ["business_model", "pricing_model"]),
-    ("competition", "Position against alternatives honestly.", ["competitive_landscape"]),
-    ("ask", "State what is being raised and what it buys.", ["funding_ask"]),
-]
-
-
 def _field_text(profile: dict, key: str) -> str:
-    return (profile.get(key) or "").strip()
+    value = profile.get(key)
+    return value.strip() if isinstance(value, str) else ""
 
 
-def _build_input(profile: dict, diligence: dict | None) -> tuple[str, list[str]]:
-    """Assembles the evidence, and reports which slides have nothing behind them."""
+#: Roles whose case is strengthened by independent codebase evidence even when
+#: the founder left the matching profile fields thin.
+_DILIGENCE_ROLES = {"product", "solution", "solution_demo", "moat", "technology", "evidence"}
+
+
+def _role_has_material(profile: dict, role: SlideRole, diligence: dict | None) -> bool:
+    if any(_field_text(profile, f) for f in role.source_fields):
+        return True
+    # team_members is a list, not a text field.
+    if "team_members" in role.source_fields and (profile.get("team_members") or []):
+        return True
+    if diligence and role.key in _DILIGENCE_ROLES:
+        return True
+    return False
+
+
+def _build_input(
+    profile: dict, diligence: dict | None, structure: DeckStructure,
+) -> tuple[str, list[str]]:
+    """
+    Assembles the evidence and, from the chosen structure, the ordered list of
+    slides to write — each with its purpose and role-level quality bar inline.
+
+    Returns the prompt text and the roles that came out empty, so the caller can
+    warn the founder which sections had nothing behind them.
+    """
     lines: list[str] = []
     empty: list[str] = []
 
@@ -99,11 +111,15 @@ def _build_input(profile: dict, diligence: dict | None) -> tuple[str, list[str]]
     if one := _field_text(profile, "one_liner"):
         lines.append(f"ONE-LINER: {one}")
 
-    for key in [
-        "problem", "solution", "market_opportunity", "competitive_landscape",
-        "traction", "key_metrics", "business_model", "pricing_model",
-        "evidence_of_innovation", "risks_and_mitigations", "funding_ask",
-    ]:
+    # Every profile field a role in this structure draws on, de-duplicated and
+    # kept in a stable order, so the evidence block always carries what the
+    # slides-to-write section will reference.
+    evidence_keys: list[str] = []
+    for role in structure.content_roles:
+        for f in role.source_fields:
+            if f not in evidence_keys and f != "company_image_data_urls":
+                evidence_keys.append(f)
+    for key in evidence_keys:
         value = _field_text(profile, key)
         if value:
             lines.append(f"\n{key.upper().replace('_', ' ')}:\n{value}")
@@ -126,17 +142,25 @@ def _build_input(profile: dict, diligence: dict | None) -> tuple[str, list[str]]
         for integ in diligence.get("integration_depth", [])[:5]:
             lines.append(f"Integration: {integ.get('system')} — {integ.get('assessment')}")
 
-    plan_lines = []
-    for kind, purpose, needs in SLIDE_PLAN:
-        has_input = any(_field_text(profile, n) for n in needs) or (
-            kind == "technology" and diligence
-        )
+    plan_lines: list[str] = []
+    for role in structure.content_roles:
+        has_input = _role_has_material(profile, role, diligence)
         if has_input:
-            plan_lines.append(f"- {kind}: {purpose}")
-        else:
-            empty.append(kind)
+            plan_lines.append(
+                f"- kind \"{role.key}\": {role.purpose}\n"
+                f"    Quality bar: {role.quality_bar}"
+            )
+        elif role.requirement in ("required", "recommended"):
+            empty.append(role.key)
 
-    lines.append("\n--- SLIDES TO WRITE ---")
+    lines.append(
+        f"\n--- SLIDES TO WRITE ({structure.name} structure) ---"
+    )
+    lines.append(
+        f"Write between {structure.min_slides} and {structure.max_slides} slides "
+        f"(the cover is added separately, so it is not in this count). Use each role's "
+        f"exact key as the slide's \"kind\". Keep them in the order listed."
+    )
     lines.extend(plan_lines)
     lines.append(
         "\nWrite only the slides listed. Do not write slides for sections with no input."
@@ -183,12 +207,72 @@ def _verify_numbers(copy_text: str, source_text: str) -> list[str]:
     return sorted(set(unmatched))
 
 
+def _system_prompt() -> str:
+    """The writing rules, verbatim, plus the two global bars from the structure
+    engine so there is one source of truth for them."""
+    bars = "\n".join(f"- {b}" for b in GLOBAL_BARS)
+    return NARRATIVE_SYSTEM.replace(
+        "WHAT YOU MAY NOT DO",
+        f"TWO BARS APPLY TO EVERY SLIDE\n{bars}\n\nWHAT YOU MAY NOT DO",
+        1,
+    )
+
+
+def _minimal_slide(profile: dict, role: SlideRole) -> SlideCopy:
+    """
+    A honest stand-in for a required role the model skipped. It never invents:
+    if the founder supplied source text we lead with it, otherwise we leave a
+    visible prompt to fill it rather than silently dropping the slide.
+    """
+    for f in role.source_fields:
+        text = _field_text(profile, f)
+        if text:
+            first = text.strip().split("\n")[0][:240]
+            return SlideCopy(kind=role.key, title=role.label, lead=first, sources=[f])
+    return SlideCopy(
+        kind=role.key,
+        title=role.label,
+        lead=f"(Add your {role.label.lower()}: {role.purpose})",
+        sources=[],
+    )
+
+
+def _enforce_structure(
+    slides: list[SlideCopy], profile: dict, structure: DeckStructure, diligence: dict | None,
+) -> list[SlideCopy]:
+    """
+    Reorders the model's slides to the structure's role sequence.
+
+    Required roles the model skipped are kept as a minimal honest slide rather
+    than silently dropped. Optional/recommended roles with no source material are
+    dropped. Any slide the model produced that is not in the structure is kept at
+    the end rather than discarded.
+    """
+    by_kind: dict[str, SlideCopy] = {}
+    for s in slides:
+        by_kind.setdefault(s.kind, s)
+
+    ordered: list[SlideCopy] = []
+    for role in structure.content_roles:
+        if role.key in by_kind:
+            ordered.append(by_kind.pop(role.key))
+        elif role.requirement == "required":
+            ordered.append(_minimal_slide(profile, role))
+        # recommended/optional with nothing returned → dropped.
+
+    # Preserve anything extra the model wrote that we didn't place.
+    ordered.extend(by_kind.values())
+    return ordered
+
+
 def generate_narrative(
     profile: dict,
     diligence: dict | None = None,
     api_key_override: str | None = None,
+    structure_id: str | None = None,
 ) -> DeckNarrative:
-    source_text, empty_sections = _build_input(profile, diligence)
+    structure = get_structure(structure_id)
+    source_text, empty_sections = _build_input(profile, diligence, structure)
 
     # The same facts must be written differently for different readers. The
     # brief says who is reading, what they select on, and what the programme
@@ -203,7 +287,7 @@ def generate_narrative(
 
     raw = generate(GenerateRequest(
         task="deck_narrative",
-        system=NARRATIVE_SYSTEM,
+        system=_system_prompt(),
         prompt=source_text,
         max_tokens=3500,
         api_key_override=api_key_override,
@@ -231,6 +315,11 @@ def generate_narrative(
             points=[p.strip() for p in item.get("points", []) if p and p.strip()],
             sources=item.get("sources", []),
         ))
+
+    # CRITICAL: the model's returned order is not trusted. Reorder to the
+    # structure's role sequence, keep missing required roles as honest stubs,
+    # and drop optional roles it skipped.
+    slides = _enforce_structure(slides, profile, structure, diligence)
 
     warnings: list[str] = []
     if empty_sections:

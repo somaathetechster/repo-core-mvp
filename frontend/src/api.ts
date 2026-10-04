@@ -195,6 +195,7 @@ export async function createDeck(params: {
   name: string;
   useSharedProfile: boolean;
   repoSummaries: Record<string, unknown>[];
+  structureId?: string | null;
 }): Promise<FullDeck> {
   const res = await fetch(`${API_BASE}/decks`, {
     method: "POST",
@@ -203,9 +204,52 @@ export async function createDeck(params: {
       name: params.name,
       use_shared_profile: params.useSharedProfile,
       repo_summaries: params.repoSummaries,
+      structure_id: params.structureId ?? null,
     }),
   });
   if (!res.ok) await throwWithDetail(res, `Failed to create deck: ${res.status}`);
+  return res.json();
+}
+
+/* ---------------------------------------------------------------- */
+/* Deck structures — the named shapes a deck can be generated against */
+/* ---------------------------------------------------------------- */
+
+export interface DeckStructureRole {
+  key: string;
+  requirement: "required" | "recommended" | "optional";
+  purpose: string;
+  quality_bar: string;
+  source_fields: string[];
+  label: string;
+}
+
+export interface DeckStructureInfo {
+  id: string;
+  name: string;
+  description: string;
+  target_audience: string;
+  min_slides: number;
+  max_slides: number;
+  required_roles: string[];
+  roles: DeckStructureRole[];
+}
+
+export async function listStructures(): Promise<DeckStructureInfo[]> {
+  const res = await fetch(`${API_BASE}/decks/structures`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, `Failed to load deck structures: ${res.status}`);
+  return (await res.json()).structures ?? [];
+}
+
+export async function recommendStructure(params: {
+  useSharedProfile: boolean;
+}): Promise<{ structure_id: string; reason: string }> {
+  const res = await fetch(`${API_BASE}/decks/recommend-structure`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ use_shared_profile: params.useSharedProfile }),
+  });
+  if (!res.ok) await throwWithDetail(res, `Failed to recommend a structure: ${res.status}`);
   return res.json();
 }
 

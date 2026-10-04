@@ -26,7 +26,7 @@ import { buildTheme, type DeckTheme } from "./deck/theme";
 import { compose } from "./deck/composers";
 import { planFix } from "./deck/fixActions";
 import type { FixAction } from "./deck/fixActions";
-import { reviewDeck, unansweredQuestions, type Finding, type ProgramBrief } from "./deck/review";
+import { reviewDeck, unansweredQuestions, type Finding, type ProgramBrief, type ReviewStructure } from "./deck/review";
 import { planVariants } from "./deck/variants";
 import SlideCanvas from "./deck/SlideCanvas";
 import WordCount from "./WordCount";
@@ -345,6 +345,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
   const [deckId, setDeckId] = useState<string | null>(null);
   const [slides, setSlides] = useState<ElementSlide[] | null>(null);
   const [brief, setBrief] = useState<ProgramBrief | null>(null);
+  const [structure, setStructure] = useState<ReviewStructure | null>(null);
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const [deckTheme, setDeckTheme] = useState<DeckTheme>(() => reviewTheme(null));
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
@@ -406,7 +407,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
     getDeck(deckId)
       .then((d) => {
         if (cancelled) return;
-        const theme = d.theme as { template_id?: string; program_brief?: ProgramBrief } | null;
+        const theme = d.theme as { template_id?: string; program_brief?: ProgramBrief; program_structure?: ReviewStructure } | null;
         const tpl = theme?.template_id ?? DEFAULT_TEMPLATE_ID;
         setTemplateId(tpl);
         setDeckTheme(reviewTheme(d.theme as {
@@ -416,6 +417,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
           type_scale?: number | null;
         } | null));
         setBrief(theme?.program_brief ?? null);
+        setStructure(theme?.program_structure ?? null);
         setSlides(toElementSlides(d.slides as unknown as StoredSlide[], tpl, { companyName: d.name }));
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "Couldn't load deck"))
@@ -433,8 +435,8 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
       image: sl.elements.find((e) => e.type === "image" && e.src)?.src ?? null,
       chart: sl.elements.find((e) => e.type === "chart")?.chart ?? null,
     })));
-    return { ...reviewDeck(slides, variants, brief), questions: unansweredQuestions(slides) };
-  }, [slides, brief]);
+    return { ...reviewDeck(slides, variants, brief, structure), questions: unansweredQuestions(slides) };
+  }, [slides, brief, structure]);
 
   const scoredReview = useMemo(() => {
     if (!review) return null;
@@ -462,10 +464,11 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
       setFixing(findingId);
       try {
         const d = await addSlide(deckId, action.section);
-        const theme = d.theme as { template_id?: string; program_brief?: ProgramBrief } | null;
+        const theme = d.theme as { template_id?: string; program_brief?: ProgramBrief; program_structure?: ReviewStructure } | null;
         const tpl = theme?.template_id ?? DEFAULT_TEMPLATE_ID;
         setTemplateId(tpl);
         setBrief(theme?.program_brief ?? null);
+        setStructure(theme?.program_structure ?? null);
         setDeckTheme(reviewTheme(d.theme as {
           primary_color?: string | null;
           secondary_color?: string | null;

@@ -18,6 +18,7 @@ from app.routers.company_profile import CompanyProfileIn
 from app.services.program_intelligence import build_brief
 from app.services.deck_builder import build_deck, build_deck_from_narrative, slide_to_dict, theme_to_dict
 from app.services.narrative_engine import generate_narrative
+from app.services.deck_structures import get_structure, all_structures, recommend_structure
 from app.services.github_extract import RepoSummary
 
 router = APIRouter(prefix="/decks", tags=["decks"])
@@ -64,6 +65,35 @@ class CreateDeckRequest(BaseModel):
     name: str = "Untitled deck"
     use_shared_profile: bool = True
     repo_summaries: list[RepoSummary] = []
+    #: The deck structure to generate against. Falls back to the structure the
+    #: programme audience maps to when the caller doesn't choose one.
+    structure_id: str | None = None
+
+
+class RecommendStructureRequest(BaseModel):
+    use_shared_profile: bool = True
+    #: Optional inline profile/programme context, used instead of the saved
+    #: profile (e.g. before the founder has saved it).
+    profile: dict | None = None
+
+
+@router.get("/structures")
+async def list_structures():
+    """The seven deck structures, for the picker. No auth: these are static."""
+    return {"structures": all_structures()}
+
+
+@router.post("/recommend-structure")
+async def recommend_deck_structure(
+    body: RecommendStructureRequest, user_id: str = Depends(get_current_user_id)
+):
+    """Suggests the best structure for this founder's company and target programme."""
+    async with AsyncSessionLocal() as session:
+        profile = body.profile if body.profile is not None else (
+            await _shared_profile_dict(session, user_id) if body.use_shared_profile else {}
+        )
+    structure_id, reason = recommend_structure(profile or {})
+    return {"structure_id": structure_id, "reason": reason}
 
 
 @router.get("")
@@ -140,13 +170,21 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
             brief = None
             brief_dict = {}
 
+        # The chosen structure drives generation, order and length. If the
+        # caller didn't pick one, fall back to the structure the programme
+        # audience maps to (seed when there's no programme).
+        structure = get_structure(
+            body.structure_id or (brief.structure_id if brief else None)
+        )
+        structure_dict = structure.to_dict()
+
         try:
-            narrative = generate_narrative(profile, diligence)
+            narrative = generate_narrative(profile, diligence, structure_id=structure.id)
             slide_list, deck_theme, narrative_warnings = build_deck_from_narrative(
-                profile, narrative, body.repo_summaries
+                profile, narrative, body.repo_summaries, structure
             )
         except Exception as e:
-            slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief)
+            slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief, structure)
             narrative_warnings = [
                 f"Slides were written directly from your profile because the narrative "
                 f"step didn't complete: {e}"
@@ -158,7 +196,12 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
             profile_snapshot=profile,
             repo_full_names=[s.full_name for s in body.repo_summaries],
             slides=[slide_to_dict(s) for s in slide_list],
-            theme={**theme_to_dict(deck_theme), "program_brief": brief_dict},
+            theme={
+                **theme_to_dict(deck_theme),
+                "program_brief": brief_dict,
+                "structure_id": structure.id,
+                "program_structure": structure_dict,
+            },
             layouts={},
             freeform_slide_ids=[],
         )
@@ -257,7 +300,8 @@ async def append_slide(deck_id: str, body: AppendSlideRequest, user_id: str = De
 
         profile = deck.profile_snapshot or {}
         brief = build_brief(profile)
-        slide_list, _ = build_deck(profile, [], brief)
+        structure = get_structure((deck.theme or {}).get("structure_id") or brief.structure_id)
+        slide_list, _ = build_deck(profile, [], brief, structure)
         candidate = next((slide for slide in slide_list if slide.id == body.section), None)
         if candidate is None:
             raise HTTPException(
@@ -288,7 +332,8 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
         profile = deck.profile_snapshot or {}
         brief = build_brief(profile)
         brief_dict = brief.to_dict()
-        slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief)
+        structure = get_structure((deck.theme or {}).get("structure_id") or brief.structure_id)
+        slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief, structure)
         generated_slides = [slide_to_dict(s) for s in slide_list]
         old_slides = list(deck.slides or [])
         freeform_ids = list(deck.freeform_slide_ids or [])
@@ -327,7 +372,12 @@ async def regenerate_deck(deck_id: str, body: RegenerateRequest, user_id: str = 
         # Carrying them across means "regenerate" doesn't silently undo the
         # styling work they just did.
         previous_theme = deck.theme or {}
-        new_theme = {**theme_to_dict(deck_theme), "program_brief": brief_dict}
+        new_theme = {
+            **theme_to_dict(deck_theme),
+            "program_brief": brief_dict,
+            "structure_id": structure.id,
+            "program_structure": structure.to_dict(),
+        }
         for key in ("template_id", "scheme_id"):
             if previous_theme.get(key):
                 new_theme[key] = previous_theme[key]

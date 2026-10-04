@@ -83,6 +83,52 @@ export interface ProgramBrief {
   question_map: { question: string; section: string | null }[];
 }
 
+/** The chosen deck structure, as stored on the deck's theme. Drives which
+ *  roles are required, the per-slide quality bars, and the length bounds. */
+export interface ReviewStructureRole {
+  key: string;
+  requirement: "required" | "recommended" | "optional";
+  quality_bar: string;
+  label?: string;
+}
+export interface ReviewStructure {
+  id: string;
+  name: string;
+  min_slides: number;
+  max_slides: number;
+  required_roles: string[];
+  roles: ReviewStructureRole[];
+}
+
+/** Maps a structure's role key to the content signal that detects it. "cover"
+ *  means the role is the title page (always present); null means there is no
+ *  content signal to check (optional flourishes like a closing slide). */
+const ROLE_SIGNAL: Record<string, string | null> = {
+  title: "cover", title_mission: "cover",
+  market_opportunity: "market",
+  solution_demo: "product", approach: "solution",
+  problem_insight: "problem", statement_of_need: "problem",
+  traction_snapshot: "traction", progress: "traction", evidence: "traction",
+  timeline_milestones: "milestones", goals_objectives: "milestones",
+  budget: "use_of_funds",
+  capacity: "team", why_you: "team",
+  ask_batch: "ask", ask_contact: "ask",
+  closing: null, press: null, testimonials: null,
+  // product, moat, unit_economics, go_to_market, roadmap, financials,
+  // sustainability, why_now, impact each have their own SECTION_SIGNAL and so
+  // resolve to themselves via the fallthrough below.
+};
+
+function roleSignalSection(roleKey: string): string | null | undefined {
+  if (roleKey in ROLE_SIGNAL) return ROLE_SIGNAL[roleKey];
+  return roleKey; // keys that already match a SECTION_SIGNAL (problem, market, …)
+}
+
+const MOM_RE = /\b(month[- ]over[- ]month|mom\b|retention|churn|cohort|returning|repeat|week[- ]over[- ]week|\d+\s*%\s*(?:growth|retention|mom)?)\b/i;
+const UNIT_ECON_RE = /\b(cac|ltv|payback|gross margin|contribution margin|unit econom)\b/i;
+const FIRST_MOVER_RE = /\bfirst[- ](?:mover|to market)\b/i;
+const CITATION_RE = /\b(according to|study|studies|research|survey|census|report|\d+\s*%|data (?:from|shows)|statistics?|documented|cited?)\b/i;
+
 
 const SECTION_SIGNALS: Record<string, RegExp> = {
   problem: /\b(problem|pain|broken|fails?|failing|struggle|frustrat|inefficien|bottleneck|gap|lack of|no way to|difficult to|too (?:slow|expensive|hard)|underserved|friction|barrier)\b/i,
@@ -99,6 +145,13 @@ const SECTION_SIGNALS: Record<string, RegExp> = {
   risks: /\b(risk|mitigat|challeng|assumption|dependency|contingency|what could go wrong|regulatory|threat)\b/i,
   why_now: /\b(why now|timing|recently|shift|regulat\w+ change|new (?:law|regulation|technology)|inflection|tailwind|just became possible)\b/i,
   technology: /\b(technolog|architecture|built (?:on|with)|patent|proprietary|algorithm|infrastructure|api|model|engine|stack)\b/i,
+  product: /\b(product|screenshot|demo|dashboard|interface|features?|how it works|workflow|the app|user experience|ui)\b/i,
+  moat: /\b(moat|defensib|proprietary|network effect|switching cost|lock[- ]in|hard to (?:copy|replicate)|barrier to entry|data advantage|first[- ](?:mover|to market))\b/i,
+  unit_economics: /\b(cac|ltv|payback|gross margin|contribution margin|unit econom|customer acquisition cost|lifetime value)\b/i,
+  go_to_market: /\b(go[- ]to[- ]market|gtm|acquisition channel|sales motion|distribution|funnel|outbound|inbound|channel strategy)\b/i,
+  roadmap: /\b(roadmap|milestone|next (?:6|12|twelve|18|eighteen|six) months|phase|timeline|deliverable|by (?:q[1-4]|end of|20\d\d))\b/i,
+  financials: /\b(projection|forecast|financial|p&l|revenue (?:plan|projection)|burn|runway|ebitda|three[- ]year|5[- ]year)\b/i,
+  sustainability: /\b(sustainab|ongoing funding|after the (?:grant|funding|programme|program)|continue(?:d|s)? (?:after|beyond)|long[- ]term funding|self[- ]sustain|diversif\w+ (?:funding|revenue)|earned income)\b/i,
 };
 
 function sectionCovered(section: string, slides: ElementSlide[], kinds: string[]): boolean {
@@ -112,6 +165,7 @@ export function reviewDeck(
   slides: ElementSlide[],
   variants: LayoutVariant[] = [],
   brief?: ProgramBrief | null,
+  structure?: ReviewStructure | null,
 ): DeckReview {
   const findings: Finding[] = [];
   const strengths: string[] = [];
@@ -119,10 +173,33 @@ export function reviewDeck(
 
   /* --- 1. Is the argument complete? ------------------------------- */
 
-  // When the deck is aimed at a named programme, that programme's own
-  // requirements decide what "complete" means. A grant panel asking for a
-  // workplan is not satisfied by a deck with a great competition slide.
-  if (brief?.required_sections?.length) {
+  // The chosen structure decides what "complete" means. A grant deck is
+  // required to carry a statement of need, not a moat; a seed deck the reverse.
+  // When no structure is stored (legacy decks), fall back to the programme
+  // brief and then to the generic investor expectations below.
+  const structureRequiredCovered: boolean[] = [];
+  if (structure?.required_roles?.length) {
+    for (const roleKey of structure.required_roles) {
+      const section = roleSignalSection(roleKey);
+      if (section === "cover") { structureRequiredCovered.push(true); continue; }
+      if (section == null) continue; // no content signal to check
+      const covered = sectionCovered(section, slides, kinds);
+      structureRequiredCovered.push(covered);
+      if (covered) continue;
+      const role = structure.roles.find((r) => r.key === roleKey);
+      const label = (role?.label ?? roleKey).replace(/_/g, " ");
+      findings.push({
+        id: `struct-missing-${roleKey}`,
+        severity: "critical",
+        slideIndex: null,
+        title: `Nothing in the deck covers ${label}, which the ${structure.name} structure requires`,
+        detail: role?.quality_bar
+          ? `This is a required slide for this deck structure. ${role.quality_bar}`
+          : `This is a required slide for this deck structure. The review checked both slide titles and the text on every slide.`,
+        fix: `Add a ${label} slide, or fill that section of your company profile and regenerate.`,
+      });
+    }
+  } else if (brief?.required_sections?.length) {
     for (const section of brief.required_sections) {
       if (sectionCovered(section, slides, kinds)) continue;
       const label = section.replace(/_/g, " ");
@@ -135,6 +212,10 @@ export function reviewDeck(
         fix: `Add a ${label} slide, or fill that section of your company profile and regenerate.`,
       });
     }
+  }
+
+  // Application questions still need answering regardless of structure.
+  if (brief?.question_map?.length) {
     for (const q of brief.question_map ?? []) {
       if (q.section) continue;
       findings.push({
@@ -148,7 +229,11 @@ export function reviewDeck(
     }
   }
 
+  // The generic investor expectations only apply when no structure (and no
+  // programme brief) has already defined what this deck must contain —
+  // otherwise a grant deck would be penalised for lacking a market slide.
   for (const expected of EXPECTED) {
+    if (structure?.required_roles?.length) break;
     if (brief?.required_sections?.length && !brief.required_sections.includes(expected.kind)) continue;
     if (!sectionCovered(expected.kind, slides, kinds)) {
       findings.push({
@@ -197,6 +282,86 @@ export function reviewDeck(
     }
   });
 
+  /* --- 2b. Structure quality bars --------------------------------- */
+
+  // Each role carries a specific bar. Where a bar is checkable from the slide
+  // text, apply it to the slide that plays that role — e.g. a traction slide
+  // with no month-over-month figure, a unit-economics slide with no CAC/LTV.
+  if (structure?.roles?.length) {
+    const hasRole = (key: string) => structure.roles.some((r) => r.key === key);
+    const barFor = (key: string) => structure.roles.find((r) => r.key === key)?.quality_bar ?? "";
+    // The index of the first slide whose text matches a content signal.
+    const slideForSection = (section: string): number => {
+      if (kinds.includes(section as SlideKind)) return kinds.indexOf(section as SlideKind);
+      const signal = SECTION_SIGNALS[section];
+      if (!signal) return -1;
+      return slides.findIndex((sl) => signal.test(slideText(sl)));
+    };
+
+    // Traction family: numbers alone are not enough — the bar asks for a rate.
+    for (const key of ["traction", "traction_snapshot", "progress"]) {
+      if (!hasRole(key)) continue;
+      const idx = slideForSection(roleSignalSection(key) as string);
+      if (idx < 0) break; // missing entirely is the completeness check's job
+      if (!MOM_RE.test(slideText(slides[idx]))) {
+        findings.push({
+          id: `bar-traction-${idx}`,
+          severity: "important",
+          slideIndex: idx,
+          title: `"${slides[idx].title}" shows totals but no rate of change`,
+          detail: barFor(key) || "Returning or recommending users beat signups.",
+          fix: "Add month-over-month growth or retention — a cohort that comes back, not just a cumulative total.",
+        });
+      }
+      break;
+    }
+
+    // Unit economics: the bar is explicit about the maths it wants.
+    if (hasRole("unit_economics")) {
+      const idx = slideForSection("unit_economics");
+      if (idx >= 0 && !UNIT_ECON_RE.test(slideText(slides[idx]))) {
+        findings.push({
+          id: `bar-unit-econ-${idx}`,
+          severity: "important",
+          slideIndex: idx,
+          title: "The unit economics don't show the math",
+          detail: barFor("unit_economics"),
+          fix: "State CAC, LTV, the LTV:CAC ratio (aim >3:1), payback period and gross margin.",
+        });
+      }
+    }
+
+    // Moat: "first mover" is explicitly called out as not a moat.
+    if (hasRole("moat")) {
+      const idx = slides.findIndex((sl) => FIRST_MOVER_RE.test(slideText(sl)));
+      if (idx >= 0) {
+        findings.push({
+          id: `bar-moat-${idx}`,
+          severity: "important",
+          slideIndex: idx,
+          title: `"${slides[idx].title}" rests on being first`,
+          detail: barFor("moat") || "'First mover' is not a moat.",
+          fix: "Name what actually defends this — distribution, proprietary data, network effects, switching costs.",
+        });
+      }
+    }
+
+    // Statement of need (grant): the most-scored section must be evidenced.
+    if (hasRole("statement_of_need")) {
+      const idx = slideForSection("problem");
+      if (idx >= 0 && !CITATION_RE.test(slideText(slides[idx]))) {
+        findings.push({
+          id: `bar-need-${idx}`,
+          severity: "critical",
+          slideIndex: idx,
+          title: "The statement of need isn't backed by evidence",
+          detail: barFor("statement_of_need"),
+          fix: "Lead with documented, cited figures that the need is real, local and measurable.",
+        });
+      }
+    }
+  }
+
   /* --- 3. Density: what nobody will read -------------------------- */
 
   let totalWords = 0;
@@ -231,21 +396,27 @@ export function reviewDeck(
   /* --- 4. Length -------------------------------------------------- */
 
   const content = slides.filter((s) => s.kind !== "cover" && s.kind !== "contents").length;
-  if (content > 14) {
+  // The chosen structure sets the length it was designed for; fall back to the
+  // generic 6–14 band for legacy decks with no structure stored.
+  const maxLen = structure?.max_slides ?? 14;
+  const minLen = structure?.min_slides ?? 6;
+  if (content > maxLen) {
     findings.push({
       id: "too-long",
       severity: "important",
       slideIndex: null,
-      title: `${content} content slides is more than most investors will read`,
-      detail: "Seed decks that get meetings are usually ten to twelve slides. Past that, the later slides are rarely reached.",
+      title: `${content} content slides is more than the ${structure?.name ?? "deck"} structure is built for`,
+      detail: structure
+        ? `The ${structure.name} structure runs to ${maxLen} slides. Past that, the later slides are rarely reached.`
+        : "Seed decks that get meetings are usually ten to twelve slides. Past that, the later slides are rarely reached.",
       fix: "Move supporting detail to an appendix, and keep the main deck to the argument.",
     });
-  } else if (content < 6) {
+  } else if (content < minLen) {
     findings.push({
       id: "too-short",
       severity: "important",
       slideIndex: null,
-      title: `Only ${content} content slides`,
+      title: `Only ${content} content slides${structure ? `, below the ${structure.name} structure's ${minLen}` : ""}`,
       detail: "There is probably an obvious question this deck does not answer yet.",
       fix: "Check the missing sections above before sending it.",
     });
@@ -301,7 +472,13 @@ export function reviewDeck(
   /* --- strengths ---------------------------------------------------- */
 
   const covered = EXPECTED.filter((e) => sectionCovered(e.kind, slides, kinds)).length;
-  if (covered === EXPECTED.length) strengths.push("Every section an investor expects is present.");
+  if (structure?.required_roles?.length) {
+    if (structureRequiredCovered.length && structureRequiredCovered.every(Boolean)) {
+      strengths.push(`Every slide the ${structure.name} structure requires is present.`);
+    }
+  } else if (covered === EXPECTED.length) {
+    strengths.push("Every section an investor expects is present.");
+  }
   if (content >= 8 && content <= 12) strengths.push(`${content} content slides is the length that gets read.`);
   if (withImages >= 3) strengths.push("Imagery appears throughout rather than on one slide.");
   const numbered = slides.filter((s) => NUMBER_RE.test(slideText(s))).length;
@@ -317,7 +494,12 @@ export function reviewDeck(
     findings.filter((f) => f.severity === "critical").length * 11 +
     findings.filter((f) => f.severity === "important").length * 6 +
     findings.filter((f) => f.severity === "polish").length * 2;
-  const coverageRatio = covered / EXPECTED.length;
+  // The floor rewards a deck that covers what it is required to. When a
+  // structure is chosen, "required" means its required roles; otherwise the
+  // generic investor expectations.
+  const coverageRatio = structure?.required_roles?.length && structureRequiredCovered.length
+    ? structureRequiredCovered.filter(Boolean).length / structureRequiredCovered.length
+    : covered / EXPECTED.length;
   const floor = coverageRatio >= 0.6 ? 15 : 0;
   const score = Math.max(floor, Math.min(100, 100 - penalty));
 
