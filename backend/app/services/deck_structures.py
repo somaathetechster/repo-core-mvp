@@ -45,12 +45,20 @@ class SlideRole:
     def label(self) -> str:
         return self.key.replace("_", " ").strip().title()
 
+    @property
+    def quality_bar_detailed(self) -> str:
+        """The quality bar, with the preferred content-block hint appended when
+        this role has one. One source of truth for both the writing prompt and
+        the structure the picker/review read."""
+        hint = block_hint_for(self.key)
+        return f"{self.quality_bar} {hint}".strip() if hint else self.quality_bar
+
     def to_dict(self) -> dict:
         return {
             "key": self.key,
             "requirement": self.requirement,
             "purpose": self.purpose,
-            "quality_bar": self.quality_bar,
+            "quality_bar": self.quality_bar_detailed,
             "source_fields": list(self.source_fields),
             "label": self.label,
         }
@@ -114,6 +122,41 @@ GLOBAL_BARS: list[str] = [
     "Headline each slide with its conclusion, not its topic.",
     "Each slide must stand alone when read out of order.",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Preferred content block per role. Where a slide's content is naturally
+# structured, the generator should emit a typed block (stat/comparison/…)
+# rather than prose. This maps the role to the block that fits it, and the
+# hint sentence is appended to that role's quality bar.
+# ---------------------------------------------------------------------------
+
+PREFERRED_BLOCK: dict[str, str] = {
+    "traction": "stat", "traction_snapshot": "stat", "progress": "stat",
+    "evidence": "stat",
+    "competition": "comparison",
+    "roadmap": "timeline", "timeline_milestones": "timeline", "goals_objectives": "timeline",
+    "team": "chips", "why_you": "chips", "capacity": "chips",
+    "press": "logos",
+    "testimonials": "quote",
+    "financials": "bars", "budget": "bars", "ask": "bars",
+    "unit_economics": "bars", "use_of_funds": "bars", "ask_contact": "bars",
+}
+
+_BLOCK_HINT: dict[str, str] = {
+    "stat": "Lead with stat blocks for the key figures.",
+    "comparison": "Place yourself against the alternatives in a comparison table.",
+    "timeline": "Express the sequence as a timeline block.",
+    "chips": "Present the people as chips (name, role).",
+    "logos": "Present these as a logos row.",
+    "quote": "Carry it as a quote block with its attribution.",
+    "bars": "Show the split or projection as labeled bars.",
+}
+
+
+def block_hint_for(role_key: str) -> str:
+    """The preferred-block hint sentence for a role, or '' if it has none."""
+    return _BLOCK_HINT.get(PREFERRED_BLOCK.get(role_key, ""), "")
 
 
 # ---------------------------------------------------------------------------

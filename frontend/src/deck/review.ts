@@ -362,6 +362,39 @@ export function reviewDeck(
     }
   }
 
+  /* --- 2c. Figures rendered as prose instead of a block ----------- */
+
+  // A traction/market/competition/financials slide that has numbers but
+  // wrote them as prose would read faster as a stat/comparison/bars block.
+  // Polish only, and only when the data is actually there — a text-only slide
+  // with no figures is not penalised.
+  const BLOCK_OPPORTUNITY_KINDS = new Set<SlideKind>(["traction", "market", "competition"]);
+  const FINANCIALS_RE = /\b(projection|forecast|financial|p&l|burn|runway|revenue plan|three[- ]year|use of funds)\b/i;
+  const structuredKinds = (slide: ElementSlide): Set<string> => {
+    const out = new Set<string>();
+    for (const b of slide.content_blocks ?? []) out.add(b.type);
+    for (const el of slide.elements) {
+      if (el.type === "blocks" && el.blocks) for (const b of el.blocks) out.add(b.type);
+    }
+    return out;
+  };
+  slides.forEach((slide, i) => {
+    const isFinancials = FINANCIALS_RE.test(slide.title) || FINANCIALS_RE.test(slideText(slide));
+    if (!BLOCK_OPPORTUNITY_KINDS.has(slide.kind) && !isFinancials) return;
+    const text = slideText(slide);
+    if (!NUMBER_RE.test(text)) return; // no figures present → nothing to restructure
+    const present = structuredKinds(slide);
+    if (present.has("stat") || present.has("comparison") || present.has("bars")) return;
+    findings.push({
+      id: `blockable-${i}`,
+      severity: "polish",
+      slideIndex: i,
+      title: `"${slide.title}" shows its figures as prose`,
+      detail: "The numbers on this slide would land faster as a structured block than inside a sentence.",
+      fix: "Consider showing these figures as a stat block (or a comparison table / bars, whichever fits).",
+    });
+  });
+
   /* --- 3. Density: what nobody will read -------------------------- */
 
   let totalWords = 0;

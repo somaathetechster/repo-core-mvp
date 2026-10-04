@@ -36,6 +36,10 @@ class Slide:
     image_data_url: str | None = None
     team_members: list[dict] | None = None  # only set for the Team slide
     toc_entries: list[dict] | None = None  # only set for the Table of Contents slide
+    # Optional typed content blocks (stat/comparison/timeline/logos/chips/
+    # quote/bars) produced by the narrative engine. Rendered as designed
+    # elements by the frontend; a slide with none renders as text-only.
+    content_blocks: list[dict] | None = None
 
 
 @dataclass
@@ -120,6 +124,7 @@ def build_deck_from_narrative(
         image = (images_by_tag.get(tag) or [None])[0] if tag else None
         slides.append(Slide(
             id=kind, type="text", title=item.title, blocks=blocks, image_data_url=image,
+            content_blocks=(list(item.blocks) if getattr(item, "blocks", None) else None),
         ))
 
     team = profile.get("team_members") or []
@@ -291,6 +296,7 @@ def slide_to_dict(slide: Slide) -> dict:
         "image_data_url": slide.image_data_url,
         "team_members": slide.team_members,
         "toc_entries": slide.toc_entries,
+        "content_blocks": slide.content_blocks,
     }
 
 

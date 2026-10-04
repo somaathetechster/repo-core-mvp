@@ -1,4 +1,7 @@
 import { supabase } from "./supabaseClient";
+import type { ContentBlock } from "./deck/elements";
+
+export type { ContentBlock } from "./deck/elements";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -155,6 +158,8 @@ export interface DeckSlide {
   team_members: DeckTeamMember[] | null;
   toc_entries: { title: string }[] | null;
   chart?: { chart_type: "bar" | "line" | "pie" | "table"; columns: string[]; rows: string[][] };
+  /** Typed content blocks produced by generation; optional and additive. */
+  content_blocks?: ContentBlock[] | null;
 }
 
 export interface DeckTheme {

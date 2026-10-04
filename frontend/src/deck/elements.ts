@@ -40,7 +40,68 @@ export type ElementType =
   | "quote"
   | "logo"
   | "asset"
+  | "blocks"
   | "pageNumber";
+
+/* ------------------------------------------------------------------ */
+/* Typed content blocks                                                */
+/*                                                                     */
+/* Beyond title/lead/points/sources a generated slide may carry an     */
+/* ordered list of typed content blocks the builder and templates can  */
+/* render as designed elements (stat callouts, comparison tables, etc) */
+/* rather than prose. Every block type is optional; a slide with none  */
+/* renders exactly as a text-only slide does.                          */
+/* ------------------------------------------------------------------ */
+
+export interface StatBlock {
+  type: "stat";
+  value: string;
+  label: string;
+  sublabel?: string;
+  sources?: string[];
+}
+export interface ComparisonBlock {
+  type: "comparison";
+  columns: string[];
+  rows: { cells: string[] }[];
+  sources?: string[];
+}
+export interface TimelineBlock {
+  type: "timeline";
+  items: { period: string; points: string[] }[];
+  sources?: string[];
+}
+export interface LogosBlock {
+  type: "logos";
+  items: { name: string; note?: string }[];
+  sources?: string[];
+}
+export interface ChipsBlock {
+  type: "chips";
+  items: { name: string; role?: string; note?: string }[];
+  sources?: string[];
+}
+export interface QuoteBlock {
+  type: "quote";
+  text: string;
+  author: string;
+  role?: string;
+  sources?: string[];
+}
+export interface BarsBlock {
+  type: "bars";
+  items: { label: string; value: number; max?: number }[];
+  sources?: string[];
+}
+
+export type ContentBlock =
+  | StatBlock
+  | ComparisonBlock
+  | TimelineBlock
+  | LogosBlock
+  | ChipsBlock
+  | QuoteBlock
+  | BarsBlock;
 
 export interface Frame {
   x: number;
@@ -105,6 +166,8 @@ export interface SlideElement {
     rows: string[][];
     encoding?: Record<string, unknown>;
   };
+  /** Typed content blocks, for a "blocks" element. */
+  blocks?: ContentBlock[];
   /** A caption element attached to another element, so moving the parent
    *  can move the caption with it. */
   attachedTo?: string | null;
@@ -150,6 +213,10 @@ export interface ElementSlide {
   /** Set when the user has hand-positioned elements, so a template change
    *  can offer to preserve their work instead of silently discarding it. */
   customized?: boolean;
+  /** Typed content blocks for this slide, carried through save/load and
+   *  rendered via a composed "blocks" element. Independent of the rendering,
+   *  so a template switch cannot consume it. */
+  content_blocks?: ContentBlock[] | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -288,6 +355,8 @@ export interface LegacySlide {
   team_members: { name: string; role: string; bio: string; photo_data_url: string; linkedin_url: string }[] | null;
   toc_entries: { title: string }[] | null;
   chart?: { chart_type: string; columns: string[]; rows: string[][] };
+  /** Typed content blocks produced by generation; optional and additive. */
+  content_blocks?: ContentBlock[] | null;
 }
 
 const KIND_BY_TITLE: [RegExp, SlideKind][] = [

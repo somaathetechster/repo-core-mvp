@@ -3,6 +3,7 @@ import type { SlideElement, ElementStyle } from "./elements";
 import type { DeckTheme } from "./theme";
 import { treatmentFilter, objectPosition, type ImageTreatment } from "./images";
 import { ASSETS, assetToSvg } from "./assets";
+import SlideBlocks from "./SlideBlocks";
 
 /**
  * Renders a single element.
@@ -189,6 +190,13 @@ export default function ElementView({
       return (
         <div style={{ ...css, overflow: "hidden" }}>
           {renderChart ? renderChart(element) : null}
+        </div>
+      );
+
+    case "blocks":
+      return (
+        <div style={{ ...css, overflow: "hidden" }}>
+          <SlideBlocks blocks={element.blocks ?? []} theme={theme} />
         </div>
       );
 

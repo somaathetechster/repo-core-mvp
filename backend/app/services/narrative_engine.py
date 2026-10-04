@@ -29,6 +29,10 @@ class SlideCopy:
     points: list[str] = field(default_factory=list)
     # Evidence the copy rests on, surfaced under the slide.
     sources: list[str] = field(default_factory=list)
+    # Optional typed content blocks (stat/comparison/timeline/logos/chips/
+    # quote/bars) the model may emit where the content is naturally
+    # structured. Kept as validated raw dicts — see _KNOWN_BLOCK_TYPES.
+    blocks: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -58,6 +62,10 @@ WHAT YOU MAY NOT DO
 
 For each slide, list in "sources" which input fields you drew on, so every claim can be traced back.
 
+CONTENT BLOCKS
+Where a slide's content is naturally structured, express it as a content block instead of prose. A traction slide's numbers become `stat` blocks. A competition slide becomes a `comparison` table. A roadmap becomes a `timeline`. A team slide becomes `chips`. Press/customers become `logos`. A testimonial becomes a `quote`. Use-of-funds or projections become `bars`. NEVER invent data for a block — every value must come from the founder's input or the technical evidence. If the data for a block does not exist, write prose instead. A block with real numbers always beats a paragraph describing them.
+Any block carrying data must list its source fields in that block's own "sources", exactly as the slide does.
+
 Return valid JSON only, no markdown fences:
 {
   "slides": [
@@ -66,10 +74,20 @@ Return valid JSON only, no markdown fences:
       "title": "Short, specific slide title",
       "lead": "The one sentence that carries the slide.",
       "points": ["Supporting point.", "Supporting point."],
-      "sources": ["problem", "traction"]
+      "sources": ["problem", "traction"],
+      "blocks": [
+        { "type": "stat", "value": "54%", "label": "week-1 retention", "sublabel": "8-week cohort", "sources": ["traction"] },
+        { "type": "comparison", "columns": ["", "Us", "Incumbent"], "rows": [{ "cells": ["Onboarding", "2 min", "2 weeks"] }], "sources": ["competitive_landscape"] },
+        { "type": "timeline", "items": [{ "period": "H1 2026", "points": ["Launch in Lagos", "First 1,000 users"] }], "sources": ["milestones_next_12m"] },
+        { "type": "logos", "items": [{ "name": "TechCrunch", "note": "Featured" }], "sources": ["traction"] },
+        { "type": "chips", "items": [{ "name": "Ada Obi", "role": "CEO", "note": "ex-Paystack" }], "sources": ["team_members"] },
+        { "type": "quote", "text": "It cut our settlement time from days to minutes.", "author": "Chidi N.", "role": "CFO, Acme", "sources": ["traction"] },
+        { "type": "bars", "items": [{ "label": "Engineering", "value": 60, "max": 100 }, { "label": "Go-to-market", "value": 40, "max": 100 }], "sources": ["use_of_funds"] }
+      ]
     }
   ]
-}"""
+}
+The "blocks" array is OPTIONAL. Omit it entirely on slides whose content is prose. Include only the block types that fit the slide, never all of them, and only when every value is real."""
 
 
 def _field_text(profile: dict, key: str) -> str:
@@ -148,7 +166,7 @@ def _build_input(
         if has_input:
             plan_lines.append(
                 f"- kind \"{role.key}\": {role.purpose}\n"
-                f"    Quality bar: {role.quality_bar}"
+                f"    Quality bar: {role.quality_bar_detailed}"
             )
         elif role.requirement in ("required", "recommended"):
             empty.append(role.key)
@@ -205,6 +223,72 @@ def _verify_numbers(copy_text: str, source_text: str) -> list[str]:
         unmatched.append(raw)
 
     return sorted(set(unmatched))
+
+
+_KNOWN_BLOCK_TYPES = {"stat", "comparison", "timeline", "logos", "chips", "quote", "bars"}
+
+
+def _sanitize_blocks(raw) -> list[dict]:
+    """
+    Keeps only well-formed blocks of a known type, discarding anything the
+    model returned in the wrong shape. This never adds data — it only drops
+    malformed entries — so the never-invent guarantee is unaffected.
+    """
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for b in raw:
+        if not isinstance(b, dict):
+            continue
+        t = b.get("type")
+        if t not in _KNOWN_BLOCK_TYPES:
+            continue
+        # Minimal shape check per type; a block missing its payload is dropped
+        # rather than rendered empty.
+        if t == "stat" and not (b.get("value") and b.get("label")):
+            continue
+        if t == "comparison" and not (isinstance(b.get("columns"), list) and isinstance(b.get("rows"), list) and b["rows"]):
+            continue
+        if t == "timeline" and not (isinstance(b.get("items"), list) and b["items"]):
+            continue
+        if t in ("logos", "chips") and not (isinstance(b.get("items"), list) and b["items"]):
+            continue
+        if t == "quote" and not (b.get("text") and b.get("author")):
+            continue
+        if t == "bars" and not (isinstance(b.get("items"), list) and b["items"]):
+            continue
+        out.append(b)
+    return out
+
+
+def _block_text(blocks: list[dict]) -> str:
+    """
+    Flattens every value a block carries into one string, so the number
+    verification pass checks figures inside blocks the same way it checks
+    prose. An invented stat value or bar figure must be caught too.
+    """
+    parts: list[str] = []
+    for b in blocks:
+        t = b.get("type")
+        if t == "stat":
+            parts += [str(b.get("value", "")), str(b.get("label", "")), str(b.get("sublabel", ""))]
+        elif t == "comparison":
+            parts += [str(c) for c in (b.get("columns") or [])]
+            for row in b.get("rows") or []:
+                parts += [str(c) for c in (row.get("cells") or [])]
+        elif t == "timeline":
+            for it in b.get("items") or []:
+                parts.append(str(it.get("period", "")))
+                parts += [str(p) for p in (it.get("points") or [])]
+        elif t in ("logos", "chips"):
+            for it in b.get("items") or []:
+                parts += [str(it.get("name", "")), str(it.get("role", "")), str(it.get("note", ""))]
+        elif t == "quote":
+            parts += [str(b.get("text", "")), str(b.get("author", "")), str(b.get("role", ""))]
+        elif t == "bars":
+            for it in b.get("items") or []:
+                parts += [str(it.get("label", "")), str(it.get("value", "")), str(it.get("max", ""))]
+    return " ".join(p for p in parts if p)
 
 
 def _system_prompt() -> str:
@@ -314,6 +398,7 @@ def generate_narrative(
             lead=lead,
             points=[p.strip() for p in item.get("points", []) if p and p.strip()],
             sources=item.get("sources", []),
+            blocks=_sanitize_blocks(item.get("blocks")),
         ))
 
     # CRITICAL: the model's returned order is not trusted. Reorder to the
@@ -329,7 +414,11 @@ def generate_narrative(
             + ". Fill those fields in your profile and regenerate."
         )
 
-    all_copy = "\n".join(s.lead + " " + " ".join(s.points) for s in slides)
+    # Verify numbers in the prose AND inside any content blocks: an invented
+    # stat value or bar figure is exactly as damaging as an invented sentence.
+    all_copy = "\n".join(
+        s.lead + " " + " ".join(s.points) + " " + _block_text(s.blocks) for s in slides
+    )
     unmatched = _verify_numbers(all_copy, source_text)
     if unmatched:
         warnings.append(
@@ -350,6 +439,7 @@ def narrative_to_dict(n: DeckNarrative) -> dict:
                 "lead": s.lead,
                 "points": s.points,
                 "sources": s.sources,
+                "blocks": s.blocks,
             }
             for s in n.slides
         ],

@@ -14,7 +14,7 @@
  */
 import {
   CANVAS_W, CANVAS_H, makeElement, elementId,
-  type SlideElement, type ElementSlide, type SlideKind,
+  type SlideElement, type ElementSlide, type SlideKind, type ContentBlock,
 } from "./elements";
 import { measureHeight } from "./measure";
 
@@ -35,6 +35,9 @@ export interface SlideContentInput {
   showGrid?: boolean;
   /** Several images, for templates whose composition is an image grid. */
   galleryImages?: (string | null)[];
+  /** Typed content blocks, rendered as a composed body card. Optional:
+   *  a slide with none composes exactly as it does today. */
+  blocks?: ContentBlock[] | null;
 }
 
 export type { Composer as ComposerFn };
@@ -1031,11 +1034,35 @@ function ensureChrome(
   return out;
 }
 
+/** The y-band a composed blocks card occupies: a lower body region clear of
+ *  the bottom chrome (page number / company caption). */
+const BLOCKS_FRAME = { x: 72, y: 296, w: CANVAS_W - 144, h: 340, z: 14 };
+
 export function compose(templateId: string, content: SlideContentInput): ElementSlide {
   const composer = COMPOSERS[templateId] ?? composeEditorial;
-  const composed = composer(content);
+  const hasBlocks = (content.blocks?.length ?? 0) > 0;
+
+  // When a slide carries structured blocks, the prose is reduced to the lead
+  // so the composer lays out title + lead at the top and the blocks card owns
+  // the body. A slide with no blocks is composed exactly as before.
+  const composerInput: SlideContentInput = hasBlocks
+    ? { ...content, paragraphs: content.paragraphs.slice(0, 1) }
+    : content;
+
+  const composed = composer(composerInput);
   const background = composed.background;
-  const elements = ensureChrome(composed.elements, content, background);
+  let elements = ensureChrome(composed.elements, composerInput, background);
+
+  if (hasBlocks) {
+    // One "blocks" element carries the whole typed payload; it renders as a
+    // self-contained, theme-aware card and is draggable/resizable like any
+    // element. Kept above background shapes but below locked chrome.
+    elements = [
+      ...elements,
+      makeElement("blocks", { ...BLOCKS_FRAME }, {}, { blocks: content.blocks ?? [] }),
+    ];
+  }
+
   return {
     id: elementId("slide"),
     kind: content.kind,
@@ -1043,5 +1070,6 @@ export function compose(templateId: string, content: SlideContentInput): Element
     elements,
     background: background ?? "paper",
     customized: false,
+    content_blocks: content.blocks ?? null,
   };
 }

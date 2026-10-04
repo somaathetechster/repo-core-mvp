@@ -113,6 +113,7 @@ export function toElementSlide(
       ),
       background: stored.background ?? "paper",
       customized: true,
+      content_blocks: stored.content_blocks ?? null,
     };
   }
 
@@ -124,6 +125,7 @@ export function toElementSlide(
     chart: stored.chart ?? null,
     team: stored.team_members,
     contents: stored.toc_entries,
+    blocks: stored.content_blocks ?? null,
     logo: context.logo ?? null,
     companyName: context.companyName,
     pageNumber: context.pageNumber,
@@ -194,6 +196,9 @@ export function toStoredSlide(slide: ElementSlide, previous?: StoredSlide): Stor
     kind: slide.kind,
     background: slide.background ?? "paper",
     customized: slide.customized ?? false,
+    // Structured blocks belong to the slide, carried through every switch so a
+    // template that renders them differently cannot consume them.
+    content_blocks: slide.content_blocks ?? previous?.content_blocks ?? null,
   };
 
   if (!slide.customized) return base;
