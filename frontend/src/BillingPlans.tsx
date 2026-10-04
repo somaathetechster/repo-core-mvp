@@ -208,18 +208,24 @@ function CurrentPlanSummary({ billing, displayPlanName }: { billing: BillingMe; 
             <span className="bp-cp-value">{periodDate}</span>
           </div>
         )}
-        <div className="bp-cp-item">
-          <span className="bp-cp-label">Exports</span>
-          <span className="bp-cp-value">
-            {unlimited ? "Unlimited exports" : `${used} of ${limit} used`}
-          </span>
-        </div>
+        {id !== "free" && (
+          <div className="bp-cp-item">
+            <span className="bp-cp-label">Exports</span>
+            <span className="bp-cp-value">
+              {unlimited ? "Unlimited exports" : `${used} of ${limit} used`}
+            </span>
+          </div>
+        )}
       </div>
-      {!unlimited && (
+      {id === "free" ? (
+        <p className="bp-cp-no-exports">
+          No exports on the free plan — upgrade to export your deck.
+        </p>
+      ) : !unlimited ? (
         <div className="bp-cp-usage" role="progressbar" aria-valuenow={used} aria-valuemin={0} aria-valuemax={limit}>
           <div className="bp-cp-usage-bar" style={{ width: `${pct}%` }} />
         </div>
-      )}
+      ) : null}
     </section>
   );
 }
