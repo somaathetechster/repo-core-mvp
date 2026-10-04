@@ -19,6 +19,7 @@ import {
   type DeckCoachMessage,
   type CompanyProfile,
   type DeckSummary,
+  type DeckIntelligence,
 } from "./api";
 import { toElementSlides, type StoredSlide } from "./deck/migrate";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
@@ -346,6 +347,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
   const [slides, setSlides] = useState<ElementSlide[] | null>(null);
   const [brief, setBrief] = useState<ProgramBrief | null>(null);
   const [structure, setStructure] = useState<ReviewStructure | null>(null);
+  const [intelligence, setIntelligence] = useState<DeckIntelligence | null>(null);
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
   const [deckTheme, setDeckTheme] = useState<DeckTheme>(() => reviewTheme(null));
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
@@ -418,6 +420,7 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
         } | null));
         setBrief(theme?.program_brief ?? null);
         setStructure(theme?.program_structure ?? null);
+        setIntelligence(d.brief ?? null);
         setSlides(toElementSlides(d.slides as unknown as StoredSlide[], tpl, { companyName: d.name }));
       })
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : "Couldn't load deck"))
@@ -581,6 +584,8 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
         <div className="rvp-empty">No decks yet. Build one in the Deck tab, then come back to review it.</div>
       )}
       {(loading || (decks === null && !error)) && <div className="rvp-loading"><span className="rvp-spin" />Reading the deck…</div>}
+
+      {intelligence && !loading && <IntelligencePanel intel={intelligence} />}
 
       {review && !loading && (
         <div className="rvp-body">
@@ -780,5 +785,97 @@ export default function DeckReview({ onOpenDeck, onNavigate }: Props) {
         </form>
       </aside>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Intelligence panel — the Planner brief + Critic read, surfaced so   */
+/* the deck feels like it has opinions, not just output.               */
+/* ------------------------------------------------------------------ */
+
+function prettyRole(role: string): string {
+  return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function IntelligencePanel({ intel }: { intel: DeckIntelligence }) {
+  const critic = intel.critic ?? null;
+  const killShots = intel.kill_shots ?? [];
+  const missing = new Set((critic?.missing_pre_answers ?? []).map((m) => m.trim().toLowerCase()));
+  const override = intel.applied_structure_override ?? null;
+  const gaps = intel.gaps ?? [];
+
+  // Nothing worth showing (e.g. the deterministic fallback path produced no
+  // brief) — render nothing rather than an empty shell.
+  if (!intel.core_argument && !intel.founder_edge && !killShots.length && !critic && !override && !gaps.length) {
+    return null;
+  }
+
+  return (
+    <section className="rvp-intel" aria-label="Deck intelligence">
+      <div className="rvp-intel-head">
+        <span className="rvp-eyebrow">Intelligence</span>
+        <h2>What we thought before we wrote it</h2>
+      </div>
+
+      {override && (
+        <div className="rvp-intel-override">
+          Based on your evidence, we structured this as <strong>{prettyRole(override.to)}</strong> instead
+          of <strong>{prettyRole(override.from)}</strong>. {override.reason}
+        </div>
+      )}
+
+      <div className="rvp-intel-grid">
+        {intel.core_argument && (
+          <div className="rvp-intel-card">
+            <div className="rvp-intel-label">Core argument</div>
+            <p className="rvp-intel-lead">{intel.core_argument}</p>
+          </div>
+        )}
+        {intel.founder_edge && (
+          <div className="rvp-intel-card">
+            <div className="rvp-intel-label">Founder edge</div>
+            <p>{intel.founder_edge}</p>
+          </div>
+        )}
+      </div>
+
+      {gaps.length > 0 && (
+        <div className="rvp-intel-gaps">
+          <div className="rvp-intel-label">Evidence gaps</div>
+          {gaps.map((g, i) => (
+            <div key={i} className="rvp-intel-gap">
+              ⚠ We couldn't find evidence for {g} — add it to your company profile to strengthen this.
+            </div>
+          ))}
+        </div>
+      )}
+
+      {killShots.length > 0 && (
+        <div className="rvp-intel-kill">
+          <div className="rvp-intel-label">Investor kill shots — does the deck pre-answer them?</div>
+          {killShots.map((q, i) => {
+            const answered = !missing.has(q.trim().toLowerCase());
+            return (
+              <div key={i} className={`rvp-intel-ks ${answered ? "is-ok" : "is-flag"}`}>
+                <span className="rvp-intel-ks-mark">{answered ? "✓" : "⚑"}</span>
+                <span className="rvp-intel-ks-q">{q}</span>
+                {!answered && <span className="rvp-intel-ks-note">Not answered yet{critic?.weakest_slide ? ` — start with the ${prettyRole(critic.weakest_slide)} slide` : ""}.</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {critic && (critic.overall || critic.strongest_slide || critic.weakest_slide) && (
+        <div className="rvp-intel-critic">
+          <div className="rvp-intel-label">The investor's honest read</div>
+          {critic.overall && <p className="rvp-intel-overall">{critic.overall}</p>}
+          <div className="rvp-intel-sw">
+            {critic.strongest_slide && <span className="rvp-intel-strong">Strongest: {prettyRole(critic.strongest_slide)}</span>}
+            {critic.weakest_slide && <span className="rvp-intel-weak">Weakest: {prettyRole(critic.weakest_slide)}</span>}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

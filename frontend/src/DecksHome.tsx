@@ -192,7 +192,26 @@ function NewDeckWizard({
     new Set(analyzedRepos.map((r) => String(r.summary.full_name)))
   );
   const [creating, setCreating] = useState(false);
+  const [genStep, setGenStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Generation runs a Planner → Generation → Critic → Rewrites pipeline on the
+  // backend, which takes longer than a single call. Surface the steps so the
+  // intelligence is visible and the wait is expected. The backend isn't
+  // streaming, so the indicator advances on a timer that lands on the last
+  // step until the request resolves.
+  const GEN_STEPS = [
+    "Analyzing your company…",
+    "Writing your deck…",
+    "Reviewing for investor readiness…",
+    "Refining weak slides…",
+  ];
+  useEffect(() => {
+    if (!creating) { setGenStep(0); return; }
+    const t = setInterval(() => setGenStep((s) => Math.min(s + 1, GEN_STEPS.length - 1)), 3500);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creating]);
 
   // The deck structure: which named shape to generate against. Loaded from the
   // backend so the picker and generation share one source of truth.
@@ -367,12 +386,26 @@ function NewDeckWizard({
 
         {error && <p className="p-error">{error}</p>}
 
+        {creating && (
+          <div className="wizard-progress" role="status" aria-live="polite">
+            {GEN_STEPS.map((label, i) => (
+              <div
+                key={i}
+                className={`wizard-progress-step ${i < genStep ? "is-done" : i === genStep ? "is-active" : ""}`}
+              >
+                <span className="wizard-progress-mark">{i < genStep ? "✓" : i === genStep ? "●" : "○"}</span>
+                {label}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="wizard-actions">
-          <button className="p-btn p-btn-secondary" onClick={onClose}>
+          <button className="p-btn p-btn-secondary" onClick={onClose} disabled={creating}>
             Cancel
           </button>
           <button className="p-btn p-btn-primary" onClick={handleCreate} disabled={creating}>
-            {creating ? "Creating..." : "Create deck"}
+            {creating ? "Building…" : "Create deck"}
           </button>
         </div>
       </div>

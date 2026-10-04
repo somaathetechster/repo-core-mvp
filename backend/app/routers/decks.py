@@ -58,6 +58,7 @@ def _deck_full(d: DeckModel) -> dict:
         "theme": d.theme,
         "layouts": d.layouts,
         "freeform_slide_ids": d.freeform_slide_ids,
+        "brief": getattr(d, "brief", None),
     }
 
 
@@ -178,11 +179,29 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
         )
         structure_dict = structure.to_dict()
 
+        # The intelligence layer (Planner brief, Critic read, applied override)
+        # produced by generation, stored on the deck and shown in the Review tab.
+        intelligence: dict | None = None
+        structure_override = None
+        llm_calls = 0
         try:
             narrative = generate_narrative(profile, diligence, structure_id=structure.id)
+            # The Planner may have overridden the structure; build and store
+            # against the one actually used.
+            effective_structure = get_structure(narrative.structure_id or structure.id)
             slide_list, deck_theme, narrative_warnings = build_deck_from_narrative(
-                profile, narrative, body.repo_summaries, structure
+                profile, narrative, body.repo_summaries, effective_structure
             )
+            structure = effective_structure
+            structure_dict = effective_structure.to_dict()
+            structure_override = narrative.structure_override
+            llm_calls = narrative.llm_calls
+            if narrative.brief is not None or narrative.critic is not None or narrative.structure_override:
+                intelligence = {
+                    **(narrative.brief or {}),
+                    "critic": narrative.critic,
+                    "applied_structure_override": narrative.structure_override,
+                }
         except Exception as e:
             slide_list, deck_theme = build_deck(profile, body.repo_summaries, brief, structure)
             narrative_warnings = [
@@ -202,6 +221,7 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
                 "structure_id": structure.id,
                 "program_structure": structure_dict,
             },
+            brief=intelligence,
             layouts={},
             freeform_slide_ids=[],
         )
@@ -210,8 +230,14 @@ async def create_deck(body: CreateDeckRequest, user_id: str = Depends(get_curren
         await session.refresh(deck)
         # Warnings ride along on the create response: a founder needs to know
         # which sections came out empty and whether any figure couldn't be
-        # traced to something they wrote.
-        return {**_deck_full(deck), "warnings": narrative_warnings}
+        # traced to something they wrote. The structure override (if any) is
+        # surfaced so the UI can tell them we restructured the deck.
+        return {
+            **_deck_full(deck),
+            "warnings": narrative_warnings,
+            "structure_override": structure_override,
+            "llm_calls": llm_calls,
+        }
 
 
 @router.get("/{deck_id}")

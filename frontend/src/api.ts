@@ -181,6 +181,54 @@ export interface DeckSummary {
   created_at: string | null;
 }
 
+/* ---------------------------------------------------------------- */
+/* Deck intelligence — the Planner brief + Critic read               */
+/* ---------------------------------------------------------------- */
+
+export interface EvidenceRating {
+  field: string;
+  rating: "STRONG" | "WEAK" | "MISSING";
+  note: string;
+}
+
+export interface SlideBrief {
+  role: string;
+  argument: string;
+  evidence_fields: string[];
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  block_type: string | null;
+  notes: string;
+}
+
+export interface CriticFinding {
+  role: string;
+  severity: "CRITICAL" | "IMPORTANT" | "POLISH";
+  finding: string;
+  suggestion: string;
+  should_rewrite: boolean;
+}
+
+export interface CriticRead {
+  overall: string;
+  slide_findings: CriticFinding[];
+  missing_pre_answers: string[];
+  strongest_slide: string;
+  weakest_slide: string;
+}
+
+/** Stored on the deck as `brief`: the planner Brief fields plus the Critic
+ *  read and any applied structure override. */
+export interface DeckIntelligence {
+  core_argument?: string;
+  evidence_inventory?: EvidenceRating[];
+  slide_briefs?: SlideBrief[];
+  founder_edge?: string;
+  kill_shots?: string[];
+  gaps?: string[];
+  critic?: CriticRead | null;
+  applied_structure_override?: { from: string; to: string; reason: string } | null;
+}
+
 export interface FullDeck extends DeckSummary {
   profile_snapshot: Record<string, unknown>;
   repo_full_names: string[];
@@ -188,6 +236,24 @@ export interface FullDeck extends DeckSummary {
   theme: DeckTheme;
   layouts: Record<string, unknown>;
   freeform_slide_ids: string[];
+  brief?: DeckIntelligence | null;
+  /** Present on the create response when the Planner recommended a different
+   *  structure than the one chosen. */
+  structure_override?: { from: string; to: string; reason: string } | null;
+  warnings?: string[];
+}
+
+export interface ProfileGaps {
+  evidence_inventory: EvidenceRating[];
+  gaps: string[];
+  core_argument: string;
+  founder_edge: string;
+}
+
+export async function getProfileGaps(): Promise<ProfileGaps> {
+  const res = await fetch(`${API_BASE}/company-profile/gaps`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't analyse your profile.");
+  return res.json();
 }
 
 export async function listDecks(): Promise<DeckSummary[]> {

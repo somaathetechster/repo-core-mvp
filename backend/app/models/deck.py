@@ -38,6 +38,12 @@ class DeckModel(Base):
     layouts: Mapped[dict] = mapped_column(JSON, default=dict)
     freeform_slide_ids: Mapped[list] = mapped_column(JSON, default=list)
 
+    # The strategic Brief (Planner) plus the Critic read and any applied
+    # structure override — the deck's "intelligence" layer. Nullable so older
+    # decks and the deterministic build path simply carry None. Auto-migrated
+    # on boot by _add_missing_columns.
+    brief: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

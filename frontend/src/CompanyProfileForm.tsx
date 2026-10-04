@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import DeckImport from "./DeckImport";
 import WordCount from "./WordCount";
-import { getCompanyProfile, saveCompanyProfile, type CompanyProfile, type TeamMember, type TaggedImage } from "./api";
+import { getCompanyProfile, saveCompanyProfile, getProfileGaps, type CompanyProfile, type TeamMember, type TaggedImage, type ProfileGaps } from "./api";
 import { fileToDataUrl, extractDominantColor, MAX_IMAGE_BYTES } from "./fileUtils";
 import "./theme.css";
 import "./profile-form.css";
@@ -190,6 +190,26 @@ export default function CompanyProfileForm({
   const doLoad = load ?? getCompanyProfile;
   const doSave = save ?? saveCompanyProfile;
 
+  // Profile-strength analysis only applies to the shared company profile, not
+  // the per-deck content editor (which passes custom load/save).
+  const isSharedProfile = !load && !save;
+  const [gaps, setGaps] = useState<ProfileGaps | null>(null);
+  const [gapsLoading, setGapsLoading] = useState(false);
+
+  const loadGaps = () => {
+    if (!isSharedProfile) return;
+    setGapsLoading(true);
+    getProfileGaps()
+      .then(setGaps)
+      .catch(() => { /* non-fatal: the form still works without the strength panel */ })
+      .finally(() => setGapsLoading(false));
+  };
+
+  useEffect(() => {
+    if (isSharedProfile) loadGaps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     doLoad()
       .then((p) => setProfile({ ...EMPTY_PROFILE, ...p }))
@@ -221,6 +241,9 @@ export default function CompanyProfileForm({
     try {
       await doSave(profile);
       setSavedAt(new Date());
+      // Re-analyse strength against the just-saved profile (the backend cache
+      // was invalidated by the save).
+      loadGaps();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save your profile.");
     } finally {
@@ -335,6 +358,10 @@ export default function CompanyProfileForm({
       </div>
 
       {error && <p className="p-error">{error}</p>}
+
+      {isSharedProfile && (gaps || gapsLoading) && (
+        <ProfileStrength gaps={gaps} loading={gapsLoading} />
+      )}
 
       {/* Brand assets */}
       <div className="profile-section">
@@ -665,6 +692,67 @@ export default function CompanyProfileForm({
         <button className="p-btn p-btn-primary" onClick={handleSave} disabled={saving}>
           {saving ? "Saving..." : "Save profile"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile strength — the Planner's evidence inventory, surfaced so a  */
+/* founder sees what the generator needs before they build a deck.     */
+/* ------------------------------------------------------------------ */
+
+function prettyField(field: string): string {
+  return field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function ProfileStrength({ gaps, loading }: { gaps: ProfileGaps | null; loading: boolean }) {
+  if (loading && !gaps) {
+    return (
+      <div className="profile-strength is-loading">
+        <span className="profile-strength-spin" /> Analysing your profile…
+      </div>
+    );
+  }
+  if (!gaps) return null;
+
+  const inv = gaps.evidence_inventory ?? [];
+  const strong = inv.filter((r) => r.rating === "STRONG");
+  const weak = inv.filter((r) => r.rating === "WEAK");
+  const missing = inv.filter((r) => r.rating === "MISSING");
+  const ratio = inv.length ? strong.length / inv.length : 0;
+
+  const overall =
+    ratio >= 0.6 ? "Your profile is strong enough for a Seed deck."
+      : ratio >= 0.3 ? "Your profile has the basics — filling the gaps below will sharpen your deck."
+        : "Your profile is still thin. Fill the gaps below before generating.";
+
+  const toAdd = (gaps.gaps && gaps.gaps.length ? gaps.gaps : missing.map((m) => prettyField(m.field)));
+
+  return (
+    <div className="profile-strength">
+      <div className="profile-strength-head">
+        <span className="profile-strength-eyebrow">Profile strength</span>
+        <div className="profile-strength-bar" aria-hidden="true">
+          <div className="profile-strength-fill" style={{ width: `${Math.round(ratio * 100)}%` }} />
+        </div>
+      </div>
+      <p className="profile-strength-overall">{overall}</p>
+      {toAdd.length > 0 && (
+        <p className="profile-strength-add">
+          To generate a Premium deck, add: {toAdd.slice(0, 6).join(", ")}.
+        </p>
+      )}
+      <div className="profile-strength-fields">
+        {strong.map((r, i) => (
+          <span key={`s${i}`} className="profile-strength-chip is-strong" title={r.note}>✓ {prettyField(r.field)}</span>
+        ))}
+        {weak.map((r, i) => (
+          <span key={`w${i}`} className="profile-strength-chip is-weak" title={r.note}>~ {prettyField(r.field)}</span>
+        ))}
+        {missing.map((r, i) => (
+          <span key={`m${i}`} className="profile-strength-chip is-missing" title={r.note}>+ {prettyField(r.field)}</span>
+        ))}
       </div>
     </div>
   );

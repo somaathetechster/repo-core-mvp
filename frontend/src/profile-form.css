@@ -134,3 +134,20 @@
 }
 
 .brand-font-field { margin-top: 1.25rem; max-width: 340px; }
+
+/* Profile strength panel */
+.profile-strength { border: 1px solid var(--ink-border); background: var(--ink-raised); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+.profile-strength.is-loading { display: flex; align-items: center; gap: .6rem; color: var(--text-dim); font-size: .88rem; }
+.profile-strength-spin { width: 14px; height: 14px; border: 2px solid var(--ink-border); border-top-color: var(--gold, #b8860b); border-radius: 50%; animation: ps-spin .8s linear infinite; }
+@keyframes ps-spin { to { transform: rotate(360deg); } }
+.profile-strength-head { display: flex; align-items: center; gap: 1rem; margin-bottom: .6rem; }
+.profile-strength-eyebrow { font: .62rem var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
+.profile-strength-bar { flex: 1; height: 7px; background: var(--ink); border: 1px solid var(--ink-border); border-radius: 999px; overflow: hidden; }
+.profile-strength-fill { height: 100%; background: linear-gradient(90deg, var(--gold-dim, #b8860b), var(--gold, #e0b84c)); border-radius: 999px; transition: width .4s ease; }
+.profile-strength-overall { font-size: .92rem; color: var(--text); margin: 0 0 .3rem; font-weight: 500; }
+.profile-strength-add { font-size: .84rem; color: var(--text-dim); margin: 0 0 .7rem; line-height: 1.5; }
+.profile-strength-fields { display: flex; flex-wrap: wrap; gap: .4rem; }
+.profile-strength-chip { font-size: .76rem; padding: .22rem .6rem; border-radius: 999px; border: 1px solid var(--ink-border); }
+.profile-strength-chip.is-strong { color: var(--success, #4ade80); border-color: rgba(74,222,128,.3); background: rgba(74,222,128,.08); }
+.profile-strength-chip.is-weak { color: #fbbf24; border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.08); }
+.profile-strength-chip.is-missing { color: var(--text-muted); border-style: dashed; }
