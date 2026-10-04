@@ -98,36 +98,41 @@ async def create_flutterwave_checkout(body: CheckoutRequest, request: Request, u
 
 @router.post("/checkout/crypto")
 async def create_crypto_checkout(body: CheckoutRequest, request: Request, user_id: str = Depends(get_current_user_id)):
-    plan = _plan_or_400(body.plan_id)
-    if not NOWPAYMENTS_API_KEY:
-        log.warning("Crypto checkout unavailable: NOWPAYMENTS_API_KEY is missing or empty.")
-        raise HTTPException(status_code=503, detail="Crypto payments are not configured.")
-    email = _require_email(request)
-    log.info("Crypto checkout starting — user=%s plan=%s email=%s", user_id, body.plan_id, email)
-    order_id = f"provisio-{user_id}-{body.plan_id}-{int(datetime.now(timezone.utc).timestamp())}"
-    payload = {
-        "price_amount": plan["amount"], "price_currency": "usd", "pay_currency": "usdttrc20",
-        "order_id": order_id, "order_description": f"{plan['name']} — Provisio",
-        "ipn_callback_url": f"{BACKEND_URL}/webhooks/nowpayments",
-        "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
-        "cancel_url": f"{FRONTEND_URL}?checkout=cancelled", "customer_email": email,
-        "is_fixed_rate": True, "is_fee_paid_by_user": False,
-    }
-    log.info("NowPayments request payload: %s", payload)
+    log.info("=== CRYPTO CHECKOUT HANDLER REACHED ===")
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            res = await client.post(NOWPAYMENTS_URL, json=payload, headers={"x-api-key": NOWPAYMENTS_API_KEY})
-    except Exception:
-        log.error("NowPayments request failed with an exception", exc_info=True)
-        raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
-    log.info("NowPayments response: status=%s body=%s", res.status_code, res.text)
-    if res.status_code not in (200, 201):
-        log.error("NowPayments error %s: %s", res.status_code, res.text)
-        raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
-    url = res.json().get("invoice_url")
-    if not url:
-        raise HTTPException(status_code=502, detail="Could not get checkout URL from payment provider.")
-    return {"checkout_url": url}
+        plan = _plan_or_400(body.plan_id)
+        if not NOWPAYMENTS_API_KEY:
+            log.warning("Crypto checkout unavailable: NOWPAYMENTS_API_KEY is missing or empty.")
+            raise HTTPException(status_code=503, detail="Crypto payments are not configured.")
+        email = _require_email(request)
+        log.info("Crypto checkout starting — user=%s plan=%s email=%s", user_id, body.plan_id, email)
+        order_id = f"provisio-{user_id}-{body.plan_id}-{int(datetime.now(timezone.utc).timestamp())}"
+        payload = {
+            "price_amount": plan["amount"], "price_currency": "usd", "pay_currency": "usdttrc20",
+            "order_id": order_id, "order_description": f"{plan['name']} — Provisio",
+            "ipn_callback_url": f"{BACKEND_URL}/webhooks/nowpayments",
+            "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
+            "cancel_url": f"{FRONTEND_URL}?checkout=cancelled", "customer_email": email,
+            "is_fixed_rate": True, "is_fee_paid_by_user": False,
+        }
+        log.info("NowPayments request payload: %s", payload)
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                res = await client.post(NOWPAYMENTS_URL, json=payload, headers={"x-api-key": NOWPAYMENTS_API_KEY})
+        except Exception:
+            log.error("NowPayments request failed with an exception", exc_info=True)
+            raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
+        log.info("NowPayments response: status=%s body=%s", res.status_code, res.text)
+        if res.status_code not in (200, 201):
+            log.error("NowPayments error %s: %s", res.status_code, res.text)
+            raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
+        url = res.json().get("invoice_url")
+        if not url:
+            raise HTTPException(status_code=502, detail="Could not get checkout URL from payment provider.")
+        return {"checkout_url": url}
+    except Exception as e:
+        log.error("=== UNHANDLED EXCEPTION IN CRYPTO CHECKOUT: %s", e, exc_info=True)
+        raise
 
 
 @router.post("/webhooks/flutterwave")
