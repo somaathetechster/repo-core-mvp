@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["payments"])
 
 FLUTTERWAVE_URL = "https://api.flutterwave.com/v3/payments"
-NOWPAYMENTS_URL = "https://api.nowpayments.io/v1/payment"
+NOWPAYMENTS_URL = "https://api.nowpayments.io/v1/invoice"
 FLW_SECRET_KEY = os.getenv("FLW_SECRET_KEY", "")
 FLW_PUBLIC_KEY = os.getenv("FLW_PUBLIC_KEY", "")
 FLW_ENCRYPTION_KEY = os.getenv("FLW_ENCRYPTION_KEY", "")
@@ -112,8 +112,7 @@ async def create_crypto_checkout(body: CheckoutRequest, request: Request, user_i
             "order_id": order_id, "order_description": f"{plan['name']} — Provisio",
             "ipn_callback_url": f"{BACKEND_URL}/webhooks/nowpayments",
             "success_url": f"{FRONTEND_URL}?checkout=success&plan={body.plan_id}",
-            "cancel_url": f"{FRONTEND_URL}?checkout=cancelled", "customer_email": email,
-            "is_fixed_rate": True, "is_fee_paid_by_user": False,
+            "cancel_url": f"{FRONTEND_URL}?checkout=cancelled",
         }
         log.info("NowPayments request payload: %s", payload)
         try:
@@ -162,7 +161,9 @@ async def nowpayments_webhook(request: Request):
     signature = request.headers.get("x-nowpayments-sig", "")
     try:
         body = json.loads(raw)
-        canonical = json.dumps(body, sort_keys=True).encode()
+        # NowPayments signs the key-sorted JSON with no whitespace between
+        # tokens, so the canonical form must use compact separators to match.
+        canonical = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
         valid = bool(NOWPAYMENTS_IPN_SECRET) and hmac.compare_digest(
             hmac.new(NOWPAYMENTS_IPN_SECRET.encode(), canonical, hashlib.sha512).hexdigest(), signature,
         )
