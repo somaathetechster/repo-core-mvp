@@ -126,6 +126,7 @@ async def create_crypto_checkout(body: CheckoutRequest, request: Request, user_i
         if res.status_code not in (200, 201):
             log.error("NowPayments error %s: %s", res.status_code, res.text)
             raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
+        log.info("NowPayments full response: %s", res.text)
         url = res.json().get("invoice_url")
         if not url:
             raise HTTPException(status_code=502, detail="Could not get checkout URL from payment provider.")
