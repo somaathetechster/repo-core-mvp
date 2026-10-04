@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   getDeck, saveDeckEditorState, regenerateDeck, updateDeckProfile, renameDeck,
-  type DeckTheme, type CompanyProfile, type AnalyzeResult,
+  type DeckTheme, type CompanyProfile, type AnalyzeResult, type FullDeck,
 } from "./api";
 import DeckStudio from "./DeckStudio";
 import CompanyProfileForm from "./CompanyProfileForm";
@@ -63,6 +63,17 @@ export function stashChartForDeck(payload: PendingChart) {
   sessionStorage.setItem(PENDING_KEY, JSON.stringify(payload));
 }
 
+/** "Saved · just now" / "Saved · 3 min ago" for the editor's sync indicator. */
+function savedLabel(savedAt: number | null, now: number): string {
+  if (savedAt == null) return "Not saved yet";
+  const sec = Math.max(0, Math.floor((now - savedAt) / 1000));
+  if (sec < 45) return "Saved · just now";
+  const min = Math.round(sec / 60);
+  if (min < 60) return `Saved · ${min} min ago`;
+  const hr = Math.round(min / 60);
+  return `Saved · ${hr} hr ago`;
+}
+
 function claimPendingChart(): PendingChart | null {
   const raw = sessionStorage.getItem(PENDING_KEY);
   if (!raw) return null;
@@ -78,10 +89,13 @@ export default function DeckEditor({
   deckId,
   analyzedRepos,
   onBack,
+  initialSlide,
 }: {
   deckId: string;
   analyzedRepos: AnalyzeResult[];
   onBack: () => void;
+  /** Slide to open on (from the ?slide= hint when deep-linked). */
+  initialSlide?: number;
 }) {
   const [view, setView] = useState<View>("studio");
   const [deckName, setDeckName] = useState("");
@@ -127,15 +141,9 @@ export default function DeckEditor({
   const [images, setImages] = useState<BrandImage[]>([]);
   // Every distinct image in the deck, stored once and referenced by hash.
   const imageMapRef = useRef<ImageMap>({});
-  const [current, setCurrent] = useState(() => {
-    const stashed = sessionStorage.getItem("provisio:open-slide");
-    if (stashed != null) {
-      sessionStorage.removeItem("provisio:open-slide");
-      const n = parseInt(stashed, 10);
-      return Number.isFinite(n) ? n : 0;
-    }
-    return 0;
-  });
+  const [current, setCurrent] = useState(() =>
+    initialSlide != null && Number.isFinite(initialSlide) ? initialSlide : 0,
+  );
   const [dirty, setDirty] = useState(false);
   // Every local edit bumps `editSeq`; a completed save records the seq it
   // persisted in `savedSeq`. The deck is dirty whenever those differ. This is
@@ -155,6 +163,21 @@ export default function DeckEditor({
   const [guidesEnabled, setGuidesEnabled] = useState(() => localStorage.getItem("provisio:guides") !== "off");
   const loadedRef = useRef(false);
 
+  // ── Auto-sync ──────────────────────────────────────────────────────────
+  // The server `updated_at` for the version we currently hold. The 30s poll
+  // compares the server's against this to notice a newer version appearing
+  // underneath us (an edit from another tab, device, or a regenerate).
+  const syncedUpdatedAt = useRef<string | null>(null);
+  // When we last pulled/pushed a version in sync with the server (for the
+  // toolbar's "Saved · N min ago" indicator). `syncTick` just forces that
+  // relative label to re-render every 30s.
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [syncTick, setSyncTick] = useState(0);
+  // A newer server version exists but we have unsaved local edits, so we
+  // can't silently replace them — the user decides (save or discard).
+  const [syncConflict, setSyncConflict] = useState(false);
+  const dirtyRef = useRef(false);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
 
   function flash(msg: string) {
     setNotice(msg);
@@ -185,84 +208,134 @@ export default function DeckEditor({
 
   /* ---------------- load ---------------- */
 
+  // Apply a freshly-fetched deck into editor state. Used both for the initial
+  // open and for a silent re-sync when a newer server version appears. It
+  // resets the undo history to the server version, so it must only run when
+  // there are no unsaved local edits to lose.
+  const applyDeck = useCallback((d: FullDeck, opts?: { claimChart?: boolean }) => {
+    const tpl = d.theme?.template_id ?? DEFAULT_TEMPLATE_ID;
+    const settings: ThemeSettings = {
+      ink: d.theme?.secondary_color || DEFAULT_THEME.ink,
+      paper: DEFAULT_THEME.paper,
+      accent: d.theme?.primary_color || DEFAULT_THEME.accent,
+      fontPairing: d.theme?.font_pairing ?? DEFAULT_THEME.fontPairing,
+      typeScale: d.theme?.type_scale ?? 1,
+    };
+    const themeRaw = (d.theme ?? {}) as unknown as Record<string, unknown>;
+    const imageMap = (themeRaw.images as ImageMap) ?? {};
+    imageMapRef.current = imageMap;
+
+    const savedLibrary = (themeRaw.library_images as BrandImage[]) ?? [];
+    const restored = inlineImages(
+      d.slides as unknown as never[],
+      savedLibrary as unknown as { data_url: string }[],
+      imageMap,
+    );
+    const rawStoredSlides = restored.slides as unknown as StoredSlide[];
+    // Normalize the TOC snapshot on load without rebuilding a customized
+    // contents page. This repairs older decks while preserving any text
+    // or layout the user added directly to the TOC.
+    const tocEntries = rawStoredSlides
+      .filter((slide) => slide.id !== "toc" && slide.type !== "toc" && slide.kind !== "contents")
+      .map((slide) => ({ title: slide.title.trim() || "Untitled slide" }));
+    const storedSlides = rawStoredSlides.map((slide) =>
+      slide.id === "toc" || slide.type === "toc" || slide.kind === "contents"
+        ? { ...slide, toc_entries: tocEntries }
+        : slide,
+    );
+    setDeckName(d.name);
+    lastSavedName.current = d.name;
+    setDeckTheme(d.theme);
+    setStored(storedSlides);
+    history.reset({
+      slides: toElementSlides(storedSlides, tpl, { companyName: d.name }),
+      themeSettings: settings,
+      templateId: tpl,
+    });
+    setDeckProfile(d.profile_snapshot as unknown as CompanyProfile);
+
+    // Seed the library from images already saved on the deck, falling
+    // back to whatever the company profile carries so a founder who
+    // uploaded images there sees them here without re-adding them.
+    const saved = restored.library as unknown as BrandImage[];
+    if (saved?.length) {
+      setImages(saved);
+    } else {
+      const profileImages =
+        ((d.profile_snapshot as unknown as Record<string, unknown>)?.company_image_data_urls as
+          { data_url: string; tag?: string }[] | undefined) ?? [];
+      const logo = (d.profile_snapshot as unknown as Record<string, unknown>)?.logo_data_url as string | undefined;
+      const seeded: BrandImage[] = [
+        ...(logo ? [{ id: "logo", data_url: logo, tag: "logo" as const, label: "Logo" }] : []),
+        ...profileImages.map((im, i) => ({
+          id: `profile-${i}`,
+          data_url: im.data_url,
+          tag: (im.tag as BrandImage["tag"]) ?? "other",
+          label: im.tag ?? `Image ${i + 1}`,
+        })),
+      ];
+      setImages(seeded);
+    }
+    loadedRef.current = true;
+    // This version is now in sync with the server.
+    syncedUpdatedAt.current = d.updated_at ?? null;
+    setLastSyncedAt(Date.now());
+    setDirty(false);
+    editSeq.current = savedSeq.current;
+    setSyncConflict(false);
+
+    // A chart waiting from the Data Studio is offered as soon as the
+    // deck opens, with a choice of where it should go.
+    if (opts?.claimChart) {
+      const pending = claimPendingChart();
+      if (pending) setDropPrompt(pending);
+    }
+  }, [history]);
+
   useEffect(() => {
     let cancelled = false;
     getDeck(deckId)
-      .then((d) => {
-        if (cancelled) return;
-        const tpl = d.theme?.template_id ?? DEFAULT_TEMPLATE_ID;
-        const settings: ThemeSettings = {
-          ink: d.theme?.secondary_color || DEFAULT_THEME.ink,
-          paper: DEFAULT_THEME.paper,
-          accent: d.theme?.primary_color || DEFAULT_THEME.accent,
-          fontPairing: d.theme?.font_pairing ?? DEFAULT_THEME.fontPairing,
-          typeScale: d.theme?.type_scale ?? 1,
-        };
-        const themeRaw = (d.theme ?? {}) as unknown as Record<string, unknown>;
-        const imageMap = (themeRaw.images as ImageMap) ?? {};
-        imageMapRef.current = imageMap;
-
-        const savedLibrary = (themeRaw.library_images as BrandImage[]) ?? [];
-        const restored = inlineImages(
-          d.slides as unknown as never[],
-          savedLibrary as unknown as { data_url: string }[],
-          imageMap,
-        );
-        const rawStoredSlides = restored.slides as unknown as StoredSlide[];
-        // Normalize the TOC snapshot on load without rebuilding a customized
-        // contents page. This repairs older decks while preserving any text
-        // or layout the user added directly to the TOC.
-        const tocEntries = rawStoredSlides
-          .filter((slide) => slide.id !== "toc" && slide.type !== "toc" && slide.kind !== "contents")
-          .map((slide) => ({ title: slide.title.trim() || "Untitled slide" }));
-        const storedSlides = rawStoredSlides.map((slide) =>
-          slide.id === "toc" || slide.type === "toc" || slide.kind === "contents"
-            ? { ...slide, toc_entries: tocEntries }
-            : slide,
-        );
-        setDeckName(d.name);
-        lastSavedName.current = d.name;
-        setDeckTheme(d.theme);
-        setStored(storedSlides);
-        history.reset({
-          slides: toElementSlides(storedSlides, tpl, { companyName: d.name }),
-          themeSettings: settings,
-          templateId: tpl,
-        });
-        setDeckProfile(d.profile_snapshot as unknown as CompanyProfile);
-
-        // Seed the library from images already saved on the deck, falling
-        // back to whatever the company profile carries so a founder who
-        // uploaded images there sees them here without re-adding them.
-        const saved = restored.library as unknown as BrandImage[];
-        if (saved?.length) {
-          setImages(saved);
-        } else {
-          const profileImages =
-            ((d.profile_snapshot as unknown as Record<string, unknown>)?.company_image_data_urls as
-              { data_url: string; tag?: string }[] | undefined) ?? [];
-          const logo = (d.profile_snapshot as unknown as Record<string, unknown>)?.logo_data_url as string | undefined;
-          const seeded: BrandImage[] = [
-            ...(logo ? [{ id: "logo", data_url: logo, tag: "logo" as const, label: "Logo" }] : []),
-            ...profileImages.map((im, i) => ({
-              id: `profile-${i}`,
-              data_url: im.data_url,
-              tag: (im.tag as BrandImage["tag"]) ?? "other",
-              label: im.tag ?? `Image ${i + 1}`,
-            })),
-          ];
-          setImages(seeded);
-        }
-        loadedRef.current = true;
-
-        // A chart waiting from the Data Studio is offered as soon as the
-        // deck opens, with a choice of where it should go.
-        const pending = claimPendingChart();
-        if (pending) setDropPrompt(pending);
-      })
+      .then((d) => { if (!cancelled) applyDeck(d, { claimChart: true }); })
       .catch((e) => setError(e instanceof Error ? e.message : "Couldn't open this deck."));
     return () => { cancelled = true; };
-  }, [deckId]);
+  }, [deckId, applyDeck]);
+
+  /* ---------------- auto-sync poll ---------------- */
+
+  // Poll the server every 30s for a newer version. If one exists and we have
+  // no unsaved edits, reload it silently and flash a small toast. If we do
+  // have unsaved edits, raise a banner and let the user decide rather than
+  // clobbering their work.
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!loadedRef.current) return;
+      try {
+        const d = await getDeck(deckId);
+        const serverUpdated = d.updated_at;
+        if (!serverUpdated || !syncedUpdatedAt.current) {
+          // No basis for comparison yet — just record what we saw.
+          if (serverUpdated && !syncedUpdatedAt.current) syncedUpdatedAt.current = serverUpdated;
+          return;
+        }
+        if (serverUpdated <= syncedUpdatedAt.current) return; // nothing newer
+        if (dirtyRef.current || savingRef.current) {
+          setSyncConflict(true);
+        } else {
+          applyDeck(d);
+          flash("Deck updated");
+        }
+      } catch {
+        // A failed poll is not worth surfacing; try again next tick.
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [deckId, applyDeck]);
+
+  // Re-render the "Saved · N ago" label every 30s so it stays current.
+  useEffect(() => {
+    const t = setInterval(() => setSyncTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   /* ---------------- save ---------------- */
 
@@ -299,7 +372,7 @@ export default function DeckEditor({
         return; // `finally` clears the saving flags; persisted stays false.
       }
 
-      await saveDeckEditorState(deckId, {
+      const result = await saveDeckEditorState(deckId, {
         slides: packed.slides as never,
         theme: {
           ...(deckTheme ?? {}),
@@ -318,6 +391,13 @@ export default function DeckEditor({
       setStored(nextStored);
       savedSeq.current = seqAtStart;
       persisted = true;
+      // Our write is now the server's current version, so advance the sync
+      // marker to its new updated_at (clearing any stale conflict) — otherwise
+      // the next poll would see "newer on server" and try to resync our own
+      // save back over us.
+      if (result?.updated_at) syncedUpdatedAt.current = result.updated_at;
+      setLastSyncedAt(Date.now());
+      setSyncConflict(false);
       // Only clear dirty if nothing was edited while this save was running.
       // Otherwise leave it dirty so the newer edits are saved next.
       if (editSeq.current === seqAtStart) setDirty(false);
@@ -340,6 +420,18 @@ export default function DeckEditor({
   // inside a stale save still persists the current slides.
   const saveRef = useRef(save);
   useEffect(() => { saveRef.current = save; }, [save]);
+
+  // Discard local edits and take the server's newer version (the conflict
+  // banner's "discard" action).
+  const discardAndSync = useCallback(async () => {
+    try {
+      const d = await getDeck(deckId);
+      applyDeck(d);
+      flash("Synced to the latest version.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't sync the latest version.");
+    }
+  }, [deckId, applyDeck]);
 
   // Autosave on a delay: losing hand-positioned layout work to a closed tab
   // would be worse than an occasional redundant write. Keyed on editSeq (not
@@ -645,6 +737,13 @@ export default function DeckEditor({
           <button className="p-btn p-btn-ghost" onClick={regenerate} disabled={!!busy}>
             {busy ?? "Regenerate"}
           </button>
+          <span
+            className="deck-last-synced"
+            title={lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : undefined}
+            data-tick={syncTick}
+          >
+            {saving ? "Saving…" : dirty ? "Unsaved changes" : savedLabel(lastSyncedAt, Date.now())}
+          </span>
           <button className="p-btn p-btn-secondary" onClick={save} disabled={saving || !dirty}>
             {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
@@ -652,6 +751,20 @@ export default function DeckEditor({
         </header>
       </div>
       <div className="deck-editor-content">
+
+      {syncConflict && (
+        <div className="deck-sync-banner" role="alert">
+          <span>A newer version exists. Save your changes or discard to sync.</span>
+          <div className="deck-sync-banner-actions">
+            <button className="p-btn p-btn-secondary" onClick={save} disabled={saving}>
+              Save my changes
+            </button>
+            <button className="p-btn p-btn-ghost" onClick={discardAndSync}>
+              Discard &amp; sync
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <p className="p-error">{error}</p>}
       {notice && <p className="deck-notice">{notice}</p>}

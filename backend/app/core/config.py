@@ -46,5 +46,15 @@ class Settings(BaseSettings):
     # Where the frontend lives, for CORS + post-oauth redirect
     frontend_url: str = "http://localhost:5173"
 
+    # Public backend URL used by payment-provider callbacks.
+    backend_url: str = "https://provisio-41sr.onrender.com"
+
+    # Transactional email (welcome emails, etc). Provider-agnostic: point
+    # email_api_url at a transactional email API and set its key. Left blank,
+    # sending is a logged no-op. See app/services/email.py.
+    email_api_url: str = ""
+    email_api_key: str = ""
+    email_from: str = "noreply@provisio.site"
+
 
 settings = Settings()

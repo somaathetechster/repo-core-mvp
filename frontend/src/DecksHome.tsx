@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   listDecks, createDeck, deleteDeck, renameDeck, listStructures, recommendStructure,
   type DeckSummary, type AnalyzeResult, type DeckStructureInfo,
 } from "./api";
-import DeckEditor from "./DeckEditor";
 import { DownloadMenu } from "./DeckViewer";
 import "./theme.css";
 import "./decks-home.css";
@@ -13,12 +13,8 @@ interface DecksHomeProps {
 }
 
 export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
+  const navigate = useNavigate();
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
-  // Restore the deck that was open before a refresh (the editor is only
-  // mounted under the Deck tab, so this only reopens there).
-  const [openDeckId, setOpenDeckId] = useState<string | null>(
-    () => sessionStorage.getItem("provisio:open-deck-id"),
-  );
   const [showWizard, setShowWizard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Inline rename state for the deck cards.
@@ -61,28 +57,6 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
     loadDecks();
   }, []);
 
-  // Keep the open deck id in sessionStorage so a browser refresh reopens it.
-  useEffect(() => {
-    if (openDeckId) sessionStorage.setItem("provisio:open-deck-id", openDeckId);
-    else sessionStorage.removeItem("provisio:open-deck-id");
-  }, [openDeckId]);
-
-  // The Data Studio dispatches this after stashing a chart, so the deck
-  // opens straight to the placement prompt instead of the founder having to
-  // navigate back and find it.
-  useEffect(() => {
-    // The request can arrive before this lazily-loaded page mounts, in which
-    // case the event is missed. It's also stashed, so pick that up first.
-    const pending = sessionStorage.getItem("provisio:open-deck");
-    if (pending) { sessionStorage.removeItem("provisio:open-deck"); setOpenDeckId(pending); }
-    function onOpenDeck(e: Event) {
-      const id = (e as CustomEvent).detail?.deckId;
-      if (id) { sessionStorage.removeItem("provisio:open-deck"); setOpenDeckId(id); }
-    }
-    window.addEventListener("provisio:open-deck", onOpenDeck);
-    return () => window.removeEventListener("provisio:open-deck", onOpenDeck);
-  }, []);
-
   async function handleDelete(id: string) {
     if (!window.confirm("Delete this deck? This can't be undone.")) return;
     try {
@@ -93,18 +67,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
     }
   }
 
-  if (openDeckId) {
-    return (
-      <DeckEditor
-        deckId={openDeckId}
-        analyzedRepos={analyzedRepos}
-        onBack={() => {
-          setOpenDeckId(null);
-          loadDecks();
-        }}
-      />
-    );
-  }
+  const openDeck = (id: string) => navigate(`/deck/${id}`);
 
   return (
     <div className="decks-home">
@@ -137,7 +100,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
             const relAgo = ago===null?"":ago===0?"today":ago===1?"yesterday":`${ago}d ago`;
             const initials = d.name.split(" ").map((w: string)=>w[0]).join("").toUpperCase().slice(0,2);
             return (
-              <div className="deck-card" key={d.id} onClick={() => setOpenDeckId(d.id)}>
+              <div className="deck-card" key={d.id} onClick={() => openDeck(d.id)}>
                 {/* Preview thumbnail */}
                 <div className="deck-card-preview">
                   <div className="deck-card-preview-inner">
@@ -181,7 +144,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
                     See its pitch score in the Review tab
                   </div>
                   <div className="deck-card-actions" onClick={e => e.stopPropagation()}>
-                    <button className="deck-card-btn primary" onClick={() => setOpenDeckId(d.id)}>Open</button>
+                    <button className="deck-card-btn primary" onClick={() => openDeck(d.id)}>Open</button>
                     <DownloadMenu deckId={d.id} />
                     <button className="deck-card-btn danger" onClick={() => handleDelete(d.id)}>Delete</button>
                   </div>
@@ -206,7 +169,7 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
           onClose={() => setShowWizard(false)}
           onCreated={(id) => {
             setShowWizard(false);
-            setOpenDeckId(id);
+            openDeck(id);
           }}
         />
       )}

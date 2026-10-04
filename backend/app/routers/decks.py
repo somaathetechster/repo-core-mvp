@@ -244,7 +244,12 @@ async def save_deck_editor_state(deck_id: str, body: SaveDeckEditorRequest, user
         deck.layouts = body.layouts
         deck.freeform_slide_ids = body.freeform_slide_ids
         await session.commit()
-    return {"status": "saved"}
+        # Return the refreshed summary so the editor can advance its "last
+        # synced" marker to the server's new updated_at, rather than guessing
+        # it from the client clock (which would make the auto-sync poll think
+        # the deck had changed underneath it right after every save).
+        await session.refresh(deck)
+        return {"status": "saved", **_deck_summary(deck)}
 
 
 class PatchDeckRequest(BaseModel):

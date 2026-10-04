@@ -76,6 +76,13 @@ async def list_plans():
 
 @router.get("/billing/me")
 async def my_entitlement(user_id: str = Depends(get_current_user_id)):
+    now = datetime.now(timezone.utc)
+    period = now.strftime("%Y-%m")
+    # Start of the current calendar month, for the "exports this month" figure.
+    # A date range beats a to_char() comparison so the query stays portable
+    # across the SQLite used in tests and the Postgres used in production.
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
     async with AsyncSessionLocal() as session:
         ent = await load_entitlement(session, user_id)
         history = (await session.execute(
@@ -84,14 +91,44 @@ async def my_entitlement(user_id: str = Depends(get_current_user_id)):
             .order_by(desc(SubscriptionModel.created_at))
             .limit(10)
         )).scalars().all()
+        # Exports ever (the Free plan's single export is a lifetime allowance),
+        # and exports in the current month (for subscription usage display).
         exports = (await session.execute(
             select(func.count()).select_from(UsageModel)
             .where(UsageModel.user_id == user_id, UsageModel.event == "deck_export")
         )).scalar() or 0
+        exports_this_period = (await session.execute(
+            select(func.count()).select_from(UsageModel)
+            .where(
+                UsageModel.user_id == user_id,
+                UsageModel.event == "deck_export",
+                UsageModel.created_at >= month_start,
+            )
+        )).scalar() or 0
+        flags = await session.get(UserFlagsModel, user_id)
+
+    # "Member since" — when this customer's current paid period began, falling
+    # back to their first-ever subscription and then to the account record, so
+    # even a Free user sees a sensible start date.
+    member_since = None
+    if ent.subscription_id:
+        active = next((s for s in history if s.id == ent.subscription_id), None)
+        if active:
+            member_since = active.current_period_start or active.created_at
+    if member_since is None and history:
+        member_since = min(
+            (s.current_period_start or s.created_at for s in history if (s.current_period_start or s.created_at)),
+            default=None,
+        )
+    if member_since is None and flags and flags.created_at:
+        member_since = flags.created_at
 
     return {
         "entitlement": entitlement_to_dict(ent),
         "exports_used": exports,
+        "exports_used_period": exports_this_period,
+        "period": period,
+        "member_since": member_since.isoformat() if member_since else None,
         "history": [
             {
                 "id": s.id, "plan_id": s.plan_id, "status": s.status,
@@ -361,7 +398,7 @@ async def admin_stats(
         )).scalars().all()
         for sub in subs:
             if sub.plan_id == "monthly": mrr += 30
-            elif sub.plan_id == "yearly": mrr += round(99.99 / 12, 2)
+            elif sub.plan_id == "yearly": mrr += round(99.00 / 12, 2)
 
         # Active 7d: users who created or updated a deck in the last 7 days
         active_row = await session.execute(
@@ -453,7 +490,6 @@ async def revoke_user_plan(
             )
         )).scalars().all()
 
-        bachs_refs: list[str] = []
         for sub in subs:
             sub.status = SubscriptionStatus.CANCELLED.value
             sub.cancelled_at = now
@@ -465,8 +501,6 @@ async def revoke_user_plan(
             if plan and plan.deck_exports is not None:
                 sub.exports_used = plan.deck_exports
             sub.note = (sub.note or "") + " | Plan revoked by admin"
-            if sub.provider == "bachs" and sub.provider_reference:
-                bachs_refs.append(sub.provider_reference)
 
         # Record the cancellation in the usage log for the current period.
         session.add(UsageModel(
@@ -474,14 +508,6 @@ async def revoke_user_plan(
             subscription_id=subs[0].id if subs else None, detail="admin_revoke",
         ))
         await session.commit()
-
-    # Cancel at the provider too, so it stops billing and stops emitting the
-    # update events that used to reactivate the plan. Best-effort and after the
-    # commit: the local revoke stands even if the provider call fails.
-    if bachs_refs:
-        from app.routers.payments import cancel_bachs_subscription
-        for ref in bachs_refs:
-            await cancel_bachs_subscription(ref)
 
     return {"success": True}
 

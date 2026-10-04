@@ -348,6 +348,38 @@
 .deck-drop-prompt span { font-size: 0.78rem; color: var(--text-dim); }
 .deck-drop-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .deck-notice { color: #4ade80; font-size: 0.85rem; margin-bottom: 0.75rem; }
+
+/* Auto-sync: last-saved indicator in the toolbar */
+.deck-last-synced {
+  font-size: 0.78rem;
+  color: var(--text-dim, #8a8378);
+  white-space: nowrap;
+  margin: 0 0.35rem 0 0.2rem;
+  align-self: center;
+}
+
+/* Auto-sync: conflict banner when a newer server version exists and there
+   are unsaved local edits */
+.deck-sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #2a2014, #22190f);
+  border: 1px solid rgba(196, 154, 40, 0.35);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.9rem;
+  color: #fde68a;
+  font-size: 0.86rem;
+}
+
+.deck-sync-banner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
 .deck-toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .pp-hint-inline { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; margin: 0.5rem 0 0; font-style: italic; }
 

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ingestText, ingestFile, profileTable, transformTable,
   type DetectedTable, type ProfileResponse, type ChartSpecDTO,
@@ -13,6 +14,7 @@ import "./data-studio.css";
 type Stage = "input" | "choose_table" | "workspace";
 
 export default function DataStudio() {
+  const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>("input");
   const [pasteText, setPasteText] = useState("");
   const [detected, setDetected] = useState<DetectedTable[]>([]);
@@ -126,9 +128,7 @@ export default function DataStudio() {
     stashChartForDeck({ chart, title: spec.title, note: placement.note });
     flash(`Ready to place in "${placement.deck.name}". Opening the deck…`);
     setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("provisio:open-deck", { detail: { deckId: placement.deck.id } }),
-      );
+      navigate(`/deck/${placement.deck.id}`);
     }, 500);
   }
 

@@ -1,4 +1,5 @@
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { Routes, Route, Navigate, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabaseClient";
 import { type AnalyzeResult } from "./api";
@@ -7,23 +8,26 @@ import MfaChallenge from "./MfaChallenge";
 import Landing from "./marketing/Landing";
 import MfaSettings from "./MfaSettings";
 import HomeDashboard from "./HomeDashboard";
-import NotificationBanner from "./NotificationBanner";
+import NotificationBanner, { registerPlanUpgrade } from "./NotificationBanner";
 import SupportWidget from "./SupportWidget";
 import BillingPlans from "./BillingPlans";
 import ChangePassword from "./ChangePassword";
+import WelcomeCelebration from "./WelcomeCelebration";
 import "./theme.css";
 import "./dashboard.css";
 
-// These three pull in the heaviest dependencies in the app (recharts,
-// react-rnd, @dnd-kit, html2canvas), so they're loaded on demand instead of
-// bundled into the initial page load. Someone who only ever uses Evidence
-// and Home shouldn't have to download charting/drag-and-drop code they
-// never touch.
+// These pull in the heaviest dependencies in the app (recharts, react-rnd,
+// @dnd-kit, html2canvas), so they're loaded on demand instead of bundled into
+// the initial page load. Someone who only ever uses Evidence and Home
+// shouldn't have to download charting/drag-and-drop code they never touch.
 const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
 const DecksHome = lazy(() => import("./DecksHome"));
+const DeckEditor = lazy(() => import("./DeckEditor"));
 const DataStudio = lazy(() => import("./DataStudio"));
 const Evidence = lazy(() => import("./Evidence"));
 const DeckReview = lazy(() => import("./DeckReview"));
+
+const API_BASE = import.meta.env.VITE_API_BASE as string;
 
 function TabLoading() {
   return <p style={{ padding: "2rem", color: "var(--text-dim)" }}>Loading...</p>;
@@ -92,11 +96,20 @@ export default function App() {
     );
   }
 
+  // Logged out: the landing/login pages live at "/", and every other path
+  // redirects there. The login/landing toggle stays as local state so those
+  // pages are unchanged.
   if (session === null) {
-    return loggedOutView === "login" ? (
+    const loggedOut = loggedOutView === "login" ? (
       <Login onGoHome={() => setLoggedOutView("landing")} />
     ) : (
       <Landing onTryNow={() => setLoggedOutView("login")} />
+    );
+    return (
+      <Routes>
+        <Route path="/" element={loggedOut} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     );
   }
 
@@ -126,7 +139,7 @@ export default function App() {
   if (session && !sessionStorage.getItem("provisio:optin-synced")) {
     sessionStorage.setItem("provisio:optin-synced", "1");
     const optIn = Boolean((session.user.user_metadata as Record<string, unknown>)?.marketing_opt_in);
-    fetch(`${import.meta.env.VITE_API_BASE}/me/marketing-optin`, {
+    fetch(`${API_BASE}/me/marketing-optin`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ opt_in: optIn, email: session.user.email ?? "" }),
@@ -142,109 +155,96 @@ export default function App() {
   );
 }
 
-type DashTab = "home" | "evidence" | "profile" | "security" | "deck" | "review" | "data" | "billing";
-
-const DASH_TABS: DashTab[] = ["home", "evidence", "profile", "security", "deck", "review", "data", "billing"];
-const ACTIVE_TAB_KEY = "provisio:active-tab";
+const DASH_TABS = [
+  { to: "/home", label: "Home" },
+  { to: "/evidence", label: "Evidence" },
+  { to: "/profile", label: "Company profile" },
+  { to: "/deck", label: "Deck" },
+  { to: "/review", label: "Review" },
+  { to: "/data", label: "Data" },
+  { to: "/security", label: "Security" },
+  { to: "/billing", label: "Billing" },
+] as const;
 
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
-  // Restore the tab the user was on before a refresh. Guarded against stale or
-  // invalid stored values.
-  const [tab, setTab] = useState<DashTab>(() => {
-    try {
-      const stored = sessionStorage.getItem(ACTIVE_TAB_KEY);
-      if (stored && (DASH_TABS as string[]).includes(stored)) return stored as DashTab;
-    } catch { /* sessionStorage unavailable */ }
-    return "home";
-  });
-
-  // Persist the active tab so a refresh lands back on it.
-  useEffect(() => {
-    try { sessionStorage.setItem(ACTIVE_TAB_KEY, tab); } catch { /* ignore */ }
-  }, [tab]);
+  const navigate = useNavigate();
   const [analyzedRepos, setAnalyzedRepos] = useState<AnalyzeResult[]>([]);
   const [profileFocusField, setProfileFocusField] = useState<string | null>(null);
-  const [welcome, setWelcome] = useState<string | null>(null);
+  // Plan name to show in the celebration overlay; null means no overlay.
+  const [celebration, setCelebration] = useState<string | null>(null);
 
-  // Returning from the GitHub install flow lands here with ?status=success.
-  // Clear the param and open the Evidence tab, which handles loading repos
-  // itself now.
+  // The query string as it was on first render. We capture it synchronously
+  // because the "/" → "/home" redirect runs in a child effect *before* our
+  // mount effect below, and that redirect strips the query — so reading
+  // window.location.search from the effect would come back empty.
+  const initialSearch = useRef(typeof window !== "undefined" ? window.location.search : "");
+
+  // Handle the query-string hand-offs from external flows exactly once, on
+  // mount. Each clears its own param by navigating to a clean path so a
+  // refresh doesn't re-trigger it, and the browser history stays tidy.
+  //
+  //  ?status=success   — returning from the GitHub install → open Evidence.
+  //  ?checkout=success — returning from a successful checkout → open Billing,
+  //                       celebrate, and raise the persistent upgrade banner.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(initialSearch.current);
     if (params.get("status") === "success") {
-      window.history.replaceState({}, "", window.location.pathname);
-      setTab("evidence");
+      navigate("/evidence", { replace: true });
+      return;
     }
+    if (params.get("checkout") === "success") {
+      // Land on Billing with the param stripped.
+      navigate("/billing", { replace: true });
+      // Confirm the plan name from the server and use the real name in both
+      // the overlay and the banner. Fulfilment is via webhook, so the plan
+      // may lag a moment — fall back to a generic name if it hasn't landed.
+      fetch(`${API_BASE}/billing/me`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          const name = data?.entitlement?.plan?.name;
+          const planName = name && name !== "Free" ? name : "Provisio";
+          setCelebration(planName);
+          registerPlanUpgrade(planName);
+        })
+        .catch(() => {
+          setCelebration("Provisio");
+          registerPlanUpgrade("Provisio");
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Returning from a successful checkout lands here with ?checkout=success.
-  // Open the Billing tab so the user sees their new plan, and show a welcome
-  // banner naming it. Fulfilment is via webhook, so the plan may take a moment
-  // to appear — we read /billing/me for the name, falling back to a generic
-  // message if it hasn't landed yet.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("checkout") !== "success") return;
-    window.history.replaceState({}, "", window.location.pathname);
-    setTab("billing");
-    setWelcome("Welcome! Your account has been upgraded.");
-    fetch(`${import.meta.env.VITE_API_BASE}/billing/me`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const name = data?.entitlement?.plan?.name;
-        if (name && name !== "Free") setWelcome(`Welcome to ${name}! Your account has been upgraded.`);
-      })
-      .catch(() => { /* keep the generic welcome */ });
-  }, [accessToken]);
-
-  // Stash first (the Decks page is lazy and may not be mounted yet), then
-  // notify it in case it already is.
+  // Navigate to a specific deck in the editor. slideIndex, when given, is
+  // carried as a query param the editor reads on open.
   const openDeck = (id: string, slideIndex?: number) => {
-    sessionStorage.setItem("provisio:open-deck", id);
-    if (slideIndex != null) sessionStorage.setItem("provisio:open-slide", String(slideIndex));
-    else sessionStorage.removeItem("provisio:open-slide");
-    setTab("deck");
-    window.dispatchEvent(new CustomEvent("provisio:open-deck", { detail: { deckId: id, slideIndex } }));
+    navigate(`/deck/${id}${slideIndex != null ? `?slide=${slideIndex}` : ""}`);
   };
 
-  const navigateTo = (t: DashTab, focusField?: string) => {
+  const navigateTo = (tab: string, focusField?: string) => {
     if (focusField) setProfileFocusField(focusField);
-    setTab(t);
+    navigate(`/${tab}`);
   };
 
   return (
     <div className="provisio dashboard">
+      {/* Persistent notifications (incl. the plan-upgrade banner) sit above
+          the topbar, per spec. */}
+      <NotificationBanner accessToken={accessToken} />
+
       <div className="dash-topbar">
-        <button className="brand-mark brand-mark-link" onClick={() => setTab("home")}>
+        <button className="brand-mark brand-mark-link" onClick={() => navigate("/home")}>
           Provisio
         </button>
         <nav className="dash-tabs">
-          <button className={`dash-tab ${tab === "home" ? "dash-tab-active" : ""}`} onClick={() => setTab("home")}>
-            Home
-          </button>
-          <button className={`dash-tab ${tab === "evidence" ? "dash-tab-active" : ""}`} onClick={() => setTab("evidence")}>
-            Evidence
-          </button>
-          <button className={`dash-tab ${tab === "profile" ? "dash-tab-active" : ""}`} onClick={() => setTab("profile")}>
-            Company profile
-          </button>
-          <button className={`dash-tab ${tab === "deck" ? "dash-tab-active" : ""}`} onClick={() => setTab("deck")}>
-            Deck
-          </button>
-          <button className={`dash-tab ${tab === "review" ? "dash-tab-active" : ""}`} onClick={() => setTab("review")}>
-            Review
-          </button>
-          <button className={`dash-tab ${tab === "data" ? "dash-tab-active" : ""}`} onClick={() => setTab("data")}>
-            Data
-          </button>
-          <button className={`dash-tab ${tab === "security" ? "dash-tab-active" : ""}`} onClick={() => setTab("security")}>
-            Security
-          </button>
-          <button className={`dash-tab ${tab === "billing" ? "dash-tab-active" : ""}`} onClick={() => setTab("billing")}>
-            Billing
-          </button>
+          {DASH_TABS.map((t) => (
+            <NavLink
+              key={t.to}
+              to={t.to}
+              className={({ isActive }) => `dash-tab ${isActive ? "dash-tab-active" : ""}`}
+            >
+              {t.label}
+            </NavLink>
+          ))}
         </nav>
         <div className="dash-user">
           <a className="dash-domani" href="https://www.domanimedia.com" target="_blank" rel="noopener noreferrer">
@@ -257,81 +257,91 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
         </div>
       </div>
 
-      {welcome && (
-        <div className="checkout-welcome" role="status">
-          <span className="checkout-welcome-icon">✦</span>
-          <span className="checkout-welcome-msg">{welcome}</span>
-          <button className="checkout-welcome-close" onClick={() => setWelcome(null)} aria-label="Dismiss">✕</button>
-        </div>
-      )}
-
-      <NotificationBanner accessToken={accessToken} />
       <SupportWidget accessToken={accessToken} />
 
-      {tab === "profile" && (
-        <Suspense fallback={<TabLoading />}>
-          <CompanyProfileForm
-            focusField={profileFocusField}
-            onFocusHandled={() => setProfileFocusField(null)}
+      {celebration && (
+        <WelcomeCelebration planName={celebration} onDismiss={() => setCelebration(null)} />
+      )}
+
+      <Suspense fallback={<TabLoading />}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route
+            path="/home"
+            element={
+              <div className="dash-body">
+                <HomeDashboard userName={userName} onNavigate={navigateTo} onOpenDeck={openDeck} />
+              </div>
+            }
           />
-        </Suspense>
-      )}
-
-      {tab === "deck" && (
-        <Suspense fallback={<TabLoading />}>
-          <DecksHome analyzedRepos={analyzedRepos} />
-        </Suspense>
-      )}
-
-      {tab === "review" && (
-        <Suspense fallback={<TabLoading />}>
-          <DeckReview onOpenDeck={openDeck} onNavigate={navigateTo} />
-        </Suspense>
-      )}
-
-      {tab === "billing" && (
-        <div className="dash-body">
-          <BillingPlans accessToken={accessToken} />
-        </div>
-      )}
-
-      {tab === "data" && (
-        <Suspense fallback={<TabLoading />}>
-          <DataStudio />
-        </Suspense>
-      )}
-
-      {tab === "security" && (
-        <div className="dash-body">
-          <ChangePassword email={userEmail} />
-          <MfaSettings />
-        </div>
-      )}
-
-      {tab === "home" && (
-        <div className="dash-body">
-          <HomeDashboard
-            userName={userName}
-            onNavigate={(t) => setTab(t)}
-            onOpenDeck={openDeck}
+          <Route
+            path="/evidence"
+            element={
+              <Evidence
+                onAnalyzed={(res) => {
+                  // Keep analysed repos available to the deck builder, which
+                  // uses them as the evidence source when generating slides.
+                  setAnalyzedRepos((prev) => [
+                    ...prev.filter((r) => r.summary.full_name !== res.summary.full_name),
+                    res as unknown as AnalyzeResult,
+                  ]);
+                }}
+              />
+            }
           />
-        </div>
-      )}
-
-      {tab === "evidence" && (
-        <Suspense fallback={<TabLoading />}>
-          <Evidence
-            onAnalyzed={(res) => {
-              // Keep analysed repos available to the deck builder, which
-              // uses them as the evidence source when generating slides.
-              setAnalyzedRepos((prev) => [
-                ...prev.filter((r) => r.summary.full_name !== res.summary.full_name),
-                res as unknown as AnalyzeResult,
-              ]);
-            }}
+          <Route
+            path="/profile"
+            element={
+              <CompanyProfileForm
+                focusField={profileFocusField}
+                onFocusHandled={() => setProfileFocusField(null)}
+              />
+            }
           />
-        </Suspense>
-      )}
+          <Route path="/deck" element={<DecksHome analyzedRepos={analyzedRepos} />} />
+          <Route path="/deck/:id" element={<DeckEditorRoute analyzedRepos={analyzedRepos} />} />
+          <Route path="/review" element={<DeckReview onOpenDeck={openDeck} onNavigate={navigateTo} />} />
+          <Route path="/data" element={<DataStudio />} />
+          <Route
+            path="/security"
+            element={
+              <div className="dash-body">
+                <ChangePassword email={userEmail} />
+                <MfaSettings />
+              </div>
+            }
+          />
+          <Route
+            path="/billing"
+            element={
+              <div className="dash-body">
+                <BillingPlans accessToken={accessToken} />
+              </div>
+            }
+          />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
+      </Suspense>
     </div>
+  );
+}
+
+// Reads the deck id from the path (and an optional ?slide= hint) and renders
+// the editor. Back returns to the deck list.
+function DeckEditorRoute({ analyzedRepos }: { analyzedRepos: AnalyzeResult[] }) {
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  if (!id) return <Navigate to="/deck" replace />;
+  const slideParam = searchParams.get("slide");
+  const initialSlide = slideParam != null && Number.isFinite(Number(slideParam)) ? Number(slideParam) : undefined;
+  return (
+    <DeckEditor
+      key={id}
+      deckId={id}
+      initialSlide={initialSlide}
+      analyzedRepos={analyzedRepos}
+      onBack={() => navigate("/deck")}
+    />
   );
 }

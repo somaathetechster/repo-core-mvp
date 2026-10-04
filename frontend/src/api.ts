@@ -346,13 +346,14 @@ export async function saveDeckEditorState(
     layouts: Record<string, unknown>;
     freeform_slide_ids: string[];
   }
-): Promise<void> {
+): Promise<{ status: string } & Partial<DeckSummary>> {
   const res = await fetch(`${API_BASE}/decks/${deckId}`, {
     method: "PUT",
     headers: { ...(await authHeaders()), "Content-Type": "application/json" },
     body: JSON.stringify(state),
   });
   if (!res.ok) await throwWithDetail(res, `Failed to save deck: ${res.status}`);
+  return res.json();
 }
 
 export async function updateDeckProfile(deckId: string, profile: CompanyProfile): Promise<void> {

@@ -41,6 +41,13 @@
   color: #fde68a;
 }
 
+/* Plan upgrade — celebratory gold band, shown for 24h after subscribing. */
+.notif-upgrade {
+  background: linear-gradient(135deg, #2a2112, #1c1609);
+  border-bottom: 1px solid rgba(184, 134, 11, .45);
+  color: #f0d79a;
+}
+
 .notif-icon {
   font-size: 1rem;
   flex-shrink: 0;
