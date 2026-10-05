@@ -969,6 +969,9 @@ export const composeBlueprint: Composer = (c) => {
 import {
   composeGallery, composeDossier, composeEdition, composeSignal,
 } from "./templates-v2";
+import {
+  composeObsidian, composeBrutus, composeCartier, composeHerald,
+} from "./templates-v3";
 
 export const COMPOSERS: Record<string, Composer> = {
   editorial: composeEditorial,
@@ -982,6 +985,10 @@ export const COMPOSERS: Record<string, Composer> = {
   dossier: composeDossier,
   edition: composeEdition,
   signal: composeSignal,
+  obsidian: composeObsidian,
+  brutus: composeBrutus,
+  cartier: composeCartier,
+  herald: composeHerald,
 };
 
 /**

@@ -73,6 +73,8 @@ const FRAUNCES = '"Fraunces", Georgia, serif';
 const SOURCE_SERIF = '"Source Serif 4", Georgia, serif';
 const JETBRAINS = '"JetBrains Mono", ui-monospace, Menlo, monospace';
 const ARCHIVO = '"Archivo", "Helvetica Neue", Arial, sans-serif';
+const PLAYFAIR = '"Playfair Display", Georgia, serif';
+const SPACE_GROTESK = '"Space Grotesk", "Inter", sans-serif';
 
 export const TEMPLATES: DeckTemplate[] = [
   {
@@ -247,6 +249,119 @@ export const TEMPLATES: DeckTemplate[] = [
       invertsStatements: true,
       portraits: "tall",
     },
+  },
+
+  // ── Previously composer-only templates, now with full declared records so
+  // they no longer inherit whatever colour scheme happened to be active. ──
+  {
+    id: "gallery",
+    name: "Gallery",
+    description: "A modular image grid where text blocks are cells. Built around showing, not telling.",
+    bestFor: "Visual products, marketplaces, and brands with strong imagery.",
+    fonts: { display: FRAUNCES, body: INTER, label: INTER, webfonts: ["Fraunces:opsz,wght@9..144,400;9..144,600", "Inter:wght@400;500;600"] },
+    type: { statement: 96, display: 58, headline: 40, subhead: 24, body: 17, caption: 13, micro: 11 },
+    leading: { tight: 1.04, normal: 1.35, relaxed: 1.6 },
+    grid: { margin: 10, columns: 12, gutter: 10 },
+    defaults: { ink: "#1a1a18", paper: "#f5f2ea", accent: "#8fbc8f" },
+    traits: { cover: "image-overlay", titlePlacement: "top-full", rule: "block-fill", align: "left", numbering: "numeric", points: "grid-cards", density: "balanced", invertsStatements: false, portraits: "square" },
+  },
+  {
+    id: "dossier",
+    name: "Dossier",
+    description: "A ruled technical document: masthead, hairline rules, findings in a table rhythm.",
+    bestFor: "Diligence-heavy raises, technical partners, and formal reviews.",
+    fonts: { display: SOURCE_SERIF, body: INTER, label: JETBRAINS, webfonts: ["Source+Serif+4:wght@400;600", "Inter:wght@400;500", "JetBrains+Mono:wght@400;500"] },
+    type: { statement: 76, display: 48, headline: 32, subhead: 21, body: 16, caption: 12, micro: 10 },
+    leading: { tight: 1.1, normal: 1.45, relaxed: 1.65 },
+    grid: { margin: 64, columns: 12, gutter: 20 },
+    defaults: { ink: "#1c1c1e", paper: "#f9f9f7", accent: "#4a5568" },
+    traits: { cover: "banded", titlePlacement: "top-rule", rule: "hairline-full", align: "left", numbering: "sectioned", points: "numbered-rows", density: "dense", invertsStatements: false, portraits: "square" },
+  },
+  {
+    id: "edition",
+    name: "Edition",
+    description: "A magazine spread: a dominant image bleeds off the edge against a high-contrast serif.",
+    bestFor: "Consumer and lifestyle brands with editorial ambition.",
+    fonts: { display: PLAYFAIR, body: INTER, label: INTER, webfonts: ["Playfair+Display:wght@400;700", "Inter:wght@400;500;600"] },
+    type: { statement: 104, display: 66, headline: 42, subhead: 25, body: 18, caption: 14, micro: 11 },
+    leading: { tight: 1.0, normal: 1.35, relaxed: 1.6 },
+    grid: { margin: 80, columns: 12, gutter: 24 },
+    defaults: { ink: "#141414", paper: "#fafafa", accent: "#c0392b" },
+    traits: { cover: "image-overlay", titlePlacement: "left-column", rule: "none", align: "left", numbering: "numeric", points: "grid-cards", density: "generous", invertsStatements: true, portraits: "tall" },
+  },
+  {
+    id: "signal",
+    name: "Signal",
+    description: "A colour field where type is the only element. Maximum signal, zero ornament.",
+    bestFor: "Live-delivered pitches and bold single-idea decks.",
+    fonts: { display: SPACE_GROTESK, body: INTER, label: INTER, webfonts: ["Space+Grotesk:wght@400;500;700", "Inter:wght@400;500"] },
+    type: { statement: 156, display: 92, headline: 52, subhead: 28, body: 20, caption: 14, micro: 11 },
+    leading: { tight: 0.94, normal: 1.25, relaxed: 1.45 },
+    grid: { margin: 96, columns: 8, gutter: 28 },
+    defaults: { ink: "#0a0a0a", paper: "#f5f5f5", accent: "#2563eb" },
+    traits: { cover: "paper-minimal", titlePlacement: "side-rail", rule: "block-fill", align: "left", numbering: "none", points: "stacked-rules", density: "generous", invertsStatements: true, portraits: "square" },
+  },
+  {
+    id: "blueprint",
+    name: "Blueprint",
+    description: "A saturated field with a visible structural grid and an extreme type scale.",
+    bestFor: "Deep tech and infrastructure teams that want to look engineered.",
+    fonts: { display: ARCHIVO, body: INTER, label: JETBRAINS, webfonts: ["Archivo:wght@400;600;700", "Inter:wght@400;500", "JetBrains+Mono:wght@400;500"] },
+    type: { statement: 168, display: 84, headline: 40, subhead: 24, body: 16, caption: 13, micro: 11 },
+    leading: { tight: 0.92, normal: 1.35, relaxed: 1.55 },
+    grid: { margin: 56, columns: 12, gutter: 20 },
+    defaults: { ink: "#0d1b2a", paper: "#e8f0fe", accent: "#1a56db" },
+    traits: { cover: "banded", titlePlacement: "top-rule", rule: "hairline-full", align: "left", numbering: "sectioned", points: "numbered-rows", density: "dense", invertsStatements: false, portraits: "square" },
+  },
+
+  // ── Four new design systems (see templates-v3.ts for their composers). ──
+  {
+    id: "obsidian",
+    name: "Obsidian",
+    description: "Near-black canvas, gold accents, high contrast.",
+    bestFor: "Fintech, late-stage, institutional investors.",
+    fonts: { display: PLAYFAIR, body: INTER, label: INTER, webfonts: ["Playfair+Display:wght@400;700", "Inter:wght@300;400;500;600"] },
+    type: { statement: 108, display: 72, headline: 42, subhead: 24, body: 18, caption: 13, micro: 11 },
+    leading: { tight: 1.0, normal: 1.4, relaxed: 1.6 },
+    grid: { margin: 88, columns: 12, gutter: 24 },
+    defaults: { ink: "#f5f0e8", paper: "#0d0d0b", accent: "#c9a84c" },
+    traits: { cover: "ink-field", titlePlacement: "left-column", rule: "accent-bar", align: "left", numbering: "numeric", points: "columns", density: "generous", invertsStatements: false, portraits: "square" },
+  },
+  {
+    id: "brutus",
+    name: "Brutus",
+    description: "Maximum type, hard edges, zero decoration.",
+    bestFor: "Consumer, gaming, bold B2C brands.",
+    fonts: { display: ARCHIVO, body: INTER, label: JETBRAINS, webfonts: ["Archivo:wght@700;900", "Inter:wght@400;500", "JetBrains+Mono:wght@400"] },
+    type: { statement: 160, display: 96, headline: 72, subhead: 28, body: 22, caption: 14, micro: 12 },
+    leading: { tight: 0.92, normal: 1.25, relaxed: 1.45 },
+    grid: { margin: 100, columns: 12, gutter: 24 },
+    defaults: { ink: "#0a0a0a", paper: "#f0f0f0", accent: "#ff3300" },
+    traits: { cover: "paper-minimal", titlePlacement: "top-full", rule: "block-fill", align: "left", numbering: "numeric", points: "numbered-rows", density: "generous", invertsStatements: true, portraits: "square" },
+  },
+  {
+    id: "cartier",
+    name: "Cartier",
+    description: "Extreme whitespace, precise typography, luxury restraint.",
+    bestFor: "Luxury, healthcare, impact, sophisticated B2B.",
+    fonts: { display: INTER, body: INTER, label: INTER, webfonts: ["Inter:wght@300;400;500;700"] },
+    type: { statement: 88, display: 56, headline: 44, subhead: 32, body: 18, caption: 13, micro: 11 },
+    leading: { tight: 1.1, normal: 1.5, relaxed: 1.8 },
+    grid: { margin: 120, columns: 12, gutter: 28 },
+    defaults: { ink: "#1a1a1a", paper: "#ffffff", accent: "#1a1a1a" },
+    traits: { cover: "paper-minimal", titlePlacement: "left-column", rule: "none", align: "left", numbering: "numeric", points: "stacked-rules", density: "generous", invertsStatements: false, portraits: "square" },
+  },
+  {
+    id: "herald",
+    name: "Herald",
+    description: "Magazine editorial, serif authority, data in cards.",
+    bestFor: "Investor decks, grant applications, premium presentations.",
+    fonts: { display: FRAUNCES, body: INTER, label: INTER, webfonts: ["Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700", "Inter:wght@400;500;600"] },
+    type: { statement: 104, display: 72, headline: 48, subhead: 26, body: 17, caption: 14, micro: 11 },
+    leading: { tight: 1.02, normal: 1.4, relaxed: 1.65 },
+    grid: { margin: 88, columns: 12, gutter: 24 },
+    defaults: { ink: "#1a2e1a", paper: "#f5f0e4", accent: "#b5cc47" },
+    traits: { cover: "ink-field", titlePlacement: "left-column", rule: "accent-bar", align: "left", numbering: "sectioned", points: "grid-cards", density: "balanced", invertsStatements: true, portraits: "square" },
   },
 ];
 
