@@ -1,7 +1,4 @@
 import { supabase } from "./supabaseClient";
-import type { ContentBlock } from "./deck/elements";
-
-export type { ContentBlock } from "./deck/elements";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -158,8 +155,6 @@ export interface DeckSlide {
   team_members: DeckTeamMember[] | null;
   toc_entries: { title: string }[] | null;
   chart?: { chart_type: "bar" | "line" | "pie" | "table"; columns: string[]; rows: string[][] };
-  /** Typed content blocks produced by generation; optional and additive. */
-  content_blocks?: ContentBlock[] | null;
 }
 
 export interface DeckTheme {
@@ -181,54 +176,6 @@ export interface DeckSummary {
   created_at: string | null;
 }
 
-/* ---------------------------------------------------------------- */
-/* Deck intelligence — the Planner brief + Critic read               */
-/* ---------------------------------------------------------------- */
-
-export interface EvidenceRating {
-  field: string;
-  rating: "STRONG" | "WEAK" | "MISSING";
-  note: string;
-}
-
-export interface SlideBrief {
-  role: string;
-  argument: string;
-  evidence_fields: string[];
-  confidence: "HIGH" | "MEDIUM" | "LOW";
-  block_type: string | null;
-  notes: string;
-}
-
-export interface CriticFinding {
-  role: string;
-  severity: "CRITICAL" | "IMPORTANT" | "POLISH";
-  finding: string;
-  suggestion: string;
-  should_rewrite: boolean;
-}
-
-export interface CriticRead {
-  overall: string;
-  slide_findings: CriticFinding[];
-  missing_pre_answers: string[];
-  strongest_slide: string;
-  weakest_slide: string;
-}
-
-/** Stored on the deck as `brief`: the planner Brief fields plus the Critic
- *  read and any applied structure override. */
-export interface DeckIntelligence {
-  core_argument?: string;
-  evidence_inventory?: EvidenceRating[];
-  slide_briefs?: SlideBrief[];
-  founder_edge?: string;
-  kill_shots?: string[];
-  gaps?: string[];
-  critic?: CriticRead | null;
-  applied_structure_override?: { from: string; to: string; reason: string } | null;
-}
-
 export interface FullDeck extends DeckSummary {
   profile_snapshot: Record<string, unknown>;
   repo_full_names: string[];
@@ -236,24 +183,6 @@ export interface FullDeck extends DeckSummary {
   theme: DeckTheme;
   layouts: Record<string, unknown>;
   freeform_slide_ids: string[];
-  brief?: DeckIntelligence | null;
-  /** Present on the create response when the Planner recommended a different
-   *  structure than the one chosen. */
-  structure_override?: { from: string; to: string; reason: string } | null;
-  warnings?: string[];
-}
-
-export interface ProfileGaps {
-  evidence_inventory: EvidenceRating[];
-  gaps: string[];
-  core_argument: string;
-  founder_edge: string;
-}
-
-export async function getProfileGaps(): Promise<ProfileGaps> {
-  const res = await fetch(`${API_BASE}/company-profile/gaps`, { headers: await authHeaders() });
-  if (!res.ok) await throwWithDetail(res, "Couldn't analyse your profile.");
-  return res.json();
 }
 
 export async function listDecks(): Promise<DeckSummary[]> {
@@ -266,7 +195,6 @@ export async function createDeck(params: {
   name: string;
   useSharedProfile: boolean;
   repoSummaries: Record<string, unknown>[];
-  structureId?: string | null;
 }): Promise<FullDeck> {
   const res = await fetch(`${API_BASE}/decks`, {
     method: "POST",
@@ -275,52 +203,9 @@ export async function createDeck(params: {
       name: params.name,
       use_shared_profile: params.useSharedProfile,
       repo_summaries: params.repoSummaries,
-      structure_id: params.structureId ?? null,
     }),
   });
   if (!res.ok) await throwWithDetail(res, `Failed to create deck: ${res.status}`);
-  return res.json();
-}
-
-/* ---------------------------------------------------------------- */
-/* Deck structures — the named shapes a deck can be generated against */
-/* ---------------------------------------------------------------- */
-
-export interface DeckStructureRole {
-  key: string;
-  requirement: "required" | "recommended" | "optional";
-  purpose: string;
-  quality_bar: string;
-  source_fields: string[];
-  label: string;
-}
-
-export interface DeckStructureInfo {
-  id: string;
-  name: string;
-  description: string;
-  target_audience: string;
-  min_slides: number;
-  max_slides: number;
-  required_roles: string[];
-  roles: DeckStructureRole[];
-}
-
-export async function listStructures(): Promise<DeckStructureInfo[]> {
-  const res = await fetch(`${API_BASE}/decks/structures`, { headers: await authHeaders() });
-  if (!res.ok) await throwWithDetail(res, `Failed to load deck structures: ${res.status}`);
-  return (await res.json()).structures ?? [];
-}
-
-export async function recommendStructure(params: {
-  useSharedProfile: boolean;
-}): Promise<{ structure_id: string; reason: string }> {
-  const res = await fetch(`${API_BASE}/decks/recommend-structure`, {
-    method: "POST",
-    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
-    body: JSON.stringify({ use_shared_profile: params.useSharedProfile }),
-  });
-  if (!res.ok) await throwWithDetail(res, `Failed to recommend a structure: ${res.status}`);
   return res.json();
 }
 

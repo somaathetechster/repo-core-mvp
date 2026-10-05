@@ -14,14 +14,10 @@ supplied fact, and a verification pass checks the output's numbers against
 the input before anything reaches a slide.
 """
 import json
-import logging
 import re
 from dataclasses import dataclass, field
 
 from app.services.ai_provider import generate, GenerateRequest
-from app.services.deck_structures import DeckStructure, SlideRole, get_structure, GLOBAL_BARS, STRUCTURES
-
-log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,26 +28,12 @@ class SlideCopy:
     points: list[str] = field(default_factory=list)
     # Evidence the copy rests on, surfaced under the slide.
     sources: list[str] = field(default_factory=list)
-    # Optional typed content blocks (stat/comparison/timeline/logos/chips/
-    # quote/bars) the model may emit where the content is naturally
-    # structured. Kept as validated raw dicts — see _KNOWN_BLOCK_TYPES.
-    blocks: list[dict] = field(default_factory=list)
 
 
 @dataclass
 class DeckNarrative:
     slides: list[SlideCopy]
     warnings: list[str] = field(default_factory=list)
-    # The intelligence layer (see deck_planner / deck_critic).
-    brief: dict | None = None
-    critic: dict | None = None
-    #: The structure actually used (may differ from the chosen one if the
-    #: Planner recommended an override).
-    structure_id: str | None = None
-    #: When the Planner recommended a different structure: {"from","to","reason"}.
-    structure_override: dict | None = None
-    #: Total LLM calls made for this generation (planner+gen+critic+rewrites).
-    llm_calls: int = 0
 
 
 NARRATIVE_SYSTEM = """You write investor pitch deck copy. You are given a founder's own description of their company, plus any technical evidence extracted from their codebase.
@@ -75,10 +57,6 @@ WHAT YOU MAY NOT DO
 
 For each slide, list in "sources" which input fields you drew on, so every claim can be traced back.
 
-CONTENT BLOCKS
-Where a slide's content is naturally structured, express it as a content block instead of prose. A traction slide's numbers become `stat` blocks. A competition slide becomes a `comparison` table. A roadmap becomes a `timeline`. A team slide becomes `chips`. Press/customers become `logos`. A testimonial becomes a `quote`. Use-of-funds or projections become `bars`. NEVER invent data for a block — every value must come from the founder's input or the technical evidence. If the data for a block does not exist, write prose instead. A block with real numbers always beats a paragraph describing them.
-Any block carrying data must list its source fields in that block's own "sources", exactly as the slide does.
-
 Return valid JSON only, no markdown fences:
 {
   "slides": [
@@ -87,61 +65,32 @@ Return valid JSON only, no markdown fences:
       "title": "Short, specific slide title",
       "lead": "The one sentence that carries the slide.",
       "points": ["Supporting point.", "Supporting point."],
-      "sources": ["problem", "traction"],
-      "blocks": [
-        { "type": "stat", "value": "54%", "label": "week-1 retention", "sublabel": "8-week cohort", "sources": ["traction"] },
-        { "type": "comparison", "columns": ["", "Us", "Incumbent"], "rows": [{ "cells": ["Onboarding", "2 min", "2 weeks"] }], "sources": ["competitive_landscape"] },
-        { "type": "timeline", "items": [{ "period": "H1 2026", "points": ["Launch in Lagos", "First 1,000 users"] }], "sources": ["milestones_next_12m"] },
-        { "type": "logos", "items": [{ "name": "TechCrunch", "note": "Featured" }], "sources": ["traction"] },
-        { "type": "chips", "items": [{ "name": "Ada Obi", "role": "CEO", "note": "ex-Paystack" }], "sources": ["team_members"] },
-        { "type": "quote", "text": "It cut our settlement time from days to minutes.", "author": "Chidi N.", "role": "CFO, Acme", "sources": ["traction"] },
-        { "type": "bars", "items": [{ "label": "Engineering", "value": 60, "max": 100 }, { "label": "Go-to-market", "value": 40, "max": 100 }], "sources": ["use_of_funds"] }
-      ]
+      "sources": ["problem", "traction"]
     }
   ]
-}
-The "blocks" array is OPTIONAL. Omit it entirely on slides whose content is prose. Include only the block types that fit the slide, never all of them, and only when every value is real."""
+}"""
+
+
+# The spine of a deck. Each entry says what the slide must accomplish, which
+# is more useful to the model than a bare label.
+SLIDE_PLAN: list[tuple[str, str, list[str]]] = [
+    ("problem", "Establish that a real, expensive problem exists and who has it.", ["problem", "market_opportunity"]),
+    ("solution", "Explain what the company does, concretely enough to picture it.", ["solution", "one_liner"]),
+    ("technology", "Show why this is hard to build and hard to copy.", ["evidence_of_innovation"]),
+    ("market", "Size the opportunity and explain why now.", ["market_opportunity"]),
+    ("traction", "Present evidence that it is working.", ["traction", "key_metrics"]),
+    ("business_model", "Explain how it makes money.", ["business_model", "pricing_model"]),
+    ("competition", "Position against alternatives honestly.", ["competitive_landscape"]),
+    ("ask", "State what is being raised and what it buys.", ["funding_ask"]),
+]
 
 
 def _field_text(profile: dict, key: str) -> str:
-    value = profile.get(key)
-    return value.strip() if isinstance(value, str) else ""
+    return (profile.get(key) or "").strip()
 
 
-#: Roles whose case is strengthened by independent codebase evidence even when
-#: the founder left the matching profile fields thin.
-_DILIGENCE_ROLES = {"product", "solution", "solution_demo", "moat", "technology", "evidence"}
-
-
-def _role_has_material(profile: dict, role: SlideRole, diligence: dict | None) -> bool:
-    if any(_field_text(profile, f) for f in role.source_fields):
-        return True
-    # team_members is a list, not a text field.
-    if "team_members" in role.source_fields and (profile.get("team_members") or []):
-        return True
-    if diligence and role.key in _DILIGENCE_ROLES:
-        return True
-    return False
-
-
-def _build_input(
-    profile: dict, diligence: dict | None, structure: DeckStructure,
-    brief: dict | None = None,
-) -> tuple[str, list[str]]:
-    """
-    Assembles the evidence and, from the chosen structure, the ordered list of
-    slides to write as one line per slide — its role key and its purpose.
-
-    The verbose per-slide injection (quality bar, evidence fields, the Planner's
-    argument/confidence/block hint) was found to thin the model's output: it
-    read as a list of constraints rather than an invitation to write. The simple
-    one-line-per-slide format lets the model write fully. The Planner brief still
-    runs and is stored on the narrative, but it is deliberately kept out of the
-    generation prompt. `brief` is therefore accepted but unused here.
-
-    Returns the prompt text and the roles that came out empty, so the caller can
-    warn the founder which sections had nothing behind them.
-    """
+def _build_input(profile: dict, diligence: dict | None) -> tuple[str, list[str]]:
+    """Assembles the evidence, and reports which slides have nothing behind them."""
     lines: list[str] = []
     empty: list[str] = []
 
@@ -150,15 +99,11 @@ def _build_input(
     if one := _field_text(profile, "one_liner"):
         lines.append(f"ONE-LINER: {one}")
 
-    # Every profile field a role in this structure draws on, de-duplicated and
-    # kept in a stable order, so the evidence block always carries what the
-    # slides-to-write section will reference.
-    evidence_keys: list[str] = []
-    for role in structure.content_roles:
-        for f in role.source_fields:
-            if f not in evidence_keys and f != "company_image_data_urls":
-                evidence_keys.append(f)
-    for key in evidence_keys:
+    for key in [
+        "problem", "solution", "market_opportunity", "competitive_landscape",
+        "traction", "key_metrics", "business_model", "pricing_model",
+        "evidence_of_innovation", "risks_and_mitigations", "funding_ask",
+    ]:
         value = _field_text(profile, key)
         if value:
             lines.append(f"\n{key.upper().replace('_', ' ')}:\n{value}")
@@ -181,20 +126,20 @@ def _build_input(
         for integ in diligence.get("integration_depth", [])[:5]:
             lines.append(f"Integration: {integ.get('system')} — {integ.get('assessment')}")
 
-    plan_lines: list[str] = []
-    for role in structure.content_roles:
-        has_input = _role_has_material(profile, role, diligence)
-        if not has_input:
-            if role.requirement in ("required", "recommended"):
-                empty.append(role.key)
-            continue
-        plan_lines.append(f"- {role.key}: {role.purpose}")
+    plan_lines = []
+    for kind, purpose, needs in SLIDE_PLAN:
+        has_input = any(_field_text(profile, n) for n in needs) or (
+            kind == "technology" and diligence
+        )
+        if has_input:
+            plan_lines.append(f"- {kind}: {purpose}")
+        else:
+            empty.append(kind)
 
     lines.append("\n--- SLIDES TO WRITE ---")
-    lines.append("\n".join(plan_lines))
+    lines.extend(plan_lines)
     lines.append(
-        "\nWrite only the slides listed. "
-        "Do not write slides for sections with no input."
+        "\nWrite only the slides listed. Do not write slides for sections with no input."
     )
 
     return "\n".join(lines), empty
@@ -238,164 +183,16 @@ def _verify_numbers(copy_text: str, source_text: str) -> list[str]:
     return sorted(set(unmatched))
 
 
-_KNOWN_BLOCK_TYPES = {"stat", "comparison", "timeline", "logos", "chips", "quote", "bars"}
+def generate_narrative(
+    profile: dict,
+    diligence: dict | None = None,
+    api_key_override: str | None = None,
+) -> DeckNarrative:
+    source_text, empty_sections = _build_input(profile, diligence)
 
-
-def _sanitize_blocks(raw) -> list[dict]:
-    """
-    Keeps only well-formed blocks of a known type, discarding anything the
-    model returned in the wrong shape. This never adds data — it only drops
-    malformed entries — so the never-invent guarantee is unaffected.
-    """
-    if not isinstance(raw, list):
-        return []
-    out: list[dict] = []
-    for b in raw:
-        if not isinstance(b, dict):
-            continue
-        t = b.get("type")
-        if t not in _KNOWN_BLOCK_TYPES:
-            continue
-        # Minimal shape check per type; a block missing its payload is dropped
-        # rather than rendered empty.
-        if t == "stat" and not (b.get("value") and b.get("label")):
-            continue
-        if t == "comparison" and not (isinstance(b.get("columns"), list) and isinstance(b.get("rows"), list) and b["rows"]):
-            continue
-        if t == "timeline" and not (isinstance(b.get("items"), list) and b["items"]):
-            continue
-        if t in ("logos", "chips") and not (isinstance(b.get("items"), list) and b["items"]):
-            continue
-        if t == "quote" and not (b.get("text") and b.get("author")):
-            continue
-        if t == "bars" and not (isinstance(b.get("items"), list) and b["items"]):
-            continue
-        out.append(b)
-    return out
-
-
-def _block_text(blocks: list[dict]) -> str:
-    """
-    Flattens every value a block carries into one string, so the number
-    verification pass checks figures inside blocks the same way it checks
-    prose. An invented stat value or bar figure must be caught too.
-    """
-    parts: list[str] = []
-    for b in blocks:
-        t = b.get("type")
-        if t == "stat":
-            parts += [str(b.get("value", "")), str(b.get("label", "")), str(b.get("sublabel", ""))]
-        elif t == "comparison":
-            parts += [str(c) for c in (b.get("columns") or [])]
-            for row in b.get("rows") or []:
-                parts += [str(c) for c in (row.get("cells") or [])]
-        elif t == "timeline":
-            for it in b.get("items") or []:
-                parts.append(str(it.get("period", "")))
-                parts += [str(p) for p in (it.get("points") or [])]
-        elif t in ("logos", "chips"):
-            for it in b.get("items") or []:
-                parts += [str(it.get("name", "")), str(it.get("role", "")), str(it.get("note", ""))]
-        elif t == "quote":
-            parts += [str(b.get("text", "")), str(b.get("author", "")), str(b.get("role", ""))]
-        elif t == "bars":
-            for it in b.get("items") or []:
-                parts += [str(it.get("label", "")), str(it.get("value", "")), str(it.get("max", ""))]
-    return " ".join(p for p in parts if p)
-
-
-def _system_prompt() -> str:
-    """The writing rules, verbatim, plus the two global bars from the structure
-    engine so there is one source of truth for them."""
-    bars = "\n".join(f"- {b}" for b in GLOBAL_BARS)
-    return NARRATIVE_SYSTEM.replace(
-        "WHAT YOU MAY NOT DO",
-        f"TWO BARS APPLY TO EVERY SLIDE\n{bars}\n\nWHAT YOU MAY NOT DO",
-        1,
-    )
-
-
-def _minimal_slide(profile: dict, role: SlideRole) -> SlideCopy:
-    """
-    A honest stand-in for a required role the model skipped. It never invents:
-    if the founder supplied source text we lead with it, otherwise we leave a
-    visible prompt to fill it rather than silently dropping the slide.
-    """
-    for f in role.source_fields:
-        text = _field_text(profile, f)
-        if text:
-            first = text.strip().split("\n")[0][:240]
-            return SlideCopy(kind=role.key, title=role.label, lead=first, sources=[f])
-    return SlideCopy(
-        kind=role.key,
-        title=role.label,
-        lead=f"(Add your {role.label.lower()}: {role.purpose})",
-        sources=[],
-    )
-
-
-def _enforce_structure(
-    slides: list[SlideCopy], profile: dict, structure: DeckStructure, diligence: dict | None,
-) -> list[SlideCopy]:
-    """
-    Reorders the model's slides to the structure's role sequence.
-
-    Required roles the model skipped are kept as a minimal honest slide rather
-    than silently dropped. Optional/recommended roles with no source material are
-    dropped. Any slide the model produced that is not in the structure is kept at
-    the end rather than discarded.
-    """
-    by_kind: dict[str, SlideCopy] = {}
-    for s in slides:
-        by_kind.setdefault(s.kind, s)
-
-    ordered: list[SlideCopy] = []
-    for role in structure.content_roles:
-        if role.key in by_kind:
-            ordered.append(by_kind.pop(role.key))
-        elif role.requirement == "required":
-            ordered.append(_minimal_slide(profile, role))
-        # recommended/optional with nothing returned → dropped.
-
-    # Preserve anything extra the model wrote that we didn't place.
-    ordered.extend(by_kind.values())
-    return ordered
-
-
-def _clean_json(raw: str):
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("```")[1]
-        if cleaned.startswith("json"):
-            cleaned = cleaned[4:]
-    return json.loads(cleaned.strip())
-
-
-def _slide_from_item(item: dict) -> SlideCopy | None:
-    """Build a SlideCopy from one parsed slide object, or None if it has no
-    lead (the single required field)."""
-    if not isinstance(item, dict):
-        return None
-    lead = (item.get("lead") or "").strip()
-    if not lead:
-        return None
-    return SlideCopy(
-        kind=item.get("kind", "custom"),
-        title=(item.get("title") or "").strip() or item.get("kind", "Slide").title(),
-        lead=lead,
-        points=[p.strip() for p in item.get("points", []) if p and p.strip()],
-        sources=item.get("sources", []),
-        blocks=_sanitize_blocks(item.get("blocks")),
-    )
-
-
-def _assemble_source(
-    profile: dict, diligence: dict | None, structure: DeckStructure, brief: dict | None,
-) -> tuple[str, list[str]]:
-    """The company material for the generation prompt: the structure's slide
-    plan (optionally enriched with the Planner's per-slide strategy), prefixed
-    with the audience brief so the copy is aimed rather than generic."""
-    source_text, empty = _build_input(profile, diligence, structure, brief)
+    # The same facts must be written differently for different readers. The
+    # brief says who is reading, what they select on, and what the programme
+    # explicitly asked for, so the copy is aimed rather than generic.
     try:
         from app.services.program_intelligence import build_brief, brief_for_prompt
         brief_block = brief_for_prompt(build_brief(profile))
@@ -403,127 +200,39 @@ def _assemble_source(
     except Exception:
         # Never let audience tailoring break generation outright.
         pass
-    return source_text, empty
 
-
-def _match_structure_override(text: str, current_id: str) -> str | None:
-    """Resolve a Planner `structure_override` string to a known structure id,
-    if it names one different from the chosen structure. Tolerant of prose
-    like 'recommend traction-led because…'."""
-    t = (text or "").lower()
-    for sid, s in STRUCTURES.items():
-        if sid == current_id:
-            continue
-        needles = {sid, sid.replace("_", " "), sid.replace("_", "-"), s.name.lower()}
-        if any(n and n in t for n in needles):
-            return sid
-    return None
-
-
-def _evidence_fields_for(role: str, brief: dict | None, structure: DeckStructure) -> list[str]:
-    for sb in (brief or {}).get("slide_briefs", []) or []:
-        if isinstance(sb, dict) and sb.get("role") == role and sb.get("evidence_fields"):
-            return [str(e) for e in sb["evidence_fields"]]
-    r = structure.role(role)
-    return list(r.source_fields) if r else []
-
-
-def _rewrite_slide(
-    slide: SlideCopy, finding: str, suggestion: str, evidence_fields: list[str],
-    profile: dict, api_key_override: str | None,
-) -> SlideCopy | None:
-    """One targeted rewrite of a single slide. Returns the rewritten SlideCopy
-    or None if the call/parse fails (caller keeps the original)."""
-    # Supply the real values for the cited evidence fields so the rewrite has
-    # something true to work from — never invented data.
-    evidence_block = "\n".join(
-        f"{f}: {_field_text(profile, f)}" for f in evidence_fields if _field_text(profile, f)
-    ) or "(no evidence text available for the cited fields)"
-    current = {
-        "kind": slide.kind, "title": slide.title, "lead": slide.lead,
-        "points": slide.points, "sources": slide.sources, "blocks": slide.blocks,
-    }
-    prompt = (
-        f"Rewrite ONLY this slide. The problem identified: {finding}. "
-        f"The suggestion: {suggestion}. The evidence available: {', '.join(evidence_fields) or 'none'}. "
-        "Apply the same writing rules as the rest of the deck. Return the same JSON shape as a single slide. "
-        "Do not invent data.\n\n"
-        f"CURRENT SLIDE:\n{json.dumps(current, ensure_ascii=False)}\n\n"
-        f"EVIDENCE (the only facts you may use):\n{evidence_block}"
-    )
-    try:
-        raw = generate(GenerateRequest(
-            task="deck_slide_rewrite",
-            system=_system_prompt(),
-            prompt=prompt,
-            max_tokens=1200,
-            api_key_override=api_key_override,
-        ))
-        data = _clean_json(raw)
-    except Exception:
-        log.error("Slide rewrite failed for role=%s", slide.kind, exc_info=True)
-        return None
-    item = data["slides"][0] if isinstance(data, dict) and isinstance(data.get("slides"), list) and data["slides"] else data
-    new_slide = _slide_from_item(item if isinstance(item, dict) else {})
-    if new_slide:
-        # The rewrite keeps the slide's role even if the model changed "kind".
-        new_slide.kind = slide.kind
-    return new_slide
-
-
-def generate_narrative(
-    profile: dict,
-    diligence: dict | None = None,
-    api_key_override: str | None = None,
-    structure_id: str | None = None,
-) -> DeckNarrative:
-    chosen = get_structure(structure_id)
-    structure = chosen
-    calls = 0
-    warnings: list[str] = []
-
-    # ── 1. PLANNER — think before writing. ───────────────────────────────
-    planner_source, _ = _build_input(profile, diligence, structure)
-    brief: dict | None = None
-    try:
-        from app.services.deck_planner import run_planner
-        brief = run_planner(planner_source, structure, api_key_override)
-    except Exception:
-        log.error("Planner step raised", exc_info=True)
-    if brief is not None:
-        calls += 1
-
-    # ── 2. STRUCTURE OVERRIDE — honour the Planner's recommendation. ──────
-    override_info: dict | None = None
-    if brief and brief.get("structure_override"):
-        new_id = _match_structure_override(str(brief["structure_override"]), structure.id)
-        if new_id and new_id != structure.id:
-            override_info = {"from": structure.id, "to": new_id, "reason": str(brief["structure_override"]).strip()}
-            log.info("Planner recommended structure override: %s -> %s", structure.id, new_id)
-            structure = get_structure(new_id)
-
-    # ── 3. GENERATION — brief-driven. ────────────────────────────────────
-    source_text, empty_sections = _assemble_source(profile, diligence, structure, brief)
     raw = generate(GenerateRequest(
         task="deck_narrative",
-        system=_system_prompt(),
+        system=NARRATIVE_SYSTEM,
         prompt=source_text,
         max_tokens=3500,
         api_key_override=api_key_override,
     ))
-    calls += 1
+
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("```")[1]
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
     try:
-        data = _clean_json(raw)
+        data = json.loads(cleaned.strip())
     except Exception as e:
         raise ValueError(f"The narrative model returned output that couldn't be parsed: {e}")
 
-    slides: list[SlideCopy] = [s for item in data.get("slides", []) if (s := _slide_from_item(item))]
+    slides: list[SlideCopy] = []
+    for item in data.get("slides", []):
+        lead = (item.get("lead") or "").strip()
+        if not lead:
+            continue
+        slides.append(SlideCopy(
+            kind=item.get("kind", "custom"),
+            title=(item.get("title") or "").strip() or item.get("kind", "Slide").title(),
+            lead=lead,
+            points=[p.strip() for p in item.get("points", []) if p and p.strip()],
+            sources=item.get("sources", []),
+        ))
 
-    # CRITICAL: the model's returned order is not trusted. Reorder to the
-    # structure's role sequence, keep missing required roles as honest stubs,
-    # and drop optional roles it skipped.
-    slides = _enforce_structure(slides, profile, structure, diligence)
-
+    warnings: list[str] = []
     if empty_sections:
         warnings.append(
             "No content was written for: "
@@ -531,69 +240,7 @@ def generate_narrative(
             + ". Fill those fields in your profile and regenerate."
         )
 
-    # ── 4. CRITIC — review the draft for investor readiness. ──────────────
-    critic: dict | None = None
-    try:
-        from app.services.deck_critic import run_critic
-        critic = run_critic(slides, brief, profile, api_key_override)
-    except Exception:
-        log.error("Critic step raised", exc_info=True)
-    if critic is not None:
-        calls += 1
-
-    # ── 5. TARGETED REWRITES — one pass, capped at 4 slides. ──────────────
-    rewrite_targets: list[dict] = []
-    if critic:
-        rewrite_targets = [
-            f for f in critic.get("slide_findings", []) or []
-            if isinstance(f, dict) and f.get("should_rewrite")
-            and str(f.get("severity", "")).upper() in ("CRITICAL", "IMPORTANT")
-        ][:4]
-        by_kind: dict[str, int] = {}
-        for idx, s in enumerate(slides):
-            by_kind.setdefault(s.kind, idx)
-        for f in rewrite_targets:
-            idx = by_kind.get(str(f.get("role") or ""))
-            if idx is None:
-                continue
-            ev = _evidence_fields_for(slides[idx].kind, brief, structure)
-            new_slide = _rewrite_slide(
-                slides[idx], str(f.get("finding") or ""), str(f.get("suggestion") or ""),
-                ev, profile, api_key_override,
-            )
-            if new_slide:
-                slides[idx] = new_slide
-                calls += 1
-
-    # ── 6. FINAL CRITIC — confirm the criticals cleared (one call, no loop). ─
-    if rewrite_targets:
-        try:
-            from app.services.deck_critic import run_critic
-            final = run_critic(slides, brief, profile, api_key_override)
-        except Exception:
-            final = None
-            log.error("Final critic step raised", exc_info=True)
-        if final is not None:
-            calls += 1
-            critic = final
-            if any(str(x.get("severity", "")).upper() == "CRITICAL"
-                   for x in final.get("slide_findings", []) or []):
-                warnings.append(
-                    "Some critical issues remained after one rewrite pass; the rewritten "
-                    "slides were kept. Review them before sending this deck."
-                )
-
-    log.info(
-        "Deck generation LLM calls: %d (planner + generation + critic + %d rewrites%s)",
-        calls, len(rewrite_targets), " + final critic" if rewrite_targets else "",
-    )
-
-    # Verify numbers in the prose AND inside any content blocks — after rewrites,
-    # so rewritten copy is checked too. An invented stat is as damaging as an
-    # invented sentence.
-    all_copy = "\n".join(
-        s.lead + " " + " ".join(s.points) + " " + _block_text(s.blocks) for s in slides
-    )
+    all_copy = "\n".join(s.lead + " " + " ".join(s.points) for s in slides)
     unmatched = _verify_numbers(all_copy, source_text)
     if unmatched:
         warnings.append(
@@ -602,10 +249,7 @@ def generate_narrative(
             + ". Check them before sending this deck."
         )
 
-    return DeckNarrative(
-        slides=slides, warnings=warnings, brief=brief, critic=critic,
-        structure_id=structure.id, structure_override=override_info, llm_calls=calls,
-    )
+    return DeckNarrative(slides=slides, warnings=warnings)
 
 
 def narrative_to_dict(n: DeckNarrative) -> dict:
@@ -617,14 +261,8 @@ def narrative_to_dict(n: DeckNarrative) -> dict:
                 "lead": s.lead,
                 "points": s.points,
                 "sources": s.sources,
-                "blocks": s.blocks,
             }
             for s in n.slides
         ],
         "warnings": n.warnings,
-        "brief": n.brief,
-        "critic": n.critic,
-        "structure_id": n.structure_id,
-        "structure_override": n.structure_override,
-        "llm_calls": n.llm_calls,
     }

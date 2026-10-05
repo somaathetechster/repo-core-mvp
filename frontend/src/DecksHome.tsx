@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  listDecks, createDeck, deleteDeck, renameDeck, listStructures, recommendStructure,
-  type DeckSummary, type AnalyzeResult, type DeckStructureInfo,
+  listDecks, createDeck, deleteDeck, renameDeck,
+  type DeckSummary, type AnalyzeResult,
 } from "./api";
 import { DownloadMenu } from "./DeckViewer";
 import "./theme.css";
@@ -192,44 +192,7 @@ function NewDeckWizard({
     new Set(analyzedRepos.map((r) => String(r.summary.full_name)))
   );
   const [creating, setCreating] = useState(false);
-  const [genStep, setGenStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
-  // Generation runs a Planner → Generation → Critic → Rewrites pipeline on the
-  // backend, which takes longer than a single call. Surface the steps so the
-  // intelligence is visible and the wait is expected. The backend isn't
-  // streaming, so the indicator advances on a timer that lands on the last
-  // step until the request resolves.
-  const GEN_STEPS = [
-    "Analyzing your company…",
-    "Writing your deck…",
-    "Reviewing for investor readiness…",
-    "Refining weak slides…",
-  ];
-  useEffect(() => {
-    if (!creating) { setGenStep(0); return; }
-    const t = setInterval(() => setGenStep((s) => Math.min(s + 1, GEN_STEPS.length - 1)), 3500);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creating]);
-
-  // The deck structure: which named shape to generate against. Loaded from the
-  // backend so the picker and generation share one source of truth.
-  const [structures, setStructures] = useState<DeckStructureInfo[] | null>(null);
-  const [structureId, setStructureId] = useState<string>("seed");
-  const [recommending, setRecommending] = useState(false);
-  const [recommendReason, setRecommendReason] = useState<string | null>(null);
-
-  useEffect(() => {
-    listStructures()
-      .then((s) => {
-        setStructures(s);
-        // Default the selection to the first structure that exists, keeping
-        // seed if it is present (the baseline).
-        if (s.length && !s.some((x) => x.id === "seed")) setStructureId(s[0].id);
-      })
-      .catch(() => setStructures([]));
-  }, []);
 
   function toggleRepo(fullName: string) {
     setSelectedRepoNames((prev) => {
@@ -238,20 +201,6 @@ function NewDeckWizard({
       else next.add(fullName);
       return next;
     });
-  }
-
-  async function handleAutoRecommend() {
-    setRecommending(true);
-    setError(null);
-    try {
-      const { structure_id, reason } = await recommendStructure({ useSharedProfile });
-      setStructureId(structure_id);
-      setRecommendReason(reason);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't recommend a structure.");
-    } finally {
-      setRecommending(false);
-    }
   }
 
   async function handleCreate() {
@@ -265,7 +214,6 @@ function NewDeckWizard({
         name: name.trim() || "Untitled deck",
         useSharedProfile,
         repoSummaries: selectedSummaries,
-        structureId,
       });
       onCreated(deck.id);
     } catch (e) {
@@ -305,60 +253,6 @@ function NewDeckWizard({
         </div>
 
         <div className="wizard-section">
-          <div className="wizard-structure-head">
-            <span className="wizard-section-label">Deck structure</span>
-            <button
-              type="button"
-              className="wizard-recommend-btn"
-              onClick={handleAutoRecommend}
-              disabled={recommending}
-            >
-              {recommending ? "Thinking…" : "✦ Auto-recommend"}
-            </button>
-          </div>
-          {recommendReason && (
-            <p className="wizard-recommend-reason">{recommendReason}</p>
-          )}
-          {structures === null ? (
-            <p className="wizard-note">Loading structures…</p>
-          ) : (
-            <div className="wizard-structure-grid">
-              {structures.map((s) => {
-                const selected = s.id === structureId;
-                return (
-                  <button
-                    type="button"
-                    key={s.id}
-                    className={`structure-card${selected ? " selected" : ""}`}
-                    onClick={() => { setStructureId(s.id); setRecommendReason(null); }}
-                    aria-pressed={selected}
-                  >
-                    <div className="structure-card-head">
-                      <span className="structure-card-name">{s.name}</span>
-                      <span className="structure-card-count">
-                        {s.min_slides === s.max_slides
-                          ? `${s.max_slides} slides`
-                          : `${s.min_slides}–${s.max_slides} slides`}
-                      </span>
-                    </div>
-                    <div className="structure-card-audience">{s.target_audience}</div>
-                    <div className="structure-card-desc">{s.description}</div>
-                    <ol className="structure-card-roles">
-                      {s.roles.map((role) => (
-                        <li key={role.key} className={`role-${role.requirement}`}>
-                          <span className="structure-role-name">{role.label}</span>
-                          <span className="structure-role-purpose">{role.purpose}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="wizard-section">
           <span className="wizard-section-label">Repos to include</span>
           {analyzedRepos.length === 0 ? (
             <p className="wizard-note">
@@ -386,26 +280,12 @@ function NewDeckWizard({
 
         {error && <p className="p-error">{error}</p>}
 
-        {creating && (
-          <div className="wizard-progress" role="status" aria-live="polite">
-            {GEN_STEPS.map((label, i) => (
-              <div
-                key={i}
-                className={`wizard-progress-step ${i < genStep ? "is-done" : i === genStep ? "is-active" : ""}`}
-              >
-                <span className="wizard-progress-mark">{i < genStep ? "✓" : i === genStep ? "●" : "○"}</span>
-                {label}
-              </div>
-            ))}
-          </div>
-        )}
-
         <div className="wizard-actions">
-          <button className="p-btn p-btn-secondary" onClick={onClose} disabled={creating}>
+          <button className="p-btn p-btn-secondary" onClick={onClose}>
             Cancel
           </button>
           <button className="p-btn p-btn-primary" onClick={handleCreate} disabled={creating}>
-            {creating ? "Building…" : "Create deck"}
+            {creating ? "Creating..." : "Create deck"}
           </button>
         </div>
       </div>

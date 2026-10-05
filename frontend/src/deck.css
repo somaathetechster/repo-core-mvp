@@ -398,6 +398,3 @@
 }
 .deck-name-title:hover { border-color: var(--ink-border); background: var(--ink-raised-2); }
 .deck-name-saving { font-family: var(--font-mono); font-size: 0.68rem; color: var(--gold-dim); letter-spacing: 0.02em; }
-
-.deck-applying { color: var(--text-dim); animation: wizard-pulse 1.1s ease-in-out infinite; }
-@keyframes wizard-pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }

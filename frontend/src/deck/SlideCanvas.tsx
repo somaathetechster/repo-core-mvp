@@ -33,7 +33,7 @@ type Marquee = { startX: number; startY: number; currentX: number; currentY: num
 // Element types that are NOT edited as inline text. Everything else carries a
 // `text` field and drops into contentEditable, so this is the single source of
 // truth for "is this a text element" used by the pointer/text tool logic.
-const NON_TEXT_TYPES = new Set(["asset", "shape", "rule", "image", "logo", "portrait", "chart", "table", "blocks"]);
+const NON_TEXT_TYPES = new Set(["asset", "shape", "rule", "image", "logo", "portrait", "chart", "table"]);
 function isTextEl(el: SlideElement): boolean {
   return el.text !== undefined && !NON_TEXT_TYPES.has(el.type);
 }
@@ -456,7 +456,6 @@ export default function SlideCanvas({
                 <ElementView
                   element={{ ...el, frame: { ...el.frame, x: 0, y: 0 } }}
                   theme={theme}
-                  slideBackground={slide.background}
                   renderChart={renderChart}
                   editable={interactive && editingId === el.id}
                   onTextChange={(id, text) => {
