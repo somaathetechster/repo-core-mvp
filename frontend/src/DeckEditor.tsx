@@ -501,7 +501,7 @@ export default function DeckEditor({
     // BUG 1: force `customized: false` on every slide the user did NOT hand-edit
     // (and on the cover), so they fully recompose instead of being frozen by a
     // stale customized flag.
-    const normalizedStored = nextStored.map((st, i) =>
+    const normalizedStored = nextStored.map((st) =>
       preservedIds.has(st.id) ? st : { ...st, customized: false },
     );
     setStored(normalizedStored);
