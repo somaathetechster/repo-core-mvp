@@ -27,12 +27,22 @@ export default function TemplatePicker({
   onChange: (next: DeckStyle) => void;
   brandPrimary?: string | null;
 }) {
-  // Load the fonts for whatever is selected, and pre-load the rest so
-  // switching is instant rather than flashing fallback type.
+  // Load the selected template's fonts immediately. Pre-load the rest only
+  // once the user has been idle for 3+ seconds, so the background preload never
+  // competes with an active template switch (the timer resets on every change).
   useEffect(() => {
     ensureFonts(getTemplate(value.templateId));
-    const timer = setTimeout(() => TEMPLATES.forEach(ensureFonts), 1200);
-    return () => clearTimeout(timer);
+    let idleHandle: number | null = null;
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    const cic = (window as unknown as { cancelIdleCallback?: (h: number) => void }).cancelIdleCallback;
+    const idleTimer = window.setTimeout(() => {
+      if (ric) idleHandle = ric(() => TEMPLATES.forEach(ensureFonts));
+      else TEMPLATES.forEach(ensureFonts);
+    }, 3000);
+    return () => {
+      clearTimeout(idleTimer);
+      if (idleHandle != null && cic) cic(idleHandle);
+    };
   }, [value.templateId]);
 
   return (

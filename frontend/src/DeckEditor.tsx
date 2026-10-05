@@ -7,10 +7,10 @@ import DeckStudio from "./DeckStudio";
 import CompanyProfileForm from "./CompanyProfileForm";
 import ChartRenderer, { type ColumnMeta } from "./viz/ChartRenderer";
 import {
-  toElementSlides, toStoredSlides, blankSlide, resetToTemplate, syncContentsSlides, type StoredSlide,
+  toElementSlide, toElementSlides, toStoredSlides, blankSlide, resetToTemplate, syncContentsSlides, type StoredSlide,
 } from "./deck/migrate";
 import { compose } from "./deck/composers";
-import { type ThemeSettings } from "./deck/theme";
+import { loadFontPairing, type ThemeSettings } from "./deck/theme";
 import { useHistory } from "./deck/useHistory";
 import { chartWithCaption } from "./DeckStudio";
 import type { ElementSlide, SlideElement } from "./deck/elements";
@@ -162,6 +162,14 @@ export default function DeckEditor({
   const [dropPrompt, setDropPrompt] = useState<PendingChart | null>(null);
   const [guidesEnabled, setGuidesEnabled] = useState(() => localStorage.getItem("provisio:guides") !== "off");
   const loadedRef = useRef(false);
+
+  // The ONLY source of truth for preserving a slide's layout across a template
+  // switch: a slide id lands here when — and only when — the user genuinely
+  // hand-edits it this session (drag, resize, text edit, add/delete element).
+  // It is deliberately NOT tied to the `customized` flag, which can be set by
+  // recomposition or load; this set is never populated by those paths.
+  const userEditedSlides = useRef<Set<string>>(new Set());
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   // ── Auto-sync ──────────────────────────────────────────────────────────
   // The server `updated_at` for the version we currently hold. The 30s poll
@@ -470,32 +478,72 @@ export default function DeckEditor({
   /* ---------------- template switching ---------------- */
 
   function applyTemplate(nextId: string) {
-    if (nextId === templateId) return;
-    const customized = slides.filter((s) => s.customized).length;
-    if (customized > 0 && !window.confirm(
-      `Changing the template may reflow ${customized} hand-edited slide${customized === 1 ? "" : "s"}. ` +
-      "You can undo the template change afterwards. Continue?",
+    if (nextId === templateId || applyingTemplate) return;
+
+    // Only slides the user genuinely hand-edited this session are preserved;
+    // the cover is never preserved (it must always match the active template).
+    const edited = userEditedSlides.current;
+    const isCover = (s: ElementSlide, i: number) => i === 0 || s.kind === "cover";
+    const preservedIds = new Set(
+      slides.filter((s, i) => edited.has(s.id) && !isCover(s, i)).map((s) => s.id),
+    );
+    if (preservedIds.size > 0 && !window.confirm(
+      `Changing the template keeps your ${preservedIds.size} hand-edited slide${preservedIds.size === 1 ? "" : "s"} ` +
+      "but updates their colours, and recomposes the rest. You can undo this. Continue?",
     )) return;
-    // Recompose from the stored content, which preserves hand-edited slides
-    // because toElementSlide honours the customized flag.
+
+    setApplyingTemplate(true);
+    // BUG 4: the template's fonts must be ready BEFORE recompose, not after,
+    // or the new layout paints in fallback type and reflows a frame later.
+    loadFontPairing(themeSettings.fontPairing);
+
     const nextStored = toStoredSlides(slides, stored);
-    setStored(nextStored);
-    // Push the template switch (and the recomposed slides) as one undo entry
-    // rather than resetting the history, so the change can be undone.
-    history.set(
-      (prev) => ({
-        ...prev,
-        templateId: nextId,
-        slides: syncContentsSlides(toElementSlides(nextStored, nextId, { companyName: deckName }), nextId, { companyName: deckName }),
-      }),
-      "template",
+    // BUG 1: force `customized: false` on every slide the user did NOT hand-edit
+    // (and on the cover), so they fully recompose instead of being frozen by a
+    // stale customized flag.
+    const normalizedStored = nextStored.map((st, i) =>
+      preservedIds.has(st.id) ? st : { ...st, customized: false },
     );
-    markDirty();
-    flash(
-      customized > 0
-        ? `Switched template. ${customized} hand-edited slide${customized === 1 ? "" : "s"} kept their layout.`
-        : "Switched template.",
-    );
+    setStored(normalizedStored);
+
+    // Recompose is synchronous; defer it one frame so the "Applying…" state
+    // paints first and the switch doesn't flash.
+    requestAnimationFrame(() => {
+      history.set((prev) => {
+        const total = normalizedStored.length;
+        const byId = new Map(prev.slides.map((s) => [s.id, s]));
+        const rebuilt: ElementSlide[] = normalizedStored.map((st, i) => {
+          const ctx = { companyName: deckName, pageNumber: i + 1, totalPages: total };
+          // BUG 2 & 3: compose this slide fresh in the new template with its
+          // stored background stripped, so the COMPOSER's background wins — the
+          // cover's dark panel, Gallery's ink cover / paper interiors, etc.,
+          // are never overridden by a background left over from the old template.
+          const fresh = toElementSlide(
+            { ...st, customized: false, elements: undefined, background: null }, nextId, ctx,
+          );
+          if (preservedIds.has(st.id)) {
+            // Keep the user's hand-positioned elements, but adopt the new
+            // template's background colour for the slide.
+            const existing = byId.get(st.id);
+            return existing ? { ...existing, background: fresh.background } : fresh;
+          }
+          return fresh;
+        });
+        return {
+          ...prev,
+          templateId: nextId,
+          slides: syncContentsSlides(rebuilt, nextId, { companyName: deckName }),
+        };
+      }, "template");
+      markDirty();
+      flash(
+        preservedIds.size > 0
+          ? `Switched template. ${preservedIds.size} hand-edited slide${preservedIds.size === 1 ? "" : "s"} kept their layout.`
+          : "Switched template.",
+      );
+      // Minimum visible duration so the state doesn't flash on a fast machine.
+      setTimeout(() => setApplyingTemplate(false), 150);
+    });
   }
 
   /* ---------------- chart drop ---------------- */
@@ -503,6 +551,8 @@ export default function DeckEditor({
   function placeChart(pending: PendingChart, mode: "new" | "current") {
     const els = chartWithCaption(pending.chart, pending.note, { x: 140, y: 190 }, 780);
     if (mode === "current") {
+      // Adding an element to an existing slide is a genuine hand-edit.
+      if (slides[current]?.id) userEditedSlides.current.add(slides[current].id);
       setSlides((prev) =>
         prev.map((s, i) =>
           i === current ? { ...s, customized: true, elements: [...s.elements, ...els] } : s,
@@ -598,6 +648,9 @@ export default function DeckEditor({
       totalPages: slides.length,
     });
     setSlides((prev) => prev.map((s, i) => (i === current ? fresh : s)), "reset-template");
+    // Reset is the explicit undo of a hand-edit, so this slide is no longer
+    // user-edited and should follow the template again on the next switch.
+    userEditedSlides.current.delete(target.id);
     markDirty();
     flash("Slide reset to the template. Undo if that wasn't what you wanted.");
   }
@@ -618,6 +671,7 @@ export default function DeckEditor({
   function deleteSlide() {
     if (slides.length <= 1) return;
     if (!window.confirm(`Delete slide ${current + 1}?`)) return;
+    userEditedSlides.current.delete(slides[current]?.id);
     setSlides((prev) => prev.filter((_, i) => i !== current));
     setCurrent((c) => Math.max(0, c - 1));
     markDirty();
@@ -768,6 +822,7 @@ export default function DeckEditor({
 
       {error && <p className="p-error">{error}</p>}
       {notice && <p className="deck-notice">{notice}</p>}
+      {applyingTemplate && <p className="deck-notice deck-applying">Applying template…</p>}
 
       {dropPrompt && (
         <div className="deck-drop-prompt">
@@ -797,7 +852,16 @@ export default function DeckEditor({
           images={images}
           onImagesChange={(next) => { setImages(next); markDirty(); }}
           renderChart={renderChart}
-          onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); markDirty(); }}
+          onSlidesChange={(next, label) => {
+            setSlides(next, label ?? "edit");
+            markDirty();
+            // Record a genuine hand-edit so this slide's layout is preserved
+            // across template switches. Slide-array operations (reorder /
+            // insert / duplicate) are not element edits, so they don't count.
+            const structural = label === "reorder-slides" || label === "insert-slide" || label === "duplicate-slide";
+            const id = slides[current]?.id;
+            if (!structural && id) userEditedSlides.current.add(id);
+          }}
           onThemeChange={(next) => { setThemeSettings(next); markDirty(); }}
           onTemplateChange={applyTemplate}
           onCurrentChange={setCurrent}
