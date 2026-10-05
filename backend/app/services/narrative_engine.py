@@ -124,13 +124,18 @@ def _role_has_material(profile: dict, role: SlideRole, diligence: dict | None) -
     return False
 
 
-#: How a slide of each confidence level should be written. Fed verbatim into
-#: the per-slide section of the generation prompt.
+#: An ADDITIVE note for the confidence extremes only. A note is emitted solely
+#: when the evidence is explicitly thin (LOW) or explicitly strong (HIGH). At
+#: every other level no note is added, so the default stance is "write the
+#: slide fully" rather than "hold back". The earlier table applied a restrictive
+#: instruction at every level — MEDIUM told the model to say "nothing more",
+#: LOW told it to emit a stub — and that broad throttling is what thinned the
+#: output. Only LOW may ask for less, and only HIGH pushes for the lead figure.
 _CONFIDENCE_INSTRUCTION = {
-    "HIGH": "Write with authority. Lead with the strongest figure.",
-    "MEDIUM": "Write carefully. Say what you know, nothing more.",
-    "LOW": "Write less. One honest sentence beats a paragraph of padding. "
-           "If there is nothing to say, return a minimal stub.",
+    "LOW": "Note: evidence is thin here — write less rather than pad. "
+           "One honest sentence beats vague prose.",
+    "HIGH": "Note: evidence is strong — lead with the most impressive "
+            "specific figure.",
 }
 
 
@@ -195,26 +200,38 @@ def _build_input(
     plan_lines: list[str] = []
     for role in structure.content_roles:
         has_input = _role_has_material(profile, role, diligence)
-        if has_input:
-            line = (
-                f"- kind \"{role.key}\": {role.purpose}\n"
-                f"    Quality bar: {role.quality_bar_detailed}"
-            )
-            sb = slide_brief_by_role.get(role.key)
-            if sb:
-                conf = str(sb.get("confidence") or "").upper()
-                if sb.get("argument"):
-                    line += f"\n    Argument to make: {sb['argument']}"
-                ev = sb.get("evidence_fields") or []
-                if ev:
-                    line += f"\n    Evidence to draw on: {', '.join(str(e) for e in ev)}"
-                if conf in _CONFIDENCE_INSTRUCTION:
-                    line += f"\n    Confidence {conf}: {_CONFIDENCE_INSTRUCTION[conf]}"
-                if sb.get("block_type"):
-                    line += f"\n    Preferred block: {sb['block_type']}"
-            plan_lines.append(line)
-        elif role.requirement in ("required", "recommended"):
-            empty.append(role.key)
+        if not has_input:
+            if role.requirement in ("required", "recommended"):
+                empty.append(role.key)
+            continue
+
+        sb = slide_brief_by_role.get(role.key)
+        # Evidence to draw on: the Planner's chosen fields when it named any,
+        # otherwise the role's own source fields. Always present, so the model
+        # is told what it has to work with on every slide.
+        ev = [str(e) for e in (sb.get("evidence_fields") or [])] if sb else []
+        if not ev:
+            ev = [f for f in role.source_fields if f != "company_image_data_urls"]
+
+        # Each slide is an invitation to write, not a list of constraints: its
+        # job, the evidence it may draw on, the bar to clear, and — only where
+        # the Planner supplied them — the specific argument, a preferred block,
+        # and a confidence note (LOW or HIGH only).
+        parts = [
+            f"--- {role.key} ---",
+            f"Write this slide. Its job: {role.purpose}",
+            f"Evidence to draw on: {', '.join(ev) if ev else '(see company material above)'}",
+            f"Quality bar: {role.quality_bar_detailed}",
+        ]
+        if sb:
+            if sb.get("argument"):
+                parts.append(f"Specific argument to make: {sb['argument']}")
+            if sb.get("block_type"):
+                parts.append(f"Preferred block: {sb['block_type']}")
+            conf = str(sb.get("confidence") or "").upper()
+            if conf in _CONFIDENCE_INSTRUCTION:
+                parts.append(_CONFIDENCE_INSTRUCTION[conf])
+        plan_lines.append("\n".join(parts))
 
     lines.append(
         f"\n--- SLIDES TO WRITE ({structure.name} structure) ---"
@@ -224,7 +241,8 @@ def _build_input(
         f"(the cover is added separately, so it is not in this count). Use each role's "
         f"exact key as the slide's \"kind\". Keep them in the order listed."
     )
-    lines.extend(plan_lines)
+    # A blank line between slide blocks so each reads as its own section.
+    lines.append("\n" + "\n\n".join(plan_lines))
     lines.append(
         "\nWrite only the slides listed. Do not write slides for sections with no input."
     )
