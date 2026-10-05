@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { SlideElement, ElementStyle } from "./elements";
+import type { SlideElement, ElementStyle, ElementSlide } from "./elements";
 import type { DeckTheme } from "./theme";
 import { treatmentFilter, objectPosition, type ImageTreatment } from "./images";
 import { ASSETS, assetToSvg } from "./assets";
@@ -97,10 +97,13 @@ export interface ElementRenderProps {
   /** In the editor, text is editable in place. */
   editable?: boolean;
   onTextChange?: (id: string, text: string) => void;
+  /** The host slide's background, so a "blocks" card can adapt to a dark
+   *  (ink) canvas instead of rendering a light card stranded on it. */
+  slideBackground?: ElementSlide["background"];
 }
 
 export default function ElementView({
-  element, theme, renderChart, editable, onTextChange,
+  element, theme, renderChart, editable, onTextChange, slideBackground,
 }: ElementRenderProps) {
   const css = elementStyleToCss(element, theme);
   const s = element.style ?? {};
@@ -196,7 +199,7 @@ export default function ElementView({
     case "blocks":
       return (
         <div style={{ ...css, overflow: "hidden" }}>
-          <SlideBlocks blocks={element.blocks ?? []} theme={theme} />
+          <SlideBlocks blocks={element.blocks ?? []} theme={theme} slideBackground={slideBackground} />
         </div>
       );
 

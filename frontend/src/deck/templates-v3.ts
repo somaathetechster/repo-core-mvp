@@ -91,14 +91,25 @@ export const composeObsidian: Composer = (c) => {
     const team = c.team!.slice(0, 4);
     const gap = 40;
     const w = (CANVAS_W - OBM * 2 - gap * (team.length - 1)) / team.length;
+    // Smaller portraits when the row is full, so the names and roles below
+    // clear the footer instead of being squeezed against it.
+    const photoH = w * (team.length >= 4 ? 0.95 : 1.1);
+    const top = 150;
     team.forEach((p, i) => {
       const x = OBM + i * (w + gap);
-      els.push(makeElement("portrait", { x, y: 150, w, h: w * 1.1, z: 10 },
-        { objectFit: "cover", filter: "grayscale(0.5)" }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("rule", { x, y: 164 + w * 1.1, w: 32, h: 1, z: 10 }, { background: OBS.gold }));
-      els.push(makeElement("text", { x, y: 174 + w * 1.1, w, h: 26, z: 10 },
-        { color: OBS.text, fontFamily: "display", fontSize: 20, fontWeight: 400 }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: 202 + w * 1.1, w, h: 18, z: 10 },
+      const name = p.name || "";
+      // Long names drop a step so they don't clip; the box holds two lines and
+      // the role is placed from the box's bottom, never a fixed offset.
+      const nameSize = name.length > 20 ? 16 : 20;
+      const nameH = nameSize * 1.25 * 2;
+      const nameY = top + photoH + 24;
+      const roleY = nameY + nameH + 8;
+      els.push(makeElement("portrait", { x, y: top, w, h: photoH, z: 10 },
+        { objectFit: "cover", filter: "grayscale(0.5)" }, { src: p.photo_data_url || null, text: name }));
+      els.push(makeElement("rule", { x, y: top + photoH + 14, w: 32, h: 1, z: 10 }, { background: OBS.gold }));
+      els.push(makeElement("text", { x, y: nameY, w, h: nameH, z: 10 },
+        { color: OBS.text, fontFamily: "display", fontSize: nameSize, fontWeight: 400, lineHeight: 1.25 }, { text: name }));
+      els.push(makeElement("caption", { x, y: roleY, w, h: 18, z: 10 },
         { color: OBS.gold, fontFamily: "label", fontSize: 12 }, { text: p.role }));
     });
     footer();
@@ -191,12 +202,21 @@ export const composeBrutus: Composer = (c) => {
     const team = c.team!.slice(0, 4);
     const gap = 36;
     const w = (CANVAS_W - BRM * 2 - gap * (team.length - 1)) / team.length;
+    // Brutus names are heavy uppercase Archivo, so they clip fastest; shrink
+    // the square portrait when full and give the name room for two lines.
+    const photoH = w * (team.length >= 4 ? 0.85 : 1);
+    const top = 200;
     team.forEach((p, i) => {
       const x = BRM + i * (w + gap);
-      els.push(makeElement("portrait", { x, y: 200, w, h: w, z: 10 }, { objectFit: "cover" }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("text", { x, y: 212 + w, w, h: 28, z: 10 },
-        { color: text, fontFamily: "display", fontSize: 22, fontWeight: 900 }, { text: (p.name || "").toUpperCase() }));
-      els.push(makeElement("caption", { x, y: 244 + w, w, h: 18, z: 10 },
+      const name = (p.name || "").toUpperCase();
+      const nameSize = name.length > 20 ? 18 : 22;
+      const nameH = nameSize * 1.1 * 2;
+      const nameY = top + photoH + 14;
+      const roleY = nameY + nameH + 8;
+      els.push(makeElement("portrait", { x, y: top, w, h: photoH, z: 10 }, { objectFit: "cover" }, { src: p.photo_data_url || null, text: p.name }));
+      els.push(makeElement("text", { x, y: nameY, w, h: nameH, z: 10 },
+        { color: text, fontFamily: "display", fontSize: nameSize, fontWeight: 900, lineHeight: 1.1 }, { text: name }));
+      els.push(makeElement("caption", { x, y: roleY, w, h: 18, z: 10 },
         { color: BRUT.accent, fontFamily: "label", fontSize: 12, letterSpacing: "0.1em" }, { text: (p.role || "").toUpperCase() }));
     });
     pageNum();
@@ -284,13 +304,20 @@ export const composeCartier: Composer = (c) => {
     const team = c.team!.slice(0, 4);
     const gap = 48;
     const w = (contentW - gap * (team.length - 1)) / team.length;
+    const photoH = w * (team.length >= 4 ? 1.0 : 1.15);
+    const top = 210;
     team.forEach((p, i) => {
       const x = CARL + i * (w + gap);
-      els.push(makeElement("portrait", { x, y: 210, w, h: w * 1.15, z: 10 },
-        { objectFit: "cover", filter: "grayscale(1)" }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("text", { x, y: 222 + w * 1.15, w, h: 26, z: 10 },
-        { color: CART.ink, fontFamily: "display", fontSize: 20, fontWeight: 500, letterSpacing: "-0.02em" }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: 250 + w * 1.15, w, h: 18, z: 10 },
+      const name = p.name || "";
+      const nameSize = name.length > 20 ? 16 : 20;
+      const nameH = nameSize * 1.25 * 2;
+      const nameY = top + photoH + 12;
+      const roleY = nameY + nameH + 8;
+      els.push(makeElement("portrait", { x, y: top, w, h: photoH, z: 10 },
+        { objectFit: "cover", filter: "grayscale(1)" }, { src: p.photo_data_url || null, text: name }));
+      els.push(makeElement("text", { x, y: nameY, w, h: nameH, z: 10 },
+        { color: CART.ink, fontFamily: "display", fontSize: nameSize, fontWeight: 500, letterSpacing: "-0.02em", lineHeight: 1.25 }, { text: name }));
+      els.push(makeElement("caption", { x, y: roleY, w, h: 18, z: 10 },
         { color: CART.ink, fontFamily: "label", fontSize: 11, letterSpacing: "0.08em", opacity: 0.5 }, { text: (p.role || "").toUpperCase() }));
     });
     pageNum();
@@ -421,12 +448,19 @@ export const composeHerald: Composer = (c) => {
     const team = c.team!.slice(0, 4);
     const gap = 28;
     const w = (CANVAS_W - HM * 2 - gap * (team.length - 1)) / team.length;
+    const photoH = w * (team.length >= 4 ? 0.92 : 1.1);
+    const top = 210;
     team.forEach((p, i) => {
       const x = HM + i * (w + gap);
-      els.push(makeElement("portrait", { x, y: 210, w, h: w * 1.1, z: 10 }, { objectFit: "cover" }, { src: p.photo_data_url || null, text: p.name }));
-      els.push(makeElement("text", { x, y: 222 + w * 1.1, w, h: 26, z: 10 },
-        { color: HER.forest, fontFamily: "display", fontSize: 20, fontWeight: 600 }, { text: p.name }));
-      els.push(makeElement("caption", { x, y: 250 + w * 1.1, w, h: 18, z: 10 },
+      const name = p.name || "";
+      const nameSize = name.length > 20 ? 16 : 20;
+      const nameH = nameSize * 1.25 * 2;
+      const nameY = top + photoH + 12;
+      const roleY = nameY + nameH + 8;
+      els.push(makeElement("portrait", { x, y: top, w, h: photoH, z: 10 }, { objectFit: "cover" }, { src: p.photo_data_url || null, text: name }));
+      els.push(makeElement("text", { x, y: nameY, w, h: nameH, z: 10 },
+        { color: HER.forest, fontFamily: "display", fontSize: nameSize, fontWeight: 600, lineHeight: 1.25 }, { text: name }));
+      els.push(makeElement("caption", { x, y: roleY, w, h: 18, z: 10 },
         { color: HER.forest, fontFamily: "label", fontSize: 12, opacity: 0.6 }, { text: p.role }));
     });
     heraldFooter(els, c, HER.forest);

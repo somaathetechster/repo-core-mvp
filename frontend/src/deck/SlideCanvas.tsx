@@ -456,6 +456,7 @@ export default function SlideCanvas({
                 <ElementView
                   element={{ ...el, frame: { ...el.frame, x: 0, y: 0 } }}
                   theme={theme}
+                  slideBackground={slide.background}
                   renderChart={renderChart}
                   editable={interactive && editingId === el.id}
                   onTextChange={(id, text) => {

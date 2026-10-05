@@ -10,13 +10,13 @@ import {
   toElementSlide, toElementSlides, toStoredSlides, blankSlide, resetToTemplate, syncContentsSlides, type StoredSlide,
 } from "./deck/migrate";
 import { compose } from "./deck/composers";
-import { loadFontPairing, type ThemeSettings } from "./deck/theme";
+import { loadFontPairing, FONT_PAIRINGS, type ThemeSettings } from "./deck/theme";
 import { useHistory } from "./deck/useHistory";
 import { chartWithCaption } from "./DeckStudio";
 import type { ElementSlide, SlideElement } from "./deck/elements";
 import type { BrandImage } from "./deck/images";
 import { extractImages, inlineImages, mapBytes, type ImageMap } from "./deck/imageStore";
-import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
+import { DEFAULT_TEMPLATE_ID, getTemplate, ensureFonts, type DeckTemplate } from "./deck/templates";
 import "./theme.css";
 import "./deck.css";
 
@@ -29,6 +29,28 @@ const DEFAULT_THEME: ThemeSettings = {
   fontPairing: "fraunces-inter",
   typeScale: 1,
 };
+
+/** The primary (first quoted) family in a CSS font stack, lower-cased. */
+function primaryFamily(fontStack: string): string {
+  const quoted = /"([^"]+)"/.exec(fontStack);
+  return (quoted ? quoted[1] : fontStack.split(",")[0]).trim().toLowerCase();
+}
+
+/**
+ * The font-pairing id whose display face matches a template's declared display
+ * font. The composers render type through the theme's `fonts`, which come from
+ * the pairing — so switching the pairing to the one that shares the template's
+ * display family is what makes, say, Brutus actually render in Archivo rather
+ * than keeping the previous template's face. Falls back to the current pairing
+ * when nothing matches.
+ */
+function pairingForTemplate(template: DeckTemplate, fallback: string): string {
+  const target = primaryFamily(template.fonts.display);
+  for (const [id, pairing] of Object.entries(FONT_PAIRINGS)) {
+    if (primaryFamily(pairing.display) === target) return id;
+  }
+  return fallback;
+}
 
 /**
  * One undo/redo entry covers the whole editable surface: the slides *and* the
@@ -493,9 +515,16 @@ export default function DeckEditor({
     )) return;
 
     setApplyingTemplate(true);
-    // BUG 4: the template's fonts must be ready BEFORE recompose, not after,
-    // or the new layout paints in fallback type and reflows a frame later.
-    loadFontPairing(themeSettings.fontPairing);
+    // The template's fonts must be ready BEFORE recompose, not after, or the
+    // new layout paints in fallback type and reflows a frame later. Load the
+    // NEW template's own declared faces (e.g. Archivo 900 for Brutus, Playfair
+    // for Obsidian) — not the current theme pairing — and switch the theme's
+    // font pairing to the one that shares this template's display family, so
+    // the composed slides actually render in the template's typeface.
+    const nextTemplate = getTemplate(nextId);
+    const nextPairing = pairingForTemplate(nextTemplate, themeSettings.fontPairing);
+    ensureFonts(nextTemplate);
+    loadFontPairing(nextPairing);
 
     const nextStored = toStoredSlides(slides, stored);
     // BUG 1: force `customized: false` on every slide the user did NOT hand-edit
@@ -532,6 +561,9 @@ export default function DeckEditor({
         return {
           ...prev,
           templateId: nextId,
+          // Adopt the template's natural font pairing as part of the same undo
+          // step, so the editor repaints in the right typeface on switch.
+          themeSettings: { ...prev.themeSettings, fontPairing: nextPairing },
           slides: syncContentsSlides(rebuilt, nextId, { companyName: deckName }),
         };
       }, "template");
