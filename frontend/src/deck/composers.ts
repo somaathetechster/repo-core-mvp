@@ -173,6 +173,22 @@ function nameHeight(name: string, width: number, fontSize: number): number {
   );
 }
 
+/**
+ * Bio text for a team card, clamped so it cannot overrun its fixed frame.
+ *
+ * Full bios were rendering into cards whose height is fixed, so a long bio
+ * spilled past the card and collided with the member beneath or beside it.
+ * The text is clamped to a fixed character budget, and past six members on a
+ * slide it is dropped entirely — at that density there is no vertical room,
+ * and showing every name and role beats showing half the bios. Returns null
+ * when nothing should be drawn.
+ */
+const TEAM_BIO_MAX = 120;
+function teamBio(bio: string | null | undefined, count: number): string | null {
+  if (!bio || count >= 6) return null;
+  return bio.length > TEAM_BIO_MAX ? bio.slice(0, TEAM_BIO_MAX) + "…" : bio;
+}
+
 /* ================================================================== */
 /* 1. EDITORIAL — asymmetric magazine column                          */
 /*    Anchor: title in a narrow left column, body in a wide right one. */
@@ -219,12 +235,39 @@ export const composeEditorial: Composer = (c) => {
   if (c.kind === "team" && c.team) {
     els.push(makeElement("heading", { x: m, y: 88, w: 600, h: 54, z: 10 },
       { color: "ink", fontFamily: "display", fontSize: 42, fontWeight: 600 }, { text: c.title }));
-    const { perRow, cellW } = teamGrid(c.team.length, CANVAS_W - m * 2, 28);
-    const portrait = Math.min(cellW, c.team.length > 4 ? 150 : 210);
-    c.team.forEach((p, i) => {
+    const team = c.team;
+    const count = team.length;
+    // Max three members per row, so cards stay wide enough to read.
+    const perRow = Math.min(Math.max(count, 1), 3);
+    const gutter = 28;
+    const cellW = Math.max(150, Math.min((CANVAS_W - m * 2 - gutter * (perRow - 1)) / perRow, 260));
+    const rows = Math.ceil(count / perRow);
+
+    // Everything below the title lives between `top` and a hard `floor` at
+    // y=680, so a second row can never overlap the first or leave the canvas.
+    const top = 190;
+    const floor = 680;
+    const gap = 16; // minimum gap between rows
+    const dense = count >= 4;
+    // 6+ members: teamBio() drops the bio entirely, so reserve no space for it.
+    const bioShown = count < 6 && team.some((p) => p.bio);
+    const bioH = bioShown ? (dense ? 38 : 62) : 0;
+    // Tallest name across the team sets a uniform row step, measured not assumed.
+    const maxNh = count > 0 ? Math.max(...team.map((p) => nameHeight(p.name, cellW, 19))) : 0;
+    // Stacked height below each portrait: rule, name, role and (maybe) bio.
+    const below = bioShown ? 54 + maxNh + bioH : 50 + maxNh;
+
+    // Desired portrait size, shrunk proportionally if the rows would otherwise
+    // push content past the floor.
+    const want = Math.min(cellW, count > 6 ? 118 : count > 4 ? 150 : 210);
+    const fit = Math.floor((floor - top - (rows - 1) * gap) / rows - below);
+    const portrait = Math.max(60, Math.min(want, fit));
+    const rowStep = portrait + below + gap;
+
+    team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
-      const x = m + col * (cellW + 28);
-      const y = 190 + row * (portrait + (c.team!.length > 4 ? 82 : 170));
+      const x = m + col * (cellW + gutter);
+      const y = top + row * rowStep;
       els.push(makeElement("portrait", { x, y, w: portrait, h: portrait, z: 10 },
         { objectFit: "cover", filter: "grayscale(0.25)" }, { src: p.photo_data_url || null, text: p.name }));
       els.push(makeElement("rule", { x, y: y + portrait + 14, w: 26, h: 2, z: 10 }, { background: "accent" }));
@@ -233,9 +276,12 @@ export const composeEditorial: Composer = (c) => {
         { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600, lineHeight: 1.2 }, { text: p.name }));
       els.push(makeElement("caption", { x, y: y + portrait + 30 + nh, w: cellW, h: 20, z: 10 },
         { color: "accent", fontFamily: "label", fontSize: 13 }, { text: p.role }));
-      if (p.bio) {
-        els.push(makeElement("text", { x, y: y + portrait + 54 + nh, w: cellW, h: 62, z: 10 },
-          { color: "muted", fontFamily: "body", fontSize: 13, lineHeight: 1.45 }, { text: p.bio }));
+      const raw = teamBio(p.bio, count);
+      if (raw) {
+        // 4+ members: 13px, clamped to two lines' worth of fixed height.
+        const bio = raw.length > 100 ? raw.slice(0, 100) + "…" : raw;
+        els.push(makeElement("text", { x, y: y + portrait + 54 + nh, w: cellW, h: dense ? 38 : 62, z: 10 },
+          { color: "muted", fontFamily: "body", fontSize: 13, lineHeight: 1.45 }, { text: bio }));
       }
     });
     return { elements: els };
@@ -355,8 +401,14 @@ export const composeTechnical: Composer = (c) => {
         { color: "ink", fontFamily: "display", fontSize: twoCol ? 17 : 19, fontWeight: 600 }, { text: p.name }));
       els.push(makeElement("caption", { x: x + thumb + 20, y: y + 26, w: colW - thumb - 20, h: 18, z: 10 },
         { color: "accent", fontFamily: "label", fontSize: 12 }, { text: p.role }));
-      els.push(makeElement("text", { x: x + thumb + 20, y: y + 46, w: colW - thumb - 20, h: twoCol ? 38 : 50, z: 10 },
-        { color: "muted", fontFamily: "body", fontSize: 13, lineHeight: 1.45 }, { text: p.bio }));
+      // twoCol is exactly the 6+ case, where teamBio() returns null and the
+      // bio is dropped; 4–5 members get a 13px bio clamped to two lines.
+      const bio = teamBio(p.bio, c.team!.length);
+      if (bio) {
+        const dense = c.team!.length >= 4;
+        els.push(makeElement("text", { x: x + thumb + 20, y: y + 46, w: colW - thumb - 20, h: dense ? 38 : 50, z: 10 },
+          { color: "muted", fontFamily: "body", fontSize: 13, lineHeight: 1.45 }, { text: bio }));
+      }
       els.push(makeElement("rule", { x, y: y + (twoCol ? 88 : 104), w: colW, h: 1, z: 10 }, { background: "rule" }));
     });
     return { elements: els };
@@ -540,20 +592,26 @@ export const composeInstitutional: Composer = (c) => {
   if (c.kind === "team" && c.team) {
     const { perRow } = teamGrid(c.team.length, CANVAS_W - m * 2, 36);
     const cw = 190;
+    // 6+ members: a smaller round portrait so the denser grid stays calm.
+    const avatar = c.team.length > 6 ? 116 : 140;
     const totalW = perRow * cw + (perRow - 1) * 36;
     c.team.forEach((p, i) => {
       const col = i % perRow, row = Math.floor(i / perRow);
       const x = cx - totalW / 2 + col * (cw + 36);
       const rowOffset = row * 232;
-      els.push(makeElement("portrait", { x: x + (cw - 140) / 2, y: rowOffset + 206, w: 140, h: 140, z: 10 },
-        { objectFit: "cover", borderRadius: 70 }, { src: p.photo_data_url || null, text: p.name }));
+      els.push(makeElement("portrait", { x: x + (cw - avatar) / 2, y: rowOffset + 206, w: avatar, h: avatar, z: 10 },
+        { objectFit: "cover", borderRadius: avatar / 2 }, { src: p.photo_data_url || null, text: p.name }));
       const nh = nameHeight(p.name, cw, 19);
       els.push(makeElement("text", { x, y: rowOffset + 364, w: cw, h: nh, z: 10 },
         { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 600, align: "center", lineHeight: 1.2 }, { text: p.name }));
       els.push(makeElement("caption", { x, y: rowOffset + 368 + nh, w: cw, h: 20, z: 10 },
         { color: "muted", fontFamily: "label", fontSize: 13, align: "center" }, { text: p.role }));
-      els.push(makeElement("text", { x, y: rowOffset + 416, w: cw, h: c.team!.length > 4 ? 52 : 90, z: 10 },
-        { color: "muted", fontFamily: "body", fontSize: 13.5, lineHeight: 1.55, align: "center" }, { text: p.bio }));
+      const bio = teamBio(p.bio, c.team!.length);
+      if (bio) {
+        const dense = c.team!.length >= 4;
+        els.push(makeElement("text", { x, y: rowOffset + 416, w: cw, h: dense ? 38 : 90, z: 10 },
+          { color: "muted", fontFamily: "body", fontSize: dense ? 13 : 13.5, lineHeight: 1.5, align: "center" }, { text: bio }));
+      }
     });
     return { elements: els };
   }
@@ -648,8 +706,12 @@ export const composeModernist: Composer = (c) => {
         { color: "ink", fontFamily: "display", fontSize: 19, fontWeight: 700 }, { text: p.name }));
       els.push(makeElement("caption", { x, y: rowOffset + 194 + portraitSize + 46, w: modW(span), h: 20, z: 10 },
         { color: "muted", fontFamily: "label", fontSize: 13 }, { text: p.role }));
-      els.push(makeElement("text", { x, y: rowOffset + 194 + portraitSize + 70, w: modW(span), h: 80, z: 10 },
-        { color: "muted", fontFamily: "body", fontSize: 13.5, lineHeight: 1.5 }, { text: p.bio }));
+      const bio = teamBio(p.bio, c.team!.length);
+      if (bio) {
+        const dense = c.team!.length >= 4;
+        els.push(makeElement("text", { x, y: rowOffset + 194 + portraitSize + 70, w: modW(span), h: dense ? 38 : 80, z: 10 },
+          { color: "muted", fontFamily: "body", fontSize: dense ? 13 : 13.5, lineHeight: 1.5 }, { text: bio }));
+      }
     });
     return { elements: els };
   }
@@ -906,10 +968,11 @@ export const composeBlueprint: Composer = (c) => {
         { color: "inverse", fontFamily: "label", fontSize: 14, opacity: 0.72 }, { text: p.role }));
       // A wrapped team has no vertical room for bios; showing the name and
       // role for everyone beats showing bios for half of them.
-      if (p.bio && c.team!.length <= 4) {
+      const bio = c.team!.length <= 4 ? teamBio(p.bio, c.team!.length) : null;
+      if (bio) {
         els.push(makeElement("text", { x, y: y + portrait + 46 + nh, w: cellW, h: 76, z: 10 },
           { color: "inverse", fontFamily: "body", fontSize: 13.5, lineHeight: 1.45, opacity: 0.82 },
-          { text: p.bio }));
+          { text: bio }));
       }
     });
     return { elements: els, background: "accent" };
