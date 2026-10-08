@@ -223,7 +223,8 @@ export const composeEditorial: Composer = (c) => {
     const entries = c.contents ?? [];
     // Each entry occupies a fixed vertical slot; cap the list to what fits
     // between the top and a hard floor at y=680 so none run off the canvas.
-    const top = 200, step = 46, entryH = 40, floor = 680;
+    const top = 200, step = 46, entryH = 28, floor = 680;
+    const colW = 480, colX = [m, m + colW + 64]; // left at margin, right after a 64px gap
     const maxPerCol = Math.max(1, Math.floor((floor - top - entryH) / step) + 1);
     const shown = entries.slice(0, maxPerCol * 2);
     // Columns are independent: the left fills first, the right is a separate
@@ -234,8 +235,9 @@ export const composeEditorial: Composer = (c) => {
       const row = i < half ? i : i - half;
       // One line per entry: truncate titles that would wrap past the column.
       const title = e.title.length > 45 ? e.title.slice(0, 45) + "…" : e.title;
-      els.push(makeElement("list", { x: m + col * 520, y: top + row * step, w: 480, h: entryH, z: 10 },
-        { color: "ink", fontFamily: "body", fontSize: 20, borderTop: 1, borderColor: "rule", padding: 10 },
+      // h matches one line of 16px text so the renderer clips rather than wraps.
+      els.push(makeElement("list", { x: colX[col], y: top + row * step, w: colW, h: entryH, z: 10 },
+        { color: "ink", fontFamily: "body", fontSize: 16, borderTop: 1, borderColor: "rule", padding: 10 },
         { text: `${String(i + 3).padStart(2, "0")}    ${title}` }));
     });
     return { elements: els };
