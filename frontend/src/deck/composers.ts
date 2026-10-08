@@ -914,16 +914,21 @@ export const composeBlueprint: Composer = (c) => {
   if (c.kind === "cover") {
     els.push(...chromeEls);
     // The title runs enormous: the single loudest thing in the deck.
-    els.push(makeElement("heading", { x: BP_L + 130, y: 190, w: CANVAS_W - BP_L - 180, h: 300, z: 10 },
-      { color: "inverse", fontFamily: "display", fontSize: 168, fontWeight: 600, lineHeight: 0.92, letterSpacing: "-0.04em" },
+    // h fits two lines at the given leading (168 * 1.1 * 2 + 40 ≈ 410) and
+    // lineHeight stays >= 1.1 so wrapped lines never overlap; w (1027) is
+    // within CANVAS_W - 2*BP_L (1134), so the text cannot run off canvas.
+    els.push(makeElement("heading", { x: BP_L + 130, y: 150, w: CANVAS_W - BP_L - 180, h: 410, z: 10 },
+      { color: "inverse", fontFamily: "display", fontSize: 168, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.04em" },
       { text: c.title }));
-    els.push(makeElement("shape", { x: bpx(0.28), y: bpy(0.71), w: bpx(0.44), h: 154, z: 6 },
+    // Byline block sits below the heading box (y + h = 560) so nothing
+    // collides; the band ends at 718, within the 720 canvas.
+    els.push(makeElement("shape", { x: bpx(0.28), y: 564, w: bpx(0.44), h: 154, z: 6 },
       { background: "ink", opacity: 0.22, shape: "rect" }));
-    els.push(makeElement("caption", { x: bpx(0.30), y: bpy(0.75), w: bpx(0.40), h: 34, z: 12 },
+    els.push(makeElement("caption", { x: bpx(0.30), y: 580, w: bpx(0.40), h: 34, z: 12 },
       { color: "inverse", fontFamily: "body", fontSize: 26 },
       { text: `By: ${c.companyName ?? ""}` }));
     if (c.paragraphs[0]) {
-      els.push(makeElement("caption", { x: bpx(0.30), y: bpy(0.81), w: bpx(0.40), h: 34, z: 12 },
+      els.push(makeElement("caption", { x: bpx(0.30), y: 622, w: bpx(0.40), h: 34, z: 12 },
         { color: "inverse", fontFamily: "body", fontSize: 26, opacity: 0.85 },
         { text: c.paragraphs[0].text }));
     }
