@@ -1014,15 +1014,27 @@ export const composeBlueprint: Composer = (c) => {
   const words = c.title.split(" ");
   const titleLines = words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [c.title];
   const titleW = BP_MID - (BP_L + 20) - 44;   // stop short of the right column
+  // lineHeight stays >= 1.1 so a wrapped title line never overlaps the next;
+  // h budgets up to three wrapped lines (84 * 1.1 * 3 + 20 ≈ 297). The stack
+  // step is one line of leading (round(84 * 1.1) = 92) so hard-split lines
+  // sit flush without colliding.
+  const headFs = 84, headLh = 1.1;
+  const headStep = Math.round(headFs * headLh);           // 92
+  const headH = Math.round(headFs * headLh * 3 + 20);     // 297
   titleLines.forEach((line, i) => {
-    els.push(makeElement("heading", { x: BP_L + 20, y: 48 + i * 92, w: titleW, h: 92, z: 10 },
-      { color: "inverse", fontFamily: "display", fontSize: 84, fontWeight: 600, lineHeight: 1.0, letterSpacing: "-0.035em" },
+    els.push(makeElement("heading", { x: BP_L + 20, y: 48 + i * headStep, w: titleW, h: headH, z: 10 },
+      { color: "inverse", fontFamily: "display", fontSize: headFs, fontWeight: 600, lineHeight: headLh, letterSpacing: "-0.035em" },
       { text: line }));
   });
 
   const lead = c.paragraphs[0];
   if (lead) {
-    els.push(makeElement("text", { x: BP_L + 24, y: bpy(BP_HY[1]) + 32, w: BP_COL + 40, h: 130, z: 10 },
+    // Keep the lead prose clear of the title block's bottom. The right-column
+    // numbered points are a separate column (x >= BP_MID), so they do not sit
+    // inside the heading's area and are left where they are.
+    const titleBottom = 48 + (titleLines.length - 1) * headStep + headH;
+    const leadY = Math.max(bpy(BP_HY[1]) + 32, titleBottom + 16);
+    els.push(makeElement("text", { x: BP_L + 24, y: leadY, w: BP_COL + 40, h: 130, z: 10 },
       { color: "inverse", fontFamily: "body", fontSize: 17, lineHeight: 1.6 },
       { text: lead.text, source: lead.source }));
   }
