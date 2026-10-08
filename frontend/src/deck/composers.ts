@@ -221,13 +221,22 @@ export const composeEditorial: Composer = (c) => {
     els.push(makeElement("heading", { x: m, y: 92, w: 500, h: 56, z: 10 },
       { color: "ink", fontFamily: "display", fontSize: 42, fontWeight: 600 }, { text: c.title }));
     const entries = c.contents ?? [];
-    const half = Math.ceil(entries.length / 2);
-    entries.forEach((e, i) => {
+    // Each entry occupies a fixed vertical slot; cap the list to what fits
+    // between the top and a hard floor at y=680 so none run off the canvas.
+    const top = 200, step = 46, entryH = 40, floor = 680;
+    const maxPerCol = Math.max(1, Math.floor((floor - top - entryH) / step) + 1);
+    const shown = entries.slice(0, maxPerCol * 2);
+    // Columns are independent: the left fills first, the right is a separate
+    // stack whose y positions never depend on the left column.
+    const half = Math.min(Math.ceil(shown.length / 2), maxPerCol);
+    shown.forEach((e, i) => {
       const col = i < half ? 0 : 1;
       const row = i < half ? i : i - half;
-      els.push(makeElement("list", { x: m + col * 520, y: 200 + row * 46, w: 480, h: 40, z: 10 },
+      // One line per entry: truncate titles that would wrap past the column.
+      const title = e.title.length > 45 ? e.title.slice(0, 45) + "…" : e.title;
+      els.push(makeElement("list", { x: m + col * 520, y: top + row * step, w: 480, h: entryH, z: 10 },
         { color: "ink", fontFamily: "body", fontSize: 20, borderTop: 1, borderColor: "rule", padding: 10 },
-        { text: `${String(i + 3).padStart(2, "0")}    ${e.title}` }));
+        { text: `${String(i + 3).padStart(2, "0")}    ${title}` }));
     });
     return { elements: els };
   }
