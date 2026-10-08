@@ -1014,13 +1014,13 @@ export const composeBlueprint: Composer = (c) => {
   const words = c.title.split(" ");
   const titleLines = words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [c.title];
   const titleW = BP_MID - (BP_L + 20) - 44;   // stop short of the right column
-  // lineHeight stays >= 1.1 so a wrapped title line never overlaps the next;
-  // h budgets up to three wrapped lines (84 * 1.1 * 3 + 20 ≈ 297). The stack
-  // step is one line of leading (round(84 * 1.1) = 92) so hard-split lines
+  // lineHeight stays >= 1.15 so a wrapped title line never overlaps the next;
+  // h budgets up to four wrapped lines (64 * 1.15 * 4 + 40 ≈ 334). The stack
+  // step is one line of leading (round(64 * 1.15) = 74) so hard-split lines
   // sit flush without colliding.
-  const headFs = 84, headLh = 1.1;
-  const headStep = Math.round(headFs * headLh);           // 92
-  const headH = Math.round(headFs * headLh * 3 + 20);     // 297
+  const headFs = 64, headLh = 1.15;
+  const headStep = Math.round(headFs * headLh);           // 74
+  const headH = Math.round(headFs * headLh * 4 + 40);     // 334
   titleLines.forEach((line, i) => {
     els.push(makeElement("heading", { x: BP_L + 20, y: 48 + i * headStep, w: titleW, h: headH, z: 10 },
       { color: "inverse", fontFamily: "display", fontSize: headFs, fontWeight: 600, lineHeight: headLh, letterSpacing: "-0.035em" },
