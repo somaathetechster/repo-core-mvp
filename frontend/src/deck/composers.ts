@@ -1029,28 +1029,26 @@ export const composeBlueprint: Composer = (c) => {
   // Argument: display title stacked top-left, lead prose under the first
   // horizontal rule, supporting points banked in the right column. The
   // 6:1 type ratio between title and body is what carries the page.
-  const words = c.title.split(" ");
-  const titleLines = words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [c.title];
   const titleW = BP_MID - (BP_L + 20) - 44;   // stop short of the right column
-  // lineHeight stays >= 1.15 so a wrapped title line never overlaps the next;
-  // h budgets up to four wrapped lines (64 * 1.15 * 4 + 40 ≈ 334). The stack
-  // step is one line of leading (round(64 * 1.15) = 74) so hard-split lines
-  // sit flush without colliding.
+  // Render the full title as ONE heading rather than hard-splitting it into
+  // stacked elements. With a split, a wrapped first element overran into the
+  // second regardless of lineHeight/h; a single element lets the text engine
+  // flow and wrap the whole title within one box. lineHeight 1.15 keeps
+  // wrapped lines from overlapping; h budgets four lines (64 * 1.15 * 4 + 40 =
+  // 334), so the title's bottom is a fixed y = 48 + 334 = 382.
   const headFs = 64, headLh = 1.15;
-  const headStep = Math.round(headFs * headLh);           // 74
   const headH = Math.round(headFs * headLh * 4 + 40);     // 334
-  titleLines.forEach((line, i) => {
-    els.push(makeElement("heading", { x: BP_L + 20, y: 48 + i * headStep, w: titleW, h: headH, z: 10 },
-      { color: "inverse", fontFamily: "display", fontSize: headFs, fontWeight: 600, lineHeight: headLh, letterSpacing: "-0.035em" },
-      { text: line }));
-  });
+  const titleY = 48;
+  els.push(makeElement("heading", { x: BP_L, y: titleY, w: titleW, h: headH, z: 10 },
+    { color: "inverse", fontFamily: "display", fontSize: headFs, fontWeight: 600, lineHeight: headLh, letterSpacing: "-0.035em" },
+    { text: c.title }));
 
   const lead = c.paragraphs[0];
   if (lead) {
     // Keep the lead prose clear of the title block's bottom. The right-column
     // numbered points are a separate column (x >= BP_MID), so they do not sit
     // inside the heading's area and are left where they are.
-    const titleBottom = 48 + (titleLines.length - 1) * headStep + headH;
+    const titleBottom = titleY + headH;   // 382 — single-element title box
     const leadY = Math.max(bpy(BP_HY[1]) + 32, titleBottom + 16);
     els.push(makeElement("text", { x: BP_L + 24, y: leadY, w: BP_COL + 40, h: 130, z: 10 },
       { color: "inverse", fontFamily: "body", fontSize: 17, lineHeight: 1.6 },
