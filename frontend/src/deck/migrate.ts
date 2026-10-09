@@ -143,8 +143,19 @@ export function toElementSlides(
   templateId: string,
   context: { logo?: string | null; companyName?: string } = {},
 ): ElementSlide[] {
+  // The contents slide must always mirror the CURRENT slide order. Derive its
+  // entries from this array rather than trusting each slide's stored
+  // toc_entries, which can be stale after a reorder. This is what lets a
+  // reorder reflect in the TOC automatically, without the contents slide ever
+  // being marked customized. (Matches the detection in toElementSlide.)
+  const isContents = (s: StoredSlide) =>
+    s.id === "toc" || s.type === "toc" || s.kind === "contents" || !!s.toc_entries?.length;
+  const isCover = (s: StoredSlide) => s.kind === "cover" || s.type === "cover";
+  const tocEntries = stored
+    .filter((s) => !isContents(s) && !isCover(s))
+    .map((s) => ({ title: (s.title ?? "").trim() || "Untitled slide" }));
   return stored.map((s, i) =>
-    toElementSlide(s, templateId, {
+    toElementSlide(isContents(s) ? { ...s, toc_entries: tocEntries } : s, templateId, {
       ...context,
       pageNumber: i + 1,
       totalPages: stored.length,

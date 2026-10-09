@@ -971,9 +971,9 @@ export const composeBlueprint: Composer = (c) => {
       const row = i < half ? i : i - half;
       const y = top + row * step;
       // One line per entry: truncate long titles; h=entryH (24) clips any
-      // residual overflow so a title can never spill onto a second line. 40
-      // chars (not 45) is the safe cap for a 260px title box at 16px.
-      const title = e.title.length > 40 ? e.title.slice(0, 40) + "…" : e.title;
+      // residual overflow so a title can never spill onto a second line. At
+      // 16px in the 260px title box (colW - 60) ≈ 26 chars fit on one line.
+      const title = e.title.length > 26 ? e.title.slice(0, 26) + "…" : e.title;
       els.push(makeElement("caption", { x: colX[col], y, w: 52, h: entryH, z: 10 },
         { color: "inverse", fontFamily: "label", fontSize: 16, fontWeight: 700 },
         { text: String(i + 3).padStart(2, "0") }));
