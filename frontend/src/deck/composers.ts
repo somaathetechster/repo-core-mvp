@@ -960,8 +960,8 @@ export const composeBlueprint: Composer = (c) => {
     // capped to what fits above the 720px canvas floor, so nothing wraps or
     // runs off-canvas (the Editorial contents fix, ported to Blueprint).
     const entries = c.contents ?? [];
-    const top = 500, step = 34, entryH = 28, floor = 720;
-    const colW = 380, gap = 64;                 // 380px max per column
+    const top = 500, step = 34, entryH = 24, floor = 720;
+    const colW = 320, gap = 64;                 // 320px max per column
     const colX = [BP_L + 130, BP_L + 130 + colW + gap]; // aligns with title's left edge
     const maxPerCol = Math.max(1, Math.floor((floor - top - entryH) / step) + 1);
     const shown = entries.slice(0, maxPerCol * 2);
@@ -970,9 +970,10 @@ export const composeBlueprint: Composer = (c) => {
       const col = i < half ? 0 : 1;
       const row = i < half ? i : i - half;
       const y = top + row * step;
-      // One line per entry: truncate long titles; h=entryH clips any residual
-      // overflow so a title can never spill onto a second line.
-      const title = e.title.length > 45 ? e.title.slice(0, 45) + "…" : e.title;
+      // One line per entry: truncate long titles; h=entryH (24) clips any
+      // residual overflow so a title can never spill onto a second line. 40
+      // chars (not 45) is the safe cap for a 260px title box at 16px.
+      const title = e.title.length > 40 ? e.title.slice(0, 40) + "…" : e.title;
       els.push(makeElement("caption", { x: colX[col], y, w: 52, h: entryH, z: 10 },
         { color: "inverse", fontFamily: "label", fontSize: 16, fontWeight: 700 },
         { text: String(i + 3).padStart(2, "0") }));
