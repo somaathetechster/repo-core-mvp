@@ -953,13 +953,31 @@ export const composeBlueprint: Composer = (c) => {
         { color: "inverse", fontFamily: "display", fontSize: 62, fontWeight: 600, lineHeight: 1.08, letterSpacing: "-0.03em" },
         { text: c.title }));
     }
-    (c.contents ?? []).forEach((e, i) => {
-      const y = 70 + i * 45;
-      els.push(makeElement("caption", { x: BP_MID + 8, y, w: 56, h: 26, z: 10 },
-        { color: "inverse", fontFamily: "label", fontSize: 17, fontWeight: 700 },
+    // Entries sit in two independent columns below the stacked title (whose
+    // lowest point is y≈490). Each column is a self-contained stack: its y
+    // positions derive only from its own row index, so the columns never
+    // depend on one another. Titles are truncated to one line and the list is
+    // capped to what fits above the 720px canvas floor, so nothing wraps or
+    // runs off-canvas (the Editorial contents fix, ported to Blueprint).
+    const entries = c.contents ?? [];
+    const top = 500, step = 34, entryH = 28, floor = 720;
+    const colW = 380, gap = 64;                 // 380px max per column
+    const colX = [BP_L + 130, BP_L + 130 + colW + gap]; // aligns with title's left edge
+    const maxPerCol = Math.max(1, Math.floor((floor - top - entryH) / step) + 1);
+    const shown = entries.slice(0, maxPerCol * 2);
+    const half = Math.min(Math.ceil(shown.length / 2), maxPerCol);
+    shown.forEach((e, i) => {
+      const col = i < half ? 0 : 1;
+      const row = i < half ? i : i - half;
+      const y = top + row * step;
+      // One line per entry: truncate long titles; h=entryH clips any residual
+      // overflow so a title can never spill onto a second line.
+      const title = e.title.length > 45 ? e.title.slice(0, 45) + "…" : e.title;
+      els.push(makeElement("caption", { x: colX[col], y, w: 52, h: entryH, z: 10 },
+        { color: "inverse", fontFamily: "label", fontSize: 16, fontWeight: 700 },
         { text: String(i + 3).padStart(2, "0") }));
-      els.push(makeElement("text", { x: BP_MID + 68, y, w: BP_RCOL - 68, h: 26, z: 10 },
-        { color: "inverse", fontFamily: "body", fontSize: 17 }, { text: e.title }));
+      els.push(makeElement("text", { x: colX[col] + 60, y, w: colW - 60, h: entryH, z: 10 },
+        { color: "inverse", fontFamily: "body", fontSize: 16 }, { text: title }));
     });
     return { elements: els, background: "accent" };
   }
