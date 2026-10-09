@@ -27,7 +27,11 @@ export interface SlideContentInput {
   logo?: string | null;
   chart?: { chart_type: string; columns: string[]; rows: string[][] } | null;
   team?: { name: string; role: string; bio: string; photo_data_url: string }[] | null;
-  contents?: { title: string }[] | null;
+  // `slide_number`, when present, is the 1-based position of the slide in the
+  // deck (cover = 1). The contents composers render it verbatim; without it
+  // they fall back to the entry's own index + 3 (cover 1, contents 2, first
+  // content slide 3).
+  contents?: { title: string; slide_number?: number }[] | null;
   companyName?: string;
   pageNumber?: number;
   totalPages?: number;
@@ -238,7 +242,7 @@ export const composeEditorial: Composer = (c) => {
       // h matches one line of 16px text so the renderer clips rather than wraps.
       els.push(makeElement("list", { x: colX[col], y: top + row * step, w: colW, h: entryH, z: 10 },
         { color: "ink", fontFamily: "body", fontSize: 16, borderTop: 1, borderColor: "rule", padding: 10 },
-        { text: `${String(i + 3).padStart(2, "0")}    ${title}` }));
+        { text: `${String(e.slide_number ?? i + 3).padStart(2, "0")}    ${title}` }));
     });
     return { elements: els };
   }
@@ -976,7 +980,7 @@ export const composeBlueprint: Composer = (c) => {
       const title = e.title.length > 26 ? e.title.slice(0, 26) + "…" : e.title;
       els.push(makeElement("caption", { x: colX[col], y, w: 52, h: entryH, z: 10 },
         { color: "inverse", fontFamily: "label", fontSize: 16, fontWeight: 700 },
-        { text: String(i + 3).padStart(2, "0") }));
+        { text: String(e.slide_number ?? i + 3).padStart(2, "0") }));
       els.push(makeElement("text", { x: colX[col] + 60, y, w: colW - 60, h: entryH, z: 10 },
         { color: "inverse", fontFamily: "body", fontSize: 16 }, { text: title }));
     });

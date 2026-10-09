@@ -351,6 +351,11 @@ export default function DeckStudio({
   const dragSrcIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [bgCustomOpen, setBgCustomOpen] = useState(false);
+  // Which filmstrip slide name is being edited inline, if any. `cancelName`
+  // lets Escape suppress the commit that the input's blur would otherwise do
+  // when it unmounts.
+  const [editingNameIndex, setEditingNameIndex] = useState<number | null>(null);
+  const cancelName = useRef(false);
 
   function moveSlide(from: number, to: number) {
     const next = [...slides];
@@ -419,6 +424,27 @@ export default function DeckStudio({
         : el;
     });
     updateSlide({ ...slide, title: nextTitle, elements }, "rename-slide");
+  }
+
+  // Rename an arbitrary slide (the filmstrip can edit any slide's name, not
+  // just the current one). Mirrors renameCurrentSlide: the title text and any
+  // heading element that echoed the old title both move to the new name.
+  // Routing through onSlidesChange means the deck's normal pipeline runs —
+  // contents re-syncs and the deck is marked dirty for autosave — so no extra
+  // sync call is needed here.
+  function renameSlideAt(index: number, title: string) {
+    const target = slides[index];
+    if (!target) return;
+    const oldTitle = target.title.trim().toLowerCase();
+    const titleTypes = new Set(["heading", "statement", "eyebrow", "quote", "text"]);
+    const elements = target.elements.map((el) => {
+      const text = el.text?.trim().toLowerCase();
+      return text === oldTitle && titleTypes.has(el.type) ? { ...el, text: title } : el;
+    });
+    onSlidesChange(
+      slides.map((s, i) => (i === index ? { ...target, title, elements } : s)),
+      "rename-slide",
+    );
   }
 
   const insertButton = (at: number) => (
@@ -638,7 +664,36 @@ export default function DeckStudio({
                 onClick={() => { onCurrentChange(i); setSelectedId(null); setSelectedIds(new Set()); }}
               >
                 <span className="dst-thumb-num">{i + 1}</span>
-                <span className="dst-thumb-title">{s.title}</span>
+                {editingNameIndex === i ? (
+                  <input
+                    className="dst-thumb-title"
+                    style={{ width: "100%", font: "inherit", boxSizing: "border-box" }}
+                    defaultValue={s.title}
+                    autoFocus
+                    draggable={false}
+                    aria-label={`Rename slide ${i + 1}`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={(e) => {
+                      if (cancelName.current) { cancelName.current = false; setEditingNameIndex(null); return; }
+                      renameSlideAt(i, e.currentTarget.value.trim() || s.title);
+                      setEditingNameIndex(null);
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+                      else if (e.key === "Escape") { e.preventDefault(); cancelName.current = true; e.currentTarget.blur(); }
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="dst-thumb-title"
+                    title="Click to rename"
+                    onClick={(e) => { e.stopPropagation(); setEditingNameIndex(i); }}
+                  >
+                    {s.title}
+                  </span>
+                )}
                 {s.customized && <span className="dst-thumb-dot" title="Hand-edited" />}
                 <span className="dst-thumb-actions" onClick={(e) => e.stopPropagation()}>
                   <button type="button" title="Move left" aria-label={`Move slide ${i + 1} left`} disabled={i === 0} onClick={() => moveSlideBy(i, -1)}>←</button>
