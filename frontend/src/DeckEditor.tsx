@@ -318,7 +318,12 @@ export default function DeckEditor({
           return;
         }
         if (serverUpdated <= syncedUpdatedAt.current) return; // nothing newer
-        if (dirtyRef.current || savingRef.current) {
+        // Never clobber local work. `editSeq !== savedSeq` is the authoritative,
+        // synchronous "has unsaved edits" signal (markDirty bumps editSeq before
+        // React commits, so dirtyRef can still read false for a tick); savingRef
+        // covers a save in flight. In either case raise the banner and let the
+        // user decide — do NOT apply the server state.
+        if (editSeq.current !== savedSeq.current || dirtyRef.current || savingRef.current) {
           setSyncConflict(true);
         } else {
           applyDeck(d);
