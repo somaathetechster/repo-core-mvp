@@ -203,7 +203,10 @@ export default function ElementView({
       );
 
     case "comparison-table": {
-      const table = element.table ?? { headers: [], rows: [] };
+      // No valid table data means a ghost element; render nothing rather than
+      // an empty, selectable box floating on the slide.
+      if (!element.table || !element.table.headers?.length) return null;
+      const table = element.table;
       // Transparent fills throughout so the table never paints an opaque block
       // over the slide (which read as a duplicate "card" layer). Only the
       // header row carries the accent; data rows get a faint zebra tint on the

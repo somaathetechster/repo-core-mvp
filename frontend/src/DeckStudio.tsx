@@ -174,6 +174,29 @@ export default function DeckStudio({
     }
   }
 
+  // Insert a comparison table, guarding against a double-insert: if one
+  // already sits at the default drop position on this slide, select it rather
+  // than stacking a second identical table on top of it.
+  const CMP_POS = { x: 88, y: 180 };
+  function insertComparisonTable() {
+    const existing = slide?.elements.find(
+      (e) => e.type === "comparison-table" && e.frame.x === CMP_POS.x && e.frame.y === CMP_POS.y,
+    );
+    if (existing) {
+      setSelectedId(existing.id);
+      setSelectedIds(new Set([existing.id]));
+      return;
+    }
+    addElements([
+      makeElement(
+        "comparison-table",
+        { x: CMP_POS.x, y: CMP_POS.y, w: 900, h: 300, z: 22 },
+        {},
+        { table: defaultComparisonTable() },
+      ),
+    ]);
+  }
+
   function addTextElement() {
     const el = makeElement(
       "text",
@@ -954,14 +977,7 @@ export default function DeckStudio({
               <button
                 className="dst-asset"
                 title="Comparison Table"
-                onClick={() => addElements([
-                  makeElement(
-                    "comparison-table",
-                    { x: 88, y: 180, w: 900, h: 300, z: 22 },
-                    {},
-                    { table: defaultComparisonTable() },
-                  ),
-                ])}
+                onClick={insertComparisonTable}
               >
                 {/* A simple 3×3 grid, drawn inline so it needs no asset. */}
                 <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
