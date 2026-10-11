@@ -74,60 +74,6 @@ function savedLabel(savedAt: number | null, now: number): string {
   return `Saved · ${hr} hr ago`;
 }
 
-/**
- * Local draft backup. React state is the only home for in-progress slides
- * until a save lands, so a crashed tab or a run of failed saves loses the
- * work. We mirror the editable surface to localStorage on every edit and
- * offer to restore it on the next open if it's newer than the server copy.
- */
-const DRAFT_PREFIX = "provisio:draft:";
-const DRAFT_MAX_BYTES = 4_000_000;
-
-function draftKey(deckId: string) {
-  return `${DRAFT_PREFIX}${deckId}`;
-}
-
-interface DeckDraft {
-  slides: ElementSlide[];
-  themeSettings: ThemeSettings;
-  templateId: string;
-  deckTheme: DeckTheme | null;
-  images: BrandImage[];
-  savedAt: number;
-}
-
-function writeDraft(deckId: string, draft: Omit<DeckDraft, "savedAt">) {
-  try {
-    const json = JSON.stringify({ ...draft, savedAt: Date.now() });
-    // Image-heavy decks can blow past the localStorage quota; skip the backup
-    // rather than throw and break editing. The server save still runs.
-    if (json.length > DRAFT_MAX_BYTES) return;
-    localStorage.setItem(draftKey(deckId), json);
-  } catch {
-    // Quota exceeded or serialization failure — a missing draft is tolerable.
-  }
-}
-
-function readDraft(deckId: string): DeckDraft | null {
-  try {
-    const raw = localStorage.getItem(draftKey(deckId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as DeckDraft;
-    if (!parsed || !Array.isArray(parsed.slides) || typeof parsed.savedAt !== "number") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function clearDraft(deckId: string) {
-  try {
-    localStorage.removeItem(draftKey(deckId));
-  } catch {
-    /* ignore */
-  }
-}
-
 function claimPendingChart(): PendingChart | null {
   const raw = sessionStorage.getItem(PENDING_KEY);
   if (!raw) return null;
@@ -214,8 +160,6 @@ export default function DeckEditor({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dropPrompt, setDropPrompt] = useState<PendingChart | null>(null);
-  // A local draft newer than the server copy, offered for recovery on open.
-  const [recovery, setRecovery] = useState<DeckDraft | null>(null);
   // A save that failed. `exhausted` flips once the auto-retries are used up,
   // switching the banner from "retrying…" to a copy-your-work warning.
   const [saveFailed, setSaveFailed] = useState<{ exhausted: boolean } | null>(null);
@@ -361,23 +305,6 @@ export default function DeckEditor({
       .then((d) => {
         if (cancelled) return;
         applyDeck(d, { claimChart: true });
-        // A local draft that's newer than the server's version means the last
-        // session's edits never made it to the server. Offer to restore it
-        // rather than silently showing the older server copy.
-        const draft = readDraft(deckId);
-        if (!draft) return;
-        const serverMs = d.updated_at ? Date.parse(d.updated_at) : NaN;
-        // A draft whose timestamp is within 5s of the server's version is
-        // almost certainly the save that just succeeded but failed to clear
-        // its backup. Discard it silently rather than nagging the user with a
-        // recovery banner for changes the server already has.
-        if (!Number.isNaN(serverMs) && Math.abs(draft.savedAt - serverMs) <= 5_000) {
-          clearDraft(deckId);
-        } else if (Number.isNaN(serverMs) || draft.savedAt > serverMs) {
-          setRecovery(draft);
-        } else {
-          clearDraft(deckId); // server is at least as new — the draft is stale.
-        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Couldn't open this deck."));
     return () => { cancelled = true; };
@@ -476,11 +403,6 @@ export default function DeckEditor({
         layouts: {},
         freeform_slide_ids: [],
       });
-      // The PUT returned 200: the server now holds this version, so the local
-      // draft is redundant. Clear it FIRST, unconditionally, before any state
-      // updates — a draft left behind here is exactly what resurfaces as a
-      // phantom "unsaved changes" recovery banner on the next open.
-      clearDraft(deckId);
       setStored(nextStored);
       savedSeq.current = seqAtStart;
       persisted = true;
@@ -544,31 +466,6 @@ export default function DeckEditor({
     }
   }, [deckId, applyDeck]);
 
-  // Recovery banner: load the local draft back into the editor and persist it.
-  const restoreDraft = useCallback(() => {
-    const draft = recovery;
-    if (!draft) return;
-    history.reset({
-      slides: draft.slides,
-      themeSettings: draft.themeSettings,
-      templateId: draft.templateId,
-    });
-    if (draft.deckTheme) setDeckTheme(draft.deckTheme);
-    if (Array.isArray(draft.images)) setImages(draft.images);
-    setRecovery(null);
-    // Mark dirty so the restored state is treated as unsaved, then save it.
-    markDirty();
-    setTimeout(() => saveRef.current(), 0);
-    flash("Restored your unsaved changes.");
-  }, [recovery, history, markDirty]);
-
-  // Recovery banner: throw the draft away and keep the server version that was
-  // already applied on load.
-  const discardDraft = useCallback(() => {
-    clearDraft(deckId);
-    setRecovery(null);
-  }, [deckId]);
-
   // Autosave on a delay: losing hand-positioned layout work to a closed tab
   // would be worse than an occasional redundant write. Keyed on editSeq (not
   // just the dirty boolean) so each edit reschedules against the latest state.
@@ -577,13 +474,6 @@ export default function DeckEditor({
     const t = setTimeout(() => { saveRef.current(); }, 2200);
     return () => clearTimeout(t);
   }, [dirty, save]);
-
-  // Mirror every unsaved edit to a local draft so a crashed tab or a run of
-  // failed saves doesn't lose it. Cleared on a successful save (see `save`).
-  useEffect(() => {
-    if (!loadedRef.current || !dirty) return;
-    writeDraft(deckId, { slides, themeSettings, templateId, deckTheme, images });
-  }, [dirty, slides, themeSettings, templateId, deckTheme, images, deckId]);
 
   // Cancel any pending save retry when the editor unmounts.
   useEffect(() => () => {
@@ -905,18 +795,6 @@ export default function DeckEditor({
           {saveFailed.exhausted
             ? "Changes couldn't be saved. Copy your work before leaving."
             : "Couldn't save — retrying…"}
-        </div>
-      )}
-
-      {recovery && (
-        <div className="deck-recovery-banner" role="alert">
-          <span>
-            You have unsaved changes from {new Date(recovery.savedAt).toLocaleString()}. Restore them?
-          </span>
-          <div className="deck-sync-banner-actions">
-            <button className="p-btn p-btn-secondary" onClick={restoreDraft}>Restore</button>
-            <button className="p-btn p-btn-ghost" onClick={discardDraft}>Discard</button>
-          </div>
         </div>
       )}
 
