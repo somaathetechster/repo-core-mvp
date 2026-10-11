@@ -666,8 +666,7 @@ export default function DeckStudio({
                 <span className="dst-thumb-num">{i + 1}</span>
                 {editingNameIndex === i ? (
                   <input
-                    className="dst-thumb-title"
-                    style={{ width: "100%", font: "inherit", boxSizing: "border-box" }}
+                    className="dst-thumb-title dst-thumb-title-input"
                     defaultValue={s.title}
                     autoFocus
                     draggable={false}

@@ -54,6 +54,17 @@
   font-size: 0.76rem; color: var(--text); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; max-width: 104px;
 }
+/* Inline rename field: inherit the thumbnail's text colour so the name stays
+   legible on light-coloured slide thumbnails (a white input hid it). */
+.dst-thumb-title-input {
+  background: transparent;
+  color: inherit;
+  outline: none;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  width: 100%;
+  font: inherit;
+}
 .dst-thumb-dot {
   position: absolute; top: 6px; right: 6px; width: 5px; height: 5px;
   border-radius: 50%; background: var(--gold);
