@@ -299,16 +299,24 @@ export default function DeckEditor({
     }
   }, [history]);
 
+  // `applyDeck` depends on `history`, and useHistory returns a fresh object
+  // every render, so applyDeck's identity changes on every render. Reach it
+  // through a ref from the load effect so that effect can depend on `deckId`
+  // alone — otherwise it re-ran on every render, re-fetching the deck in a
+  // loop and overwriting in-progress slides with the server copy.
+  const applyDeckRef = useRef(applyDeck);
+  useEffect(() => { applyDeckRef.current = applyDeck; }, [applyDeck]);
+
   useEffect(() => {
     let cancelled = false;
     getDeck(deckId)
       .then((d) => {
         if (cancelled) return;
-        applyDeck(d, { claimChart: true });
+        applyDeckRef.current(d, { claimChart: true });
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Couldn't open this deck."));
     return () => { cancelled = true; };
-  }, [deckId, applyDeck]);
+  }, [deckId]);
 
   /* ---------------- auto-sync poll ---------------- */
 
