@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import type { SlideElement, ElementStyle, TableCell, TableData } from "./elements";
+import { defaultComparisonTable } from "./elements";
+import type { SlideElement, ElementStyle, TableCell, TableData, TableCellIcon } from "./elements";
 import type { DeckTheme } from "./theme";
 import { treatmentFilter, objectPosition, type ImageTreatment } from "./images";
 import { ASSETS, assetToSvg } from "./assets";
@@ -86,6 +87,45 @@ export function elementStyleToCss(el: SlideElement, theme: DeckTheme): CSSProper
   }
 
   return css;
+}
+
+/**
+ * Migrate a comparison-table's stored data to the current TableData shape.
+ *
+ * Decks saved before the table rebuild hold the old shape
+ * ({ headers: string[], rows: { label, values }[] }); the renderer now
+ * expects rows: TableCell[][]. Converting on read keeps those decks from
+ * crashing with "e.map is not a function" without a backend migration.
+ */
+function normalizeTableData(table: unknown): TableData {
+  if (!table) return defaultComparisonTable();
+  const t = table as { rows?: unknown[]; headers?: unknown };
+
+  // Already the new shape: rows is an array of arrays (TableCell[][]).
+  if (Array.isArray(t.rows) && t.rows.length > 0 && Array.isArray(t.rows[0])) {
+    return table as TableData;
+  }
+
+  // Old shape → new. Build a header row from `headers`, then a row per
+  // old row: a label cell followed by one cell per value, mapping the
+  // yes/no sentinels to icons.
+  const headers: string[] = Array.isArray(t.headers) ? (t.headers as string[]) : [];
+  const oldRows = Array.isArray(t.rows) ? (t.rows as { label?: string; values?: string[] }[]) : [];
+
+  const headerRow: TableCell[] = [
+    { content: "", isHeader: true },
+    ...headers.map((h) => ({ content: h, isHeader: true })),
+  ];
+
+  const dataRows: TableCell[][] = oldRows.map((row) => [
+    { content: row.label ?? "" },
+    ...(row.values ?? []).map((v: string) => ({
+      content: v === "yes" || v === "no" || v === "partial" ? "" : (v ?? ""),
+      icon: (v === "yes" || v === "no" ? (v as TableCellIcon) : undefined),
+    })),
+  ]);
+
+  return { rows: [headerRow, ...dataRows] };
 }
 
 export interface ElementRenderProps {
@@ -204,7 +244,8 @@ export default function ElementView({
       );
 
     case "comparison-table": {
-      const table: TableData = element.table ?? { rows: [] };
+      // Migrate old-shape data up front so every .map() below is safe.
+      const table: TableData = normalizeTableData(element.table);
       const rows = table.rows ?? [];
       // No rows means a ghost element; render nothing rather than an empty,
       // selectable box floating on the slide.
