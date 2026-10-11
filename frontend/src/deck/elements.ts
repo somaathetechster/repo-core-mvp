@@ -31,6 +31,7 @@ export type ElementType =
   | "image"
   | "chart"
   | "table"
+  | "comparison-table"
   | "shape"
   | "rule"
   | "caption"
@@ -41,6 +42,30 @@ export type ElementType =
   | "logo"
   | "asset"
   | "pageNumber";
+
+/** One cell in a comparison table. "" is a blank (undecided) cell. */
+export type ComparisonCell = "yes" | "no" | "partial" | "";
+
+/**
+ * A manual competitor/capability matrix. `headers` are the column names
+ * (the first is conventionally "Us"); each row carries a capability `label`
+ * and one `values` entry per header, in the same order.
+ */
+export interface ComparisonTable {
+  headers: string[];
+  rows: { label: string; values: ComparisonCell[] }[];
+}
+
+/** The default table dropped in from the Assets panel: three columns, three
+ *  empty capability rows. */
+export function defaultComparisonTable(): ComparisonTable {
+  const headers = ["Us", "Competitor 1", "Competitor 2"];
+  const row = (): { label: string; values: ComparisonCell[] } => ({
+    label: "",
+    values: headers.map(() => "" as ComparisonCell),
+  });
+  return { headers, rows: [row(), row(), row()] };
+}
 
 export interface Frame {
   x: number;
@@ -105,6 +130,8 @@ export interface SlideElement {
     rows: string[][];
     encoding?: Record<string, unknown>;
   };
+  /** Comparison-table payload (manual competitor/capability matrix). */
+  table?: ComparisonTable;
   /** A caption element attached to another element, so moving the parent
    *  can move the caption with it. */
   attachedTo?: string | null;

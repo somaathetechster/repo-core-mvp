@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import SlideCanvas from "./deck/SlideCanvas";
 import { blankSlide } from "./deck/migrate";
 import { resolveColor } from "./deck/ElementView";
@@ -8,8 +8,8 @@ import {
   type ThemeSettings,
 } from "./deck/theme";
 import {
-  CANVAS_W, CANVAS_H, makeElement,
-  type ElementSlide, type SlideElement,
+  CANVAS_W, CANVAS_H, makeElement, defaultComparisonTable,
+  type ElementSlide, type SlideElement, type ComparisonCell, type ComparisonTable,
 } from "./deck/elements";
 import { elementId } from "./deck/elements";
 import { COMPOSERS } from "./deck/composers";
@@ -44,6 +44,15 @@ const LAYOUT_VARIANTS: LayoutVariant[] = [
   "statement", "lead-and-points", "numbered-rows", "grid", "split-image",
   "image-led", "metric-hero", "two-column", "quote", "data",
 ];
+
+// A comparison-table cell cycles through these on each click, so a value is
+// set by clicking rather than typing.
+const CELL_CYCLE: ComparisonCell[] = ["", "yes", "no", "partial"];
+function cycleCell(v: ComparisonCell): ComparisonCell {
+  const i = CELL_CYCLE.indexOf(v);
+  return CELL_CYCLE[(i + 1) % CELL_CYCLE.length];
+}
+const CELL_GLYPH: Record<ComparisonCell, string> = { "": "·", yes: "✓", no: "✗", partial: "—" };
 
 function HexColorControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const safeValue = HEX_COLOR.test(value) ? value : "#000000";
@@ -913,6 +922,34 @@ export default function DeckStudio({
 
         {panel === "assets" && (
           <section className="dst-section">
+            <h4>Tables</h4>
+            <div className="dst-assets">
+              <button
+                className="dst-asset"
+                title="Comparison Table"
+                onClick={() => addElements([
+                  makeElement(
+                    "comparison-table",
+                    { x: 88, y: 180, w: 900, h: 300, z: 22 },
+                    {},
+                    { table: defaultComparisonTable() },
+                  ),
+                ])}
+              >
+                {/* A simple 3×3 grid, drawn inline so it needs no asset. */}
+                <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+                  <rect x="2" y="2" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="2" y1="11.3" x2="30" y2="11.3" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="2" y1="20.7" x2="30" y2="20.7" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="11.3" y1="2" x2="11.3" y2="30" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="20.7" y1="2" x2="20.7" y2="30" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              </button>
+            </div>
+            <p className="dst-hint">
+              A competitor matrix. Drop it in, then edit columns, capability rows and cells from the
+              Selection panel — click a cell to cycle ✓ / ✗ / — / blank.
+            </p>
             <input
               className="p-input dst-search"
               placeholder="Search shapes, icons, arrows…"
@@ -1023,6 +1060,115 @@ export default function DeckStudio({
               />
             </label>
             <h4>{selected.type}</h4>
+
+            {selected.type === "comparison-table" && selected.table && (() => {
+              const table: ComparisonTable = selected.table;
+              const commit = (next: ComparisonTable) => patchSelected({ table: next });
+              const setHeader = (c: number, value: string) =>
+                commit({ ...table, headers: table.headers.map((h, i) => (i === c ? value : h)) });
+              const setLabel = (r: number, value: string) =>
+                commit({ ...table, rows: table.rows.map((row, i) => (i === r ? { ...row, label: value } : row)) });
+              const cycle = (r: number, c: number) =>
+                commit({
+                  ...table,
+                  rows: table.rows.map((row, i) =>
+                    i === r ? { ...row, values: row.values.map((v, j) => (j === c ? cycleCell(v) : v)) } : row,
+                  ),
+                });
+              const addRow = () =>
+                commit({ ...table, rows: [...table.rows, { label: "", values: table.headers.map(() => "" as ComparisonCell) }] });
+              const addColumn = () =>
+                commit({
+                  headers: [...table.headers, `Competitor ${table.headers.length}`],
+                  rows: table.rows.map((row) => ({ ...row, values: [...row.values, "" as ComparisonCell] })),
+                });
+              const removeRow = (r: number) =>
+                commit({ ...table, rows: table.rows.filter((_, i) => i !== r) });
+              const removeColumn = (c: number) =>
+                commit({
+                  headers: table.headers.filter((_, i) => i !== c),
+                  rows: table.rows.map((row) => ({ ...row, values: row.values.filter((_, i) => i !== c) })),
+                });
+              // Inline styles keep the editor self-contained (no new CSS file).
+              const rowStyle: CSSProperties = { display: "flex", gap: 4, alignItems: "center", marginBottom: 4 };
+              const cellBtn: CSSProperties = {
+                flex: "0 0 34px", height: 30, cursor: "pointer",
+                border: "1px solid var(--ink-border)", borderRadius: 4,
+                background: "var(--ink)", color: "var(--text)", fontSize: 15,
+              };
+              const delBtn: CSSProperties = { ...cellBtn, flex: "0 0 26px", color: "var(--text-dim)" };
+              const labelInput: CSSProperties = { flex: "1 1 auto", minWidth: 0 };
+              return (
+                <div className="dst-field">
+                  <span>Comparison table</span>
+                  <div style={rowStyle}>
+                    <span style={{ flex: "1 1 auto", minWidth: 0 }} />
+                    {table.headers.map((h, c) => (
+                      <input
+                        key={c}
+                        className="p-input"
+                        style={{ flex: "0 0 60px" }}
+                        value={h}
+                        aria-label={`Column ${c + 1} name`}
+                        onChange={(e) => setHeader(c, e.target.value)}
+                      />
+                    ))}
+                    <button style={delBtn} title="Add column" aria-label="Add column" onClick={addColumn}>+</button>
+                  </div>
+                  <div style={rowStyle}>
+                    <span style={{ flex: "1 1 auto", minWidth: 0, fontSize: 11, color: "var(--text-dim)" }}>
+                      Remove column →
+                    </span>
+                    {table.headers.map((_, c) => (
+                      <button
+                        key={c}
+                        style={delBtn}
+                        title="Remove column"
+                        aria-label={`Remove column ${c + 1}`}
+                        disabled={table.headers.length <= 1}
+                        onClick={() => removeColumn(c)}
+                      >
+                        ×
+                      </button>
+                    ))}
+                    <span style={{ flex: "0 0 26px" }} />
+                  </div>
+                  {table.rows.map((row, r) => (
+                    <div key={r} style={rowStyle}>
+                      <input
+                        className="p-input"
+                        style={labelInput}
+                        value={row.label}
+                        placeholder="Capability"
+                        aria-label={`Row ${r + 1} label`}
+                        onChange={(e) => setLabel(r, e.target.value)}
+                      />
+                      {table.headers.map((_, c) => (
+                        <button
+                          key={c}
+                          style={cellBtn}
+                          title="Click to cycle: blank → yes → no → partial"
+                          aria-label={`Row ${r + 1}, column ${c + 1}: ${row.values[c] || "blank"}`}
+                          onClick={() => cycle(r, c)}
+                        >
+                          {CELL_GLYPH[row.values[c] ?? ""]}
+                        </button>
+                      ))}
+                      <button
+                        style={delBtn}
+                        title="Remove row"
+                        aria-label={`Remove row ${r + 1}`}
+                        disabled={table.rows.length <= 1}
+                        onClick={() => removeRow(r)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button className="dst-text-action" onClick={addRow}>+ Row</button>
+                </div>
+              );
+            })()}
 
             {selected.text !== undefined && (
               <label className="dst-field">

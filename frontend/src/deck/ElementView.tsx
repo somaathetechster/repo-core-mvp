@@ -28,6 +28,16 @@ export function resolveColor(token: string | undefined, theme: DeckTheme, fallba
   }
 }
 
+/** A hex colour at a given alpha, for the faint cell borders and zebra rows
+ *  of the comparison table. Falls back to the colour itself if it isn't a
+ *  plain #rrggbb value. */
+function withAlpha(hex: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 export function resolveFont(token: string | undefined, theme: DeckTheme): string {
   switch (token) {
     case "display": return theme.fonts.display;
@@ -191,6 +201,87 @@ export default function ElementView({
           {renderChart ? renderChart(element) : null}
         </div>
       );
+
+    case "comparison-table": {
+      const table = element.table ?? { headers: [], rows: [] };
+      const border = `1px solid ${withAlpha(theme.ink, 0.08)}`;
+      const zebra = withAlpha(theme.ink, 0.04);
+      const cellBase: CSSProperties = {
+        border,
+        padding: "0 10px",
+        textAlign: "center",
+        verticalAlign: "middle",
+      };
+      // The value glyph and its colour: a tick in the accent, a cross/dash in
+      // a muted ink. "" renders nothing so a blank cell reads as "unknown".
+      const glyph = (v: string) => {
+        switch (v) {
+          case "yes": return <span style={{ color: theme.accent, fontWeight: 700, fontSize: 18 }}>✓</span>;
+          case "no": return <span style={{ color: withAlpha(theme.ink, 0.5), fontSize: 18 }}>✗</span>;
+          case "partial": return <span style={{ color: theme.muted, fontSize: 18 }}>—</span>;
+          default: return null;
+        }
+      };
+      return (
+        <div style={{ ...css, overflow: "hidden" }}>
+          <table
+            style={{
+              width: "100%",
+              height: "100%",
+              borderCollapse: "collapse",
+              tableLayout: "fixed",
+              fontFamily: theme.fonts.body,
+            }}
+          >
+            <thead>
+              <tr>
+                {/* Empty top-left corner above the capability-label column. */}
+                <th style={{ ...cellBase, background: theme.accent, textAlign: "left" }} />
+                {table.headers.map((h, c) => (
+                  <th
+                    key={c}
+                    style={{
+                      ...cellBase,
+                      background: theme.accent,
+                      color: theme.inverse,
+                      fontFamily: theme.fonts.label,
+                      fontWeight: 700,
+                      fontSize: 12,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, r) => (
+                <tr key={r} style={{ background: r % 2 ? zebra : theme.paper }}>
+                  <td
+                    style={{
+                      ...cellBase,
+                      textAlign: "left",
+                      background: r % 2 ? zebra : theme.paper,
+                      color: theme.ink,
+                      fontSize: 14,
+                    }}
+                  >
+                    {row.label}
+                  </td>
+                  {table.headers.map((_, c) => (
+                    <td key={c} style={cellBase}>
+                      {glyph(row.values[c] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
 
     default: {
       if (editable && onTextChange) {
