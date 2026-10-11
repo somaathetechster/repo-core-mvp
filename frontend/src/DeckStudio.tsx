@@ -111,6 +111,26 @@ export default function DeckStudio({
   const [assetQuery, setAssetQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string | null>(() => normaliseIndustry(industry));
   const [assetCat, setAssetCat] = useState<AssetCategory | "all">("all");
+  // Width of the right-hand editor panel, dragged via a handle on its left
+  // edge. The canvas column (minmax(0,1fr)) takes whatever space is left.
+  const [panelWidth, setPanelWidth] = useState(320);
+  const panelResize = useRef<{ startX: number; startW: number } | null>(null);
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      const st = panelResize.current;
+      if (!st) return;
+      // Dragging left widens the panel; clamp to the allowed range.
+      const next = Math.min(520, Math.max(280, st.startW - (e.clientX - st.startX)));
+      setPanelWidth(next);
+    }
+    function onUp() { panelResize.current = null; }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
 
   const theme = useMemo(() => buildTheme(themeSettings), [themeSettings]);
 
@@ -477,7 +497,7 @@ export default function DeckStudio({
   const bgIsCustom = HEX_COLOR.test(slideBg) && !BG_PRESETS.some((p) => p.value.toUpperCase() === slideBg.toUpperCase());
 
   return (
-    <div className="dst">
+    <div className="dst" style={{ gridTemplateColumns: `minmax(0,1fr) ${panelWidth}px` }}>
       <div className="dst-stage">
         <div className="dst-canvas-area">
         <div className="dst-toolmode" role="group" aria-label="Canvas tool">
@@ -716,6 +736,13 @@ export default function DeckStudio({
       </div>
 
       <aside className="dst-panel">
+        {/* Drag the left edge to resize the panel (280–520px). */}
+        <div
+          onPointerDown={(e) => { e.preventDefault(); panelResize.current = { startX: e.clientX, startW: panelWidth }; }}
+          title="Drag to resize panel"
+          aria-hidden="true"
+          style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, cursor: "ew-resize", zIndex: 5 }}
+        />
         <nav className="dst-tabs">
           {(["template", "theme", "assets", "library", "images", "layers", "element"] as Panel[]).map((p) => (
             <button
@@ -1165,7 +1192,10 @@ export default function DeckStudio({
                       </button>
                     </div>
                   ))}
-                  <button className="dst-text-action" onClick={addRow}>+ Row</button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="dst-text-action" onClick={addRow}>+ Row</button>
+                    <button className="dst-text-action" onClick={addColumn}>+ Column</button>
+                  </div>
                 </div>
               );
             })()}

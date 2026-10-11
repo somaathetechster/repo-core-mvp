@@ -204,13 +204,17 @@ export default function ElementView({
 
     case "comparison-table": {
       const table = element.table ?? { headers: [], rows: [] };
-      const border = `1px solid ${withAlpha(theme.ink, 0.08)}`;
-      const zebra = withAlpha(theme.ink, 0.04);
+      // Transparent fills throughout so the table never paints an opaque block
+      // over the slide (which read as a duplicate "card" layer). Only the
+      // header row carries the accent; data rows get a faint zebra tint on the
+      // row itself, and every cell stays transparent so the tint shows through.
+      const border = "1px solid rgba(0,0,0,0.1)";
       const cellBase: CSSProperties = {
         border,
         padding: "0 10px",
         textAlign: "center",
         verticalAlign: "middle",
+        background: "transparent",
       };
       // The value glyph and its colour: a tick in the accent, a cross/dash in
       // a muted ink. "" renders nothing so a blank cell reads as "unknown".
@@ -223,7 +227,7 @@ export default function ElementView({
         }
       };
       return (
-        <div style={{ ...css, overflow: "hidden" }}>
+        <div style={{ ...css, overflow: "hidden", background: "transparent" }}>
           <table
             style={{
               width: "100%",
@@ -258,16 +262,9 @@ export default function ElementView({
             </thead>
             <tbody>
               {table.rows.map((row, r) => (
-                <tr key={r} style={{ background: r % 2 ? zebra : theme.paper }}>
-                  <td
-                    style={{
-                      ...cellBase,
-                      textAlign: "left",
-                      background: r % 2 ? zebra : theme.paper,
-                      color: theme.ink,
-                      fontSize: 14,
-                    }}
-                  >
+                // Zebra on even rows only (2nd, 4th, …); odd rows transparent.
+                <tr key={r} style={{ background: r % 2 === 1 ? "rgba(0,0,0,0.04)" : "transparent" }}>
+                  <td style={{ ...cellBase, textAlign: "left", color: theme.ink, fontSize: 14 }}>
                     {row.label}
                   </td>
                   {table.headers.map((_, c) => (
