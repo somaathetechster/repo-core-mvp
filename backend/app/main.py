@@ -3,7 +3,7 @@ import logging
 import os
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -72,7 +72,40 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Access-Control-Max-Age: 0 — don't let browsers cache the preflight; a
+    # user who hit a stale CORS rejection gets a fresh check next request.
+    max_age=0,
 )
+
+# Paths whose responses may legitimately be cached by the browser. There are
+# no static mounts today, but guard anyway so a future one keeps its caching.
+_STATIC_PREFIXES = ("/static", "/assets")
+
+
+def _add_vary_origin(response) -> None:
+    """Ensure `Origin` is in the Vary header without clobbering any existing
+    values, so a response cached for one origin is never reused for another."""
+    existing = response.headers.get("Vary")
+    if not existing:
+        response.headers["Vary"] = "Origin"
+        return
+    if not any(part.strip().lower() == "origin" for part in existing.split(",")):
+        response.headers["Vary"] = f"{existing}, Origin"
+
+
+@app.middleware("http")
+async def no_cache_cors(request: Request, call_next):
+    """Tell browsers never to cache a CORS decision: every response varies by
+    Origin and expires its preflight cache immediately, and API responses are
+    marked no-store. Added after CORSMiddleware so it wraps it as the outermost
+    layer and can set these headers on real and preflight responses alike."""
+    response = await call_next(request)
+    _add_vary_origin(response)
+    response.headers["Access-Control-Max-Age"] = "0"
+    if not request.url.path.startswith(_STATIC_PREFIXES):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 app.include_router(github_auth.router)
 app.include_router(repos.router)
