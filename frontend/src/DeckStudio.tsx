@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import SlideCanvas from "./deck/SlideCanvas";
 import { blankSlide } from "./deck/migrate";
-import { resolveColor } from "./deck/ElementView";
+import { resolveColor, normalizeTableData } from "./deck/ElementView";
 import { searchLibrary, instantiate, LIBRARY_INDUSTRIES, normaliseIndustry, type LibraryItem } from "./deck/library";
 import {
   buildTheme, loadFontPairing, contrastRatio, FONT_PAIRINGS,
@@ -1111,8 +1111,10 @@ export default function DeckStudio({
             </label>
             <h4>{selected.type}</h4>
 
-            {selected.type === "comparison-table" && selected.table && (() => {
-              const table: TableData = selected.table;
+            {selected.type === "comparison-table" && (() => {
+              // Normalize up front so old-shape saved tables don't crash the
+              // panel's .map() reads; all commits below write the new shape.
+              const table: TableData = normalizeTableData(selected.table);
               const rows = table.rows;
               const colCount = rows[0]?.length ?? 0;
               // Clamp the shared cell selection to something valid.

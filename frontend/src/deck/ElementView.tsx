@@ -97,7 +97,7 @@ export function elementStyleToCss(el: SlideElement, theme: DeckTheme): CSSProper
  * expects rows: TableCell[][]. Converting on read keeps those decks from
  * crashing with "e.map is not a function" without a backend migration.
  */
-function normalizeTableData(table: unknown): TableData {
+export function normalizeTableData(table: unknown): TableData {
   if (!table) return defaultComparisonTable();
   const t = table as { rows?: unknown[]; headers?: unknown };
 
