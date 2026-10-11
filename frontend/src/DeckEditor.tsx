@@ -312,10 +312,10 @@ export default function DeckEditor({
 
   /* ---------------- auto-sync poll ---------------- */
 
-  // Poll the server every 30s for a newer version. If one exists and we have
-  // no unsaved edits, reload it silently and flash a small toast. If we do
-  // have unsaved edits, raise a banner and let the user decide rather than
-  // clobbering their work.
+  // Poll the server every 30s for a newer version. If one exists, raise the
+  // conflict banner and let the USER decide (Save my changes / Discard & sync).
+  // We NEVER apply the server state automatically — silently overwriting what
+  // someone is working on is never acceptable, dirty or not.
   useEffect(() => {
     const interval = setInterval(async () => {
       if (!loadedRef.current) return;
@@ -328,23 +328,15 @@ export default function DeckEditor({
           return;
         }
         if (serverUpdated <= syncedUpdatedAt.current) return; // nothing newer
-        // Never clobber local work. `editSeq !== savedSeq` is the authoritative,
-        // synchronous "has unsaved edits" signal (markDirty bumps editSeq before
-        // React commits, so dirtyRef can still read false for a tick); savingRef
-        // covers a save in flight. In either case raise the banner and let the
-        // user decide — do NOT apply the server state.
-        if (editSeq.current !== savedSeq.current || dirtyRef.current || savingRef.current) {
-          setSyncConflict(true);
-        } else {
-          applyDeck(d);
-          flash("Deck updated");
-        }
+        // A newer version exists on the server. Surface it and let the user
+        // resolve it — do NOT apply it in the background.
+        setSyncConflict(true);
       } catch {
         // A failed poll is not worth surfacing; try again next tick.
       }
     }, 30_000);
     return () => clearInterval(interval);
-  }, [deckId, applyDeck]);
+  }, [deckId]);
 
   // Re-render the "Saved · N ago" label every 30s so it stays current.
   useEffect(() => {
