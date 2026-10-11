@@ -367,7 +367,13 @@ export default function DeckEditor({
         const draft = readDraft(deckId);
         if (!draft) return;
         const serverMs = d.updated_at ? Date.parse(d.updated_at) : NaN;
-        if (Number.isNaN(serverMs) || draft.savedAt > serverMs) {
+        // A draft whose timestamp is within 5s of the server's version is
+        // almost certainly the save that just succeeded but failed to clear
+        // its backup. Discard it silently rather than nagging the user with a
+        // recovery banner for changes the server already has.
+        if (!Number.isNaN(serverMs) && Math.abs(draft.savedAt - serverMs) <= 5_000) {
+          clearDraft(deckId);
+        } else if (Number.isNaN(serverMs) || draft.savedAt > serverMs) {
           setRecovery(draft);
         } else {
           clearDraft(deckId); // server is at least as new — the draft is stale.
@@ -470,6 +476,11 @@ export default function DeckEditor({
         layouts: {},
         freeform_slide_ids: [],
       });
+      // The PUT returned 200: the server now holds this version, so the local
+      // draft is redundant. Clear it FIRST, unconditionally, before any state
+      // updates — a draft left behind here is exactly what resurfaces as a
+      // phantom "unsaved changes" recovery banner on the next open.
+      clearDraft(deckId);
       setStored(nextStored);
       savedSeq.current = seqAtStart;
       persisted = true;
@@ -480,9 +491,7 @@ export default function DeckEditor({
       if (result?.updated_at) syncedUpdatedAt.current = result.updated_at;
       setLastSyncedAt(Date.now());
       setSyncConflict(false);
-      // The save landed, so the local draft is now redundant and any failure
-      // streak is over — clear the backup, the retry counter and the banner.
-      clearDraft(deckId);
+      // Any failure streak is over — reset the retry counter and the banner.
       saveRetryRef.current = 0;
       if (saveRetryTimer.current) { clearTimeout(saveRetryTimer.current); saveRetryTimer.current = null; }
       setSaveFailed(null);
