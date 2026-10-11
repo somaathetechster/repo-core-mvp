@@ -562,7 +562,10 @@ export default function DeckEditor({
         pageNumber: current + 2,
         totalPages: slides.length + 1,
       });
-      const withChart: ElementSlide = { ...composed, customized: false };
+      // The user hand-dropped this chart, so mark the slide customized: a
+      // later template switch or poll re-sync must not recompose it and move
+      // the chart they placed.
+      const withChart: ElementSlide = { ...composed, customized: true };
       setSlides((prev) => {
         const next = [...prev];
         next.splice(current + 1, 0, withChart);
