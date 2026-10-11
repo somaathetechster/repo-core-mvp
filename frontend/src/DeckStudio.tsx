@@ -187,14 +187,23 @@ export default function DeckStudio({
       setSelectedIds(new Set([existing.id]));
       return;
     }
-    addElements([
-      makeElement(
-        "comparison-table",
-        { x: CMP_POS.x, y: CMP_POS.y, w: 900, h: 300, z: 22 },
-        {},
-        { table: defaultComparisonTable() },
-      ),
-    ]);
+    const newTableElement = makeElement(
+      "comparison-table",
+      { x: CMP_POS.x, y: CMP_POS.y, w: 900, h: 300, z: 22 },
+      {},
+      { table: defaultComparisonTable() },
+    );
+    // Mark the slide customized so a later template switch or poll re-sync
+    // never recomposes it and drops the hand-inserted table, and dispatch
+    // through onSlidesChange so the deck is marked dirty and autosave fires.
+    const updatedSlides = slides.map((s, i) =>
+      i === current
+        ? { ...s, customized: true, elements: [...s.elements, newTableElement] }
+        : s,
+    );
+    onSlidesChange(updatedSlides, "insert-table");
+    setSelectedId(newTableElement.id);
+    setSelectedIds(new Set([newTableElement.id]));
   }
 
   function addTextElement() {
