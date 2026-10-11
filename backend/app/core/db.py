@@ -7,7 +7,19 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+# prepared_statement_cache_size / statement_cache_size are set to 0 because
+# asyncpg's prepared-statement caching breaks behind a transaction-pooling
+# proxy (pgbouncer / Supabase): a cached statement can land on a different
+# backend connection than the one that prepared it, raising
+# "prepared statement does not exist" / "already exists" errors.
+engine = create_async_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    connect_args={
+        "prepared_statement_cache_size": 0,
+        "statement_cache_size": 0,
+    },
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
