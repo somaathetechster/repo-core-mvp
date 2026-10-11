@@ -380,6 +380,34 @@
   gap: 0.5rem;
   flex-shrink: 0;
 }
+
+/* Prominent, non-dismissible banner when a save fails (with auto-retry) */
+.deck-save-error-banner {
+  background: linear-gradient(135deg, #3a1412, #2a0e0c);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.9rem;
+  color: #fecaca;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Recovery banner offering to restore a newer local draft on open */
+.deck-recovery-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #2a2014, #22190f);
+  border: 1px solid rgba(196, 154, 40, 0.35);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.9rem;
+  color: #fde68a;
+  font-size: 0.86rem;
+}
 .deck-toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .pp-hint-inline { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; margin: 0.5rem 0 0; font-style: italic; }
 

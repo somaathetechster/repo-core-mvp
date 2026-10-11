@@ -4,6 +4,7 @@ Multi-deck management. Replaces the earlier single-deck-per-user model
 many decks, each with its own profile snapshot and repo selection.
 """
 from typing import Any
+from datetime import datetime, timezone
 import logging
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
@@ -196,6 +197,13 @@ async def save_deck_editor_state(deck_id: str, body: SaveDeckEditorRequest, user
             raise HTTPException(status_code=404, detail="Deck not found.")
         if body.name is not None:
             deck.name = body.name
+        # One level of server-side undo: snapshot the version we're about to
+        # overwrite before replacing it, so a bad save can be rolled back from
+        # the admin panel (GET /{deck_id}/snapshot). Taken from the currently
+        # persisted slides/theme, not the incoming body.
+        deck.previous_slides = deck.slides
+        deck.previous_theme = deck.theme
+        deck.snapshotted_at = datetime.now(timezone.utc)
         deck.slides = body.slides
         deck.theme = body.theme
         deck.layouts = body.layouts
@@ -207,6 +215,27 @@ async def save_deck_editor_state(deck_id: str, body: SaveDeckEditorRequest, user
         # the deck had changed underneath it right after every save).
         await session.refresh(deck)
         return {"status": "saved", **_deck_summary(deck)}
+
+
+@router.get("/{deck_id}/snapshot")
+async def get_deck_snapshot(deck_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    The one previous version of a deck's slides/theme, captured just before
+    the most recent editor-state save overwrote it. Used by the admin panel to
+    restore a deck a bad save wiped. Returns nulls if the deck has never been
+    re-saved since this snapshotting was introduced.
+    """
+    async with AsyncSessionLocal() as session:
+        deck = await session.get(DeckModel, deck_id)
+        if not deck or deck.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        return {
+            "id": deck.id,
+            "name": deck.name,
+            "previous_slides": deck.previous_slides,
+            "previous_theme": deck.previous_theme,
+            "snapshotted_at": deck.snapshotted_at.isoformat() if deck.snapshotted_at else None,
+        }
 
 
 class PatchDeckRequest(BaseModel):

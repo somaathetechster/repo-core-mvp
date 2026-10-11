@@ -38,6 +38,17 @@ class DeckModel(Base):
     layouts: Mapped[dict] = mapped_column(JSON, default=dict)
     freeform_slide_ids: Mapped[list] = mapped_column(JSON, default=list)
 
+    # One level of server-side undo: on every editor-state save we copy the
+    # about-to-be-overwritten slides/theme here first, so a bad save (or a
+    # client that clobbered a newer version) can be rolled back from the admin
+    # panel. Nullable because decks created before this column existed, and a
+    # deck that has never been re-saved, have no previous version yet.
+    previous_slides: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    previous_theme: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    snapshotted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
