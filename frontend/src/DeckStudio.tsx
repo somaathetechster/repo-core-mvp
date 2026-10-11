@@ -9,7 +9,7 @@ import {
 } from "./deck/theme";
 import {
   CANVAS_W, CANVAS_H, makeElement, defaultComparisonTable,
-  type ElementSlide, type SlideElement, type ComparisonCell, type ComparisonTable,
+  type ElementSlide, type SlideElement, type TableData, type TableCell,
 } from "./deck/elements";
 import { elementId } from "./deck/elements";
 import { COMPOSERS } from "./deck/composers";
@@ -44,15 +44,6 @@ const LAYOUT_VARIANTS: LayoutVariant[] = [
   "statement", "lead-and-points", "numbered-rows", "grid", "split-image",
   "image-led", "metric-hero", "two-column", "quote", "data",
 ];
-
-// A comparison-table cell cycles through these on each click, so a value is
-// set by clicking rather than typing.
-const CELL_CYCLE: ComparisonCell[] = ["", "yes", "no", "partial"];
-function cycleCell(v: ComparisonCell): ComparisonCell {
-  const i = CELL_CYCLE.indexOf(v);
-  return CELL_CYCLE[(i + 1) % CELL_CYCLE.length];
-}
-const CELL_GLYPH: Record<ComparisonCell, string> = { "": "·", yes: "✓", no: "✗", partial: "—" };
 
 function HexColorControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const safeValue = HEX_COLOR.test(value) ? value : "#000000";
@@ -111,6 +102,9 @@ export default function DeckStudio({
   const [assetQuery, setAssetQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string | null>(() => normaliseIndustry(industry));
   const [assetCat, setAssetCat] = useState<AssetCategory | "all">("all");
+  // The table cell selected for editing, shared between the canvas (click a
+  // cell) and the panel's cell controls.
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
   // Width of the right-hand editor panel, dragged via a handle on its left
   // edge. The canvas column (minmax(0,1fr)) takes whatever space is left.
   const [panelWidth, setPanelWidth] = useState(320);
@@ -185,6 +179,7 @@ export default function DeckStudio({
     if (existing) {
       setSelectedId(existing.id);
       setSelectedIds(new Set([existing.id]));
+      setSelectedCell({ row: 0, col: 0 });
       return;
     }
     const newTableElement = makeElement(
@@ -204,6 +199,7 @@ export default function DeckStudio({
     onSlidesChange(updatedSlides, "insert-table");
     setSelectedId(newTableElement.id);
     setSelectedIds(new Set([newTableElement.id]));
+    setSelectedCell({ row: 0, col: 0 });
   }
 
   function addTextElement() {
@@ -692,6 +688,8 @@ export default function DeckStudio({
               setSelectedIds(ids);
               setSelectedId(activeId);
             }}
+            selectedCell={selectedCell}
+            onCellSelect={(row, col) => setSelectedCell({ row, col })}
           />
         </div>
 
@@ -1114,112 +1112,126 @@ export default function DeckStudio({
             <h4>{selected.type}</h4>
 
             {selected.type === "comparison-table" && selected.table && (() => {
-              const table: ComparisonTable = selected.table;
-              const commit = (next: ComparisonTable) => patchSelected({ table: next });
-              const setHeader = (c: number, value: string) =>
-                commit({ ...table, headers: table.headers.map((h, i) => (i === c ? value : h)) });
-              const setLabel = (r: number, value: string) =>
-                commit({ ...table, rows: table.rows.map((row, i) => (i === r ? { ...row, label: value } : row)) });
-              const cycle = (r: number, c: number) =>
-                commit({
-                  ...table,
-                  rows: table.rows.map((row, i) =>
-                    i === r ? { ...row, values: row.values.map((v, j) => (j === c ? cycleCell(v) : v)) } : row,
-                  ),
-                });
-              const addRow = () =>
-                commit({ ...table, rows: [...table.rows, { label: "", values: table.headers.map(() => "" as ComparisonCell) }] });
-              const addColumn = () =>
-                commit({
-                  headers: [...table.headers, `Competitor ${table.headers.length}`],
-                  rows: table.rows.map((row) => ({ ...row, values: [...row.values, "" as ComparisonCell] })),
-                });
-              const removeRow = (r: number) =>
-                commit({ ...table, rows: table.rows.filter((_, i) => i !== r) });
-              const removeColumn = (c: number) =>
-                commit({
-                  headers: table.headers.filter((_, i) => i !== c),
-                  rows: table.rows.map((row) => ({ ...row, values: row.values.filter((_, i) => i !== c) })),
-                });
-              // Inline styles keep the editor self-contained (no new CSS file).
-              const rowStyle: CSSProperties = { display: "flex", gap: 4, alignItems: "center", marginBottom: 4 };
-              const cellBtn: CSSProperties = {
-                flex: "0 0 34px", height: 30, cursor: "pointer",
-                border: "1px solid var(--ink-border)", borderRadius: 4,
-                background: "var(--ink)", color: "var(--text)", fontSize: 15,
+              const table: TableData = selected.table;
+              const rows = table.rows;
+              const colCount = rows[0]?.length ?? 0;
+              // Clamp the shared cell selection to something valid.
+              const selR = selectedCell && selectedCell.row < rows.length ? selectedCell.row : 0;
+              const selC = selectedCell && selectedCell.col < (rows[selR]?.length ?? 0) ? selectedCell.col : 0;
+              const activeCell: TableCell | undefined = rows[selR]?.[selC];
+
+              const commit = (next: TableData) => patchSelected({ table: next });
+              const newCell = (): TableCell => ({ content: "" });
+              const headerCellForRow = (ri: number): TableCell =>
+                rows[ri]?.[0]?.isHeader
+                  ? { content: "", isHeader: true, bold: true, align: "center" }
+                  : newCell();
+              const patchCell = (r: number, c: number, patch: Partial<TableCell>) =>
+                commit({ ...table, rows: rows.map((row, ri) => (ri === r ? row.map((cell, ci) => (ci === c ? { ...cell, ...patch } : cell)) : row)) });
+              const addRowAt = (index: number) => {
+                const row = Array.from({ length: Math.max(1, colCount) }, newCell);
+                commit({ ...table, rows: [...rows.slice(0, index), row, ...rows.slice(index)] });
               };
-              const delBtn: CSSProperties = { ...cellBtn, flex: "0 0 26px", color: "var(--text-dim)" };
-              const labelInput: CSSProperties = { flex: "1 1 auto", minWidth: 0 };
+              const addColAt = (index: number) =>
+                commit({ ...table, rows: rows.map((row, ri) => [...row.slice(0, index), headerCellForRow(ri), ...row.slice(index)]) });
+              const removeLastRow = () => { if (rows.length > 1) commit({ ...table, rows: rows.slice(0, -1) }); };
+              const removeLastCol = () => { if (colCount > 1) commit({ ...table, rows: rows.map((row) => row.slice(0, -1)) }); };
+              const headerOn = (rows[0]?.length ?? 0) > 0 && (rows[0] ?? []).every((c) => c.isHeader);
+              const toggleHeaderRow = (on: boolean) =>
+                commit({ ...table, rows: rows.map((row, ri) => (ri === 0 ? row.map((cell) => ({ ...cell, isHeader: on, bold: on ? true : cell.bold })) : row)) });
+
+              const glyph = (cell: TableCell) => cell.content || (cell.icon === "yes" ? "✓" : cell.icon === "no" ? "✗" : "·");
+              const miniBtn: CSSProperties = {
+                minWidth: 30, height: 28, padding: "0 6px", cursor: "pointer",
+                border: "1px solid var(--ink-border)", borderRadius: 4,
+                background: "var(--ink)", color: "var(--text)", fontSize: 13,
+              };
+              const toggleBtn = (active: boolean): CSSProperties => ({
+                ...miniBtn,
+                borderColor: active ? "var(--gold)" : "var(--ink-border)",
+                color: active ? "var(--gold)" : "var(--text)",
+              });
               return (
                 <div className="dst-field">
-                  <span>Comparison table</span>
-                  <div style={rowStyle}>
-                    <span style={{ flex: "1 1 auto", minWidth: 0 }} />
-                    {table.headers.map((h, c) => (
-                      <input
-                        key={c}
-                        className="p-input"
-                        style={{ flex: "0 0 60px" }}
-                        value={h}
-                        aria-label={`Column ${c + 1} name`}
-                        onChange={(e) => setHeader(c, e.target.value)}
-                      />
+                  <span>Table cells — click to select, double-click on the slide to type</span>
+
+                  {/* Cell grid mirror: pick the cell to edit. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 6 }}>
+                    {rows.map((row, r) => (
+                      <div key={r} style={{ display: "flex", gap: 3 }}>
+                        {row.map((cell, c) => {
+                          const active = r === selR && c === selC;
+                          return (
+                            <button
+                              key={c}
+                              onClick={() => setSelectedCell({ row: r, col: c })}
+                              title={`Row ${r + 1}, Col ${c + 1}`}
+                              style={{
+                                flex: "1 1 0", minWidth: 0, height: 26, padding: "0 4px",
+                                cursor: "pointer", borderRadius: 3, fontSize: 12,
+                                overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+                                border: active ? "1.5px solid var(--gold)" : "1px solid var(--ink-border)",
+                                background: cell.isHeader ? "var(--gold-faint, rgba(242,183,5,0.12))" : "var(--ink)",
+                                color: "var(--text)", fontWeight: cell.isHeader ? 700 : 400,
+                              }}
+                            >
+                              {glyph(cell)}
+                            </button>
+                          );
+                        })}
+                      </div>
                     ))}
-                    <button style={delBtn} title="Add column" aria-label="Add column" onClick={addColumn}>+</button>
                   </div>
-                  <div style={rowStyle}>
-                    <span style={{ flex: "1 1 auto", minWidth: 0, fontSize: 11, color: "var(--text-dim)" }}>
-                      Remove column →
-                    </span>
-                    {table.headers.map((_, c) => (
+
+                  <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                    Selected: Row {selR + 1}, Col {selC + 1}
+                  </span>
+
+                  {/* Cell content + formatting controls for the selected cell. */}
+                  <input
+                    className="p-input"
+                    value={activeCell?.content ?? ""}
+                    placeholder="Cell content"
+                    aria-label="Cell content"
+                    onChange={(e) => patchCell(selR, selC, { content: e.target.value })}
+                  />
+
+                  <div className="dst-btn-row" role="group" aria-label="Cell icon">
+                    <button style={toggleBtn(!activeCell?.icon)} onClick={() => patchCell(selR, selC, { icon: "" })}>None</button>
+                    <button style={toggleBtn(activeCell?.icon === "yes")} onClick={() => patchCell(selR, selC, { icon: "yes" })}>✓</button>
+                    <button style={toggleBtn(activeCell?.icon === "no")} onClick={() => patchCell(selR, selC, { icon: "no" })}>✗</button>
+                    <button style={toggleBtn(!!activeCell?.bold)} onClick={() => patchCell(selR, selC, { bold: !activeCell?.bold })}>B</button>
+                  </div>
+
+                  <div className="dst-btn-row" role="group" aria-label="Cell alignment">
+                    {(["left", "center", "right"] as const).map((a) => (
                       <button
-                        key={c}
-                        style={delBtn}
-                        title="Remove column"
-                        aria-label={`Remove column ${c + 1}`}
-                        disabled={table.headers.length <= 1}
-                        onClick={() => removeColumn(c)}
+                        key={a}
+                        style={toggleBtn((activeCell?.align ?? "left") === a)}
+                        onClick={() => patchCell(selR, selC, { align: a })}
                       >
-                        ×
+                        {a === "left" ? "⬅" : a === "center" ? "⬌" : "➡"}
                       </button>
                     ))}
-                    <span style={{ flex: "0 0 26px" }} />
                   </div>
-                  {table.rows.map((row, r) => (
-                    <div key={r} style={rowStyle}>
-                      <input
-                        className="p-input"
-                        style={labelInput}
-                        value={row.label}
-                        placeholder="Capability"
-                        aria-label={`Row ${r + 1} label`}
-                        onChange={(e) => setLabel(r, e.target.value)}
-                      />
-                      {table.headers.map((_, c) => (
-                        <button
-                          key={c}
-                          style={cellBtn}
-                          title="Click to cycle: blank → yes → no → partial"
-                          aria-label={`Row ${r + 1}, column ${c + 1}: ${row.values[c] || "blank"}`}
-                          onClick={() => cycle(r, c)}
-                        >
-                          {CELL_GLYPH[row.values[c] ?? ""]}
-                        </button>
-                      ))}
-                      <button
-                        style={delBtn}
-                        title="Remove row"
-                        aria-label={`Remove row ${r + 1}`}
-                        disabled={table.rows.length <= 1}
-                        onClick={() => removeRow(r)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="dst-text-action" onClick={addRow}>+ Row</button>
-                    <button className="dst-text-action" onClick={addColumn}>+ Column</button>
+
+                  <label className="dst-check" style={{ marginTop: 4 }}>
+                    <input type="checkbox" checked={headerOn} onChange={(e) => toggleHeaderRow(e.target.checked)} />
+                    Make row 1 a header row
+                  </label>
+
+                  {/* Table structure. */}
+                  <div className="dst-btn-row" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                    <button style={miniBtn} onClick={() => addRowAt(rows.length)}>+ Row</button>
+                    <button style={miniBtn} onClick={() => addColAt(colCount)}>+ Column</button>
+                    <button style={miniBtn} onClick={removeLastRow} disabled={rows.length <= 1}>– Row</button>
+                    <button style={miniBtn} onClick={removeLastCol} disabled={colCount <= 1}>– Column</button>
+                  </div>
+                  <div className="dst-btn-row" style={{ flexWrap: "wrap" }}>
+                    <button style={miniBtn} onClick={() => addRowAt(selR)}>+ Row Above</button>
+                    <button style={miniBtn} onClick={() => addRowAt(selR + 1)}>+ Row Below</button>
+                    <button style={miniBtn} onClick={() => addColAt(selC)}>+ Col Left</button>
+                    <button style={miniBtn} onClick={() => addColAt(selC + 1)}>+ Col Right</button>
                   </div>
                 </div>
               );

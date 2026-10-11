@@ -43,28 +43,42 @@ export type ElementType =
   | "asset"
   | "pageNumber";
 
-/** One cell in a comparison table. "" is a blank (undecided) cell. */
-export type ComparisonCell = "yes" | "no" | "partial" | "";
+/** Optional icon on a table cell: a tick, a cross, or none. */
+export type TableCellIcon = "yes" | "no" | "";
 
-/**
- * A manual competitor/capability matrix. `headers` are the column names
- * (the first is conventionally "Us"); each row carries a capability `label`
- * and one `values` entry per header, in the same order.
- */
-export interface ComparisonTable {
-  headers: string[];
-  rows: { label: string; values: ComparisonCell[] }[];
+/** One cell in a freeform table. */
+export interface TableCell {
+  /** Text content. */
+  content: string;
+  /** Optional icon shown alongside or instead of the text. */
+  icon?: TableCellIcon;
+  bold?: boolean;
+  align?: "left" | "center" | "right";
+  /** Header cells get the accent background and inverse text. */
+  isHeader?: boolean;
 }
 
-/** The default table dropped in from the Assets panel: three columns, three
- *  empty capability rows. */
-export function defaultComparisonTable(): ComparisonTable {
-  const headers = ["Us", "Competitor 1", "Competitor 2"];
-  const row = (): { label: string; values: ComparisonCell[] } => ({
-    label: "",
-    values: headers.map(() => "" as ComparisonCell),
-  });
-  return { headers, rows: [row(), row(), row()] };
+/** A freeform grid of cells, addressed rows[rowIndex][colIndex]. */
+export interface TableData {
+  rows: TableCell[][];
+  /** Optional per-column width percentages. */
+  colWidths?: number[];
+}
+
+/** The default table dropped in from the Assets panel: a 4×4 grid with a
+ *  header row (first cell blank, then Us / Competitor 1 / Competitor 2) over
+ *  three empty data rows. */
+export function defaultComparisonTable(): TableData {
+  const header = (content: string): TableCell => ({ content, isHeader: true, bold: true, align: "center" });
+  const blank = (): TableCell => ({ content: "" });
+  return {
+    rows: [
+      [header(""), header("Us"), header("Competitor 1"), header("Competitor 2")],
+      [blank(), blank(), blank(), blank()],
+      [blank(), blank(), blank(), blank()],
+      [blank(), blank(), blank(), blank()],
+    ],
+  };
 }
 
 export interface Frame {
@@ -130,8 +144,8 @@ export interface SlideElement {
     rows: string[][];
     encoding?: Record<string, unknown>;
   };
-  /** Comparison-table payload (manual competitor/capability matrix). */
-  table?: ComparisonTable;
+  /** Table payload (comparison matrix / freeform grid). */
+  table?: TableData;
   /** A caption element attached to another element, so moving the parent
    *  can move the caption with it. */
   attachedTo?: string | null;

@@ -67,6 +67,10 @@ export interface CanvasProps {
   selectedIds?: Set<string>;
   onSelectionChange?: (ids: Set<string>, activeId: string | null) => void;
   guidesEnabled?: boolean;
+  /** Table cell selection, shared with the editor panel so clicking a cell on
+   *  the canvas highlights its controls (and vice versa). */
+  selectedCell?: { row: number; col: number } | null;
+  onCellSelect?: (row: number, col: number) => void;
 }
 
 export default function SlideCanvas({
@@ -76,6 +80,7 @@ export default function SlideCanvas({
   selectedIds: controlledSelections, onSelectionChange,
   guidesEnabled = true,
   toolMode = "pointer", onRequestPointerMode,
+  selectedCell, onCellSelect,
 }: CanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -463,6 +468,11 @@ export default function SlideCanvas({
                     // Blur commits the edit and closes the editor.
                     setEditingId((prev) => (prev === id ? null : prev));
                   }}
+                  // Structured element edits (table cells) dispatch through the
+                  // same updateElement path; only when the canvas is editable.
+                  onElementChange={interactive ? (id, patch) => updateElement(id, patch, `element:${id}`) : undefined}
+                  selectedCell={isSelected ? selectedCell ?? null : null}
+                  onCellSelect={interactive ? onCellSelect : undefined}
                 />
               </div>
 

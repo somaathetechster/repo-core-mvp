@@ -1,5 +1,5 @@
-import type { CSSProperties, ReactNode } from "react";
-import type { SlideElement, ElementStyle } from "./elements";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import type { SlideElement, ElementStyle, TableCell, TableData } from "./elements";
 import type { DeckTheme } from "./theme";
 import { treatmentFilter, objectPosition, type ImageTreatment } from "./images";
 import { ASSETS, assetToSvg } from "./assets";
@@ -26,16 +26,6 @@ export function resolveColor(token: string | undefined, theme: DeckTheme, fallba
     case "none": return "transparent";
     default: return key; // a literal colour, when the user has overridden
   }
-}
-
-/** A hex colour at a given alpha, for the faint cell borders and zebra rows
- *  of the comparison table. Falls back to the colour itself if it isn't a
- *  plain #rrggbb value. */
-function withAlpha(hex: string, alpha: number): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
 export function resolveFont(token: string | undefined, theme: DeckTheme): string {
@@ -106,13 +96,24 @@ export interface ElementRenderProps {
   /** In the editor, text is editable in place. */
   editable?: boolean;
   onTextChange?: (id: string, text: string) => void;
+  /** Structured element update (used by the table's in-canvas cell editing).
+   *  Its presence is what enables table editing on the canvas. */
+  onElementChange?: (id: string, patch: Partial<SlideElement>) => void;
+  /** Table cell selected in the editor panel, highlighted on the canvas. */
+  selectedCell?: { row: number; col: number } | null;
+  /** Reports which table cell the user clicked, to sync the editor panel. */
+  onCellSelect?: (row: number, col: number) => void;
 }
 
 export default function ElementView({
   element, theme, renderChart, editable, onTextChange,
+  onElementChange, selectedCell, onCellSelect,
 }: ElementRenderProps) {
   const css = elementStyleToCss(element, theme);
   const s = element.style ?? {};
+  // Which table cell is open for inline editing (contentEditable). Local to
+  // this element; a table that isn't being edited keeps this null.
+  const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null);
 
   switch (element.type) {
     case "asset": {
@@ -203,32 +204,29 @@ export default function ElementView({
       );
 
     case "comparison-table": {
-      // No valid table data means a ghost element; render nothing rather than
-      // an empty, selectable box floating on the slide.
-      if (!element.table || !element.table.headers?.length) return null;
-      const table = element.table;
-      // Transparent fills throughout so the table never paints an opaque block
-      // over the slide (which read as a duplicate "card" layer). Only the
-      // header row carries the accent; data rows get a faint zebra tint on the
-      // row itself, and every cell stays transparent so the tint shows through.
-      const border = "1px solid rgba(0,0,0,0.1)";
-      const cellBase: CSSProperties = {
-        border,
-        padding: "0 10px",
-        textAlign: "center",
-        verticalAlign: "middle",
-        background: "transparent",
+      const table: TableData = element.table ?? { rows: [] };
+      const rows = table.rows ?? [];
+      // No rows means a ghost element; render nothing rather than an empty,
+      // selectable box floating on the slide.
+      if (!rows.length) return null;
+      // In-canvas editing is enabled only when a structured-update callback is
+      // supplied (i.e. on the editable canvas, not thumbnails/preview).
+      const canEdit = !!onElementChange;
+      const cellBorder = "1px solid rgba(0,0,0,0.15)";
+
+      const commitCell = (r: number, c: number, patch: Partial<TableCell>) => {
+        if (!onElementChange) return;
+        const nextRows = rows.map((row, ri) =>
+          ri === r ? row.map((cell, ci) => (ci === c ? { ...cell, ...patch } : cell)) : row,
+        );
+        onElementChange(element.id, { table: { ...table, rows: nextRows } });
       };
-      // The value glyph and its colour: a tick in the accent, a cross/dash in
-      // a muted ink. "" renders nothing so a blank cell reads as "unknown".
-      const glyph = (v: string) => {
-        switch (v) {
-          case "yes": return <span style={{ color: theme.accent, fontWeight: 700, fontSize: 18 }}>✓</span>;
-          case "no": return <span style={{ color: withAlpha(theme.ink, 0.5), fontSize: 18 }}>✗</span>;
-          case "partial": return <span style={{ color: theme.muted, fontSize: 18 }}>—</span>;
-          default: return null;
-        }
-      };
+
+      const iconFor = (cell: TableCell) =>
+        cell.icon === "yes" ? <span style={{ color: theme.accent, fontWeight: 700, fontSize: 16 }}>✓</span>
+          : cell.icon === "no" ? <span style={{ color: theme.muted, fontSize: 16 }}>✗</span>
+            : null;
+
       return (
         <div style={{ ...css, overflow: "hidden", background: "transparent" }}>
           <table
@@ -240,41 +238,92 @@ export default function ElementView({
               fontFamily: theme.fonts.body,
             }}
           >
-            <thead>
-              <tr>
-                {/* Empty top-left corner above the capability-label column. */}
-                <th style={{ ...cellBase, background: theme.accent, textAlign: "left" }} />
-                {table.headers.map((h, c) => (
-                  <th
-                    key={c}
-                    style={{
-                      ...cellBase,
-                      background: theme.accent,
-                      color: theme.inverse,
-                      fontFamily: theme.fonts.label,
-                      fontWeight: 700,
-                      fontSize: 12,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+            {table.colWidths && table.colWidths.length
+              ? <colgroup>{table.colWidths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+              : null}
             <tbody>
-              {table.rows.map((row, r) => (
-                // Zebra on even rows only (2nd, 4th, …); odd rows transparent.
-                <tr key={r} style={{ background: r % 2 === 1 ? "rgba(0,0,0,0.04)" : "transparent" }}>
-                  <td style={{ ...cellBase, textAlign: "left", color: theme.ink, fontSize: 14 }}>
-                    {row.label}
-                  </td>
-                  {table.headers.map((_, c) => (
-                    <td key={c} style={cellBase}>
-                      {glyph(row.values[c] ?? "")}
-                    </td>
-                  ))}
+              {rows.map((row, r) => (
+                // Alternating tint on even rows; header cells paint their own
+                // accent background on top of it.
+                <tr key={r} style={{ background: r % 2 === 0 ? "rgba(0,0,0,0.03)" : "transparent" }}>
+                  {row.map((cell, c) => {
+                    const isHeader = !!cell.isHeader;
+                    const isEditing = canEdit && editingCell?.row === r && editingCell?.col === c;
+                    const isSelected = !!selectedCell && selectedCell.row === r && selectedCell.col === c;
+                    const align = cell.align ?? (isHeader ? "center" : "left");
+                    const icon = iconFor(cell);
+                    const cellStyle: CSSProperties = {
+                      border: isEditing
+                        ? `1.5px solid ${theme.accent}`
+                        : isSelected
+                          ? `1.5px solid ${theme.accentSoft}`
+                          : cellBorder,
+                      padding: "4px 8px",
+                      background: isHeader ? theme.accent : undefined,
+                      color: isHeader ? theme.inverse : theme.ink,
+                      fontWeight: cell.bold || isHeader ? 700 : 400,
+                      fontSize: isHeader ? 12 : 14,
+                      textAlign: align,
+                      verticalAlign: "middle",
+                      cursor: canEdit ? "text" : "default",
+                    };
+                    return (
+                      <td
+                        key={c}
+                        style={cellStyle}
+                        onClick={canEdit ? (e) => {
+                          e.stopPropagation();
+                          onCellSelect?.(r, c);
+                          // A click while already editing moves the edit to the
+                          // clicked cell rather than deselecting.
+                          setEditingCell((prev) => (prev ? { row: r, col: c } : prev));
+                        } : undefined}
+                        onDoubleClick={canEdit ? (e) => {
+                          e.stopPropagation();
+                          onCellSelect?.(r, c);
+                          setEditingCell({ row: r, col: c });
+                        } : undefined}
+                      >
+                        {isEditing ? (
+                          <div
+                            contentEditable
+                            suppressContentEditableWarning
+                            // Focus and place the caret at the end once, when
+                            // editing begins; the guard stops a refocus loop.
+                            ref={(node) => {
+                              if (node && document.activeElement !== node) {
+                                node.focus();
+                                const sel = window.getSelection();
+                                if (sel) { sel.selectAllChildren(node); sel.collapseToEnd(); }
+                              }
+                            }}
+                            style={{ outline: "none", minHeight: "1em", textAlign: align }}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              // Enter commits; Shift+Enter inserts a newline.
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                (e.currentTarget as HTMLDivElement).blur();
+                              }
+                            }}
+                            onBlur={(e) => {
+                              commitCell(r, c, { content: e.currentTarget.textContent ?? "" });
+                              setEditingCell((prev) => (prev?.row === r && prev?.col === c ? null : prev));
+                            }}
+                          >
+                            {cell.content}
+                          </div>
+                        ) : icon && cell.content ? (
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 6,
+                            justifyContent: align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start",
+                          }}>
+                            {icon}<span>{cell.content}</span>
+                          </span>
+                        ) : icon ? icon : cell.content}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
