@@ -135,13 +135,78 @@ async def _email_has_account(email: str) -> bool | None:
         return None
 
 
-async def _send_invite_email(to_email: str, owner_name: str, token: str) -> bool:
+def _invite_email_html(owner_name: str, role_label: str, invite_url: str) -> str:
+    """Branded HTML invite email body."""
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+</head>
+<body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#111;border-radius:12px;border:1px solid #222;overflow:hidden;">
+        <!-- Header -->
+        <tr>
+          <td style="padding:32px 40px 24px;border-bottom:1px solid #222;">
+            <span style="color:#fff;font-size:20px;font-weight:700;letter-spacing:-0.02em;">Provisio</span>
+            <span style="color:#666;font-size:13px;margin-left:8px;">by Domani</span>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:40px 40px 32px;">
+            <p style="margin:0 0 8px;color:#999;font-size:13px;text-transform:uppercase;letter-spacing:0.06em;">
+              Workspace invitation
+            </p>
+            <h1 style="margin:0 0 16px;color:#fff;font-size:26px;font-weight:700;line-height:1.2;letter-spacing:-0.02em;">
+              {owner_name} invited you to their workspace
+            </h1>
+            <p style="margin:0 0 32px;color:#888;font-size:15px;line-height:1.6;">
+              You've been invited to collaborate on
+              <strong style="color:#fff;">{owner_name}'s Provisio workspace</strong>
+              as a <strong style="color:#d4a017;">{role_label}</strong>.
+            </p>
+            <!-- CTA Button -->
+            <table cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:#d4a017;border-radius:8px;">
+                  <a href="{invite_url}" style="display:block;padding:14px 32px;color:#000;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:-0.01em;">
+                    Accept invitation &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:24px 0 0;color:#555;font-size:13px;line-height:1.5;">
+              Or paste this link into your browser:<br>
+              <a href="{invite_url}" style="color:#d4a017;word-break:break-all;">{invite_url}</a>
+            </p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 40px;border-top:1px solid #1a1a1a;">
+            <p style="margin:0;color:#444;font-size:12px;">
+              This invitation was sent by {owner_name} via Provisio. If you weren't expecting this, you can ignore it.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+
+async def _send_invite_email(to_email: str, owner_name: str, role: str, token: str) -> bool:
     """Send the invite email via Resend, mirroring services/email.py. Best
     effort: a failure is logged and never blocks creating the invite."""
     api_key = getattr(settings, "email_api_key", "")
     sender = getattr(settings, "email_from", "") or "noreply@provisio.site"
     link = f"{settings.frontend_url.rstrip('/')}/invite/{token}"
-    subject = f"You've been invited to {owner_name}'s Provisio workspace"
+    role_label = role.capitalize()  # viewer -> Viewer, admin -> Admin, etc.
+    subject = "You've been invited to collaborate on Provisio"
 
     if not api_key:
         log.info(
@@ -154,16 +219,10 @@ async def _send_invite_email(to_email: str, owner_name: str, token: str) -> bool
         "from": sender,
         "to": [to_email],
         "subject": subject,
-        "html": (
-            f"<h2>You've been invited to {owner_name}'s Provisio workspace</h2>"
-            f"<p>{owner_name} has invited you to collaborate on Provisio.</p>"
-            f"<p><a href='{link}'>Accept the invitation</a></p>"
-            f"<p>Or paste this link into your browser:<br>{link}</p>"
-            "<p>— The Provisio team</p>"
-        ),
+        "html": _invite_email_html(owner_name, role_label, link),
         "text": (
             f"{owner_name} has invited you to collaborate on their Provisio "
-            f"workspace. Accept here: {link}"
+            f"workspace as a {role_label}. Accept here: {link}"
         ),
     }
     try:
@@ -226,7 +285,7 @@ async def invite(body: InviteBody, user_id: str = Depends(get_current_user_id)):
         owner_name = me["name"]
 
     # Send the email outside the DB session; failure is non-fatal.
-    await _send_invite_email(email, owner_name, token)
+    await _send_invite_email(email, owner_name, role, token)
     return _serialise(collab)
 
 
