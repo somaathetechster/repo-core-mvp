@@ -171,7 +171,9 @@ const DASH_TABS = [
   { to: "/data", label: "Data" },
   { to: "/security", label: "Security" },
   { to: "/settings", label: "Settings" },
-  { to: "/billing", label: "Billing" },
+  // Billing is reached through Settings → Billing now, so it's no longer a
+  // top-level nav item — but the /billing route stays registered below so
+  // existing links (emails, checkout redirects) keep working.
 ] as const;
 
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
