@@ -13,6 +13,10 @@ import SupportWidget from "./SupportWidget";
 import BillingPlans from "./BillingPlans";
 import ChangePassword from "./ChangePassword";
 import WelcomeCelebration from "./WelcomeCelebration";
+import SettingsPage from "./SettingsPage";
+import InvitePage from "./InvitePage";
+import { WorkspaceProvider } from "./WorkspaceContext";
+import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import "./theme.css";
 import "./dashboard.css";
 
@@ -107,6 +111,9 @@ export default function App() {
     );
     return (
       <Routes>
+        {/* The accept-invite page is reachable whether or not you're logged
+            in — the person following the link may have no account yet. */}
+        <Route path="/invite/:token" element={<InvitePage />} />
         <Route path="/" element={loggedOut} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -163,6 +170,7 @@ const DASH_TABS = [
   { to: "/review", label: "Review" },
   { to: "/data", label: "Data" },
   { to: "/security", label: "Security" },
+  { to: "/settings", label: "Settings" },
   { to: "/billing", label: "Billing" },
 ] as const;
 
@@ -226,15 +234,19 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
   };
 
   return (
+    <WorkspaceProvider>
     <div className="provisio dashboard">
       {/* Persistent notifications (incl. the plan-upgrade banner) sit above
           the topbar, per spec. */}
       <NotificationBanner accessToken={accessToken} />
 
       <div className="dash-topbar">
-        <button className="brand-mark brand-mark-link" onClick={() => navigate("/home")}>
-          Provisio
-        </button>
+        <div className="dash-brand-group">
+          <button className="brand-mark brand-mark-link" onClick={() => navigate("/home")}>
+            Provisio
+          </button>
+          <WorkspaceSwitcher />
+        </div>
         <nav className="dash-tabs">
           {DASH_TABS.map((t) => (
             <NavLink
@@ -312,6 +324,10 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
             }
           />
           <Route
+            path="/settings"
+            element={<SettingsPage userName={userName} userEmail={userEmail} />}
+          />
+          <Route
             path="/billing"
             element={
               <div className="dash-body">
@@ -319,10 +335,14 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
               </div>
             }
           />
+          {/* Reachable while logged in too, e.g. following an invite link in
+              an already-authenticated browser. */}
+          <Route path="/invite/:token" element={<InvitePage />} />
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </Suspense>
     </div>
+    </WorkspaceProvider>
   );
 }
 

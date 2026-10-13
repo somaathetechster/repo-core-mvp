@@ -9,8 +9,24 @@ async function getToken(): Promise<string> {
   return token;
 }
 
+// The workspace the user is currently acting inside. null means their own
+// account. When another workspace is active we advertise it to the backend via
+// a header so deck operations can be scoped to that account. The Workspace
+// switcher sets this through setActiveWorkspaceOwnerId.
+let activeWorkspaceOwnerId: string | null = null;
+
+export function setActiveWorkspaceOwnerId(ownerId: string | null): void {
+  activeWorkspaceOwnerId = ownerId;
+}
+
+export function getActiveWorkspaceOwnerId(): string | null {
+  return activeWorkspaceOwnerId;
+}
+
 async function authHeaders(): Promise<HeadersInit> {
-  return { Authorization: `Bearer ${await getToken()}` };
+  const headers: Record<string, string> = { Authorization: `Bearer ${await getToken()}` };
+  if (activeWorkspaceOwnerId) headers["X-Workspace-Id"] = activeWorkspaceOwnerId;
+  return headers;
 }
 
 // A plain <a href> can't carry an Authorization header, so the GitHub-connect
@@ -664,5 +680,136 @@ export async function adminRevoke(subscription_id: string, reason: string) {
     body: JSON.stringify({ subscription_id, reason }),
   });
   if (!res.ok) await throwWithDetail(res, "Couldn't revoke.");
+  return res.json();
+}
+
+/* ---------------------------------------------------------------- */
+/* Collaboration / workspaces                                        */
+/* ---------------------------------------------------------------- */
+
+export type WorkspaceRole = "viewer" | "commenter" | "editor" | "manager" | "admin";
+
+/** A role option shown in the invite form and role dropdowns. */
+export const ROLE_OPTIONS: { value: WorkspaceRole; label: string; description: string }[] = [
+  { value: "viewer", label: "Viewer", description: "can view and export decks" },
+  { value: "commenter", label: "Commenter", description: "can view and leave comments" },
+  { value: "editor", label: "Editor", description: "can edit deck content" },
+  { value: "manager", label: "Manager", description: "can create, edit, delete decks" },
+  { value: "admin", label: "Admin", description: "full access except account settings" },
+];
+
+export interface Member {
+  id: string;
+  owner_id: string;
+  invitee_user_id: string | null;
+  name: string;
+  email: string | null;
+  role: WorkspaceRole | "owner";
+  status: "pending" | "accepted" | "revoked";
+  is_owner: boolean;
+  invited_at: string | null;
+  accepted_at: string | null;
+}
+
+export interface PendingInvite {
+  id: string;
+  invitee_email: string;
+  email: string | null;
+  role: WorkspaceRole;
+  status: string;
+  invited_at: string | null;
+}
+
+export interface Workspace {
+  owner_id: string;
+  owner_name: string;
+  owner_email: string | null;
+  role: WorkspaceRole;
+  accepted_at: string | null;
+}
+
+export interface AcceptInfo {
+  already_accepted: boolean;
+  requires_signup: boolean;
+  email: string;
+  owner_name: string;
+  role: WorkspaceRole;
+}
+
+export async function inviteMember(email: string, role: WorkspaceRole): Promise<Member> {
+  const res = await fetch(`${API_BASE}/collaboration/invite`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ email, role }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't send that invite.");
+  return res.json();
+}
+
+export async function listMembers(): Promise<Member[]> {
+  const res = await fetch(`${API_BASE}/collaboration/members`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load members.");
+  return res.json();
+}
+
+export async function updateMemberRole(collaboratorId: string, role: WorkspaceRole): Promise<Member> {
+  const res = await fetch(`${API_BASE}/collaboration/members/${collaboratorId}`, {
+    method: "PATCH",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't change that role.");
+  return res.json();
+}
+
+export async function removeMember(collaboratorId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/collaboration/members/${collaboratorId}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't remove that member.");
+}
+
+export async function listPendingInvites(): Promise<PendingInvite[]> {
+  const res = await fetch(`${API_BASE}/collaboration/invites/pending`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load pending invites.");
+  return res.json();
+}
+
+export async function revokeInvite(collaboratorId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/collaboration/invites/${collaboratorId}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't revoke that invite.");
+}
+
+export async function listWorkspaces(): Promise<Workspace[]> {
+  const res = await fetch(`${API_BASE}/collaboration/workspaces`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load your workspaces.");
+  return res.json();
+}
+
+/** Public — no auth. The person following an invite link may not be logged in. */
+export async function getAcceptInfo(token: string): Promise<AcceptInfo> {
+  const res = await fetch(`${API_BASE}/collaboration/accept/${token}`);
+  if (!res.ok) await throwWithDetail(res, "This invitation link is not valid.");
+  return res.json();
+}
+
+export interface AcceptResult {
+  ok: boolean;
+  already_accepted: boolean;
+  owner_id: string;
+  owner_name: string;
+  role: WorkspaceRole;
+}
+
+export async function acceptInvite(token: string): Promise<AcceptResult> {
+  const res = await fetch(`${API_BASE}/collaboration/accept/${token}`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't accept this invitation.");
   return res.json();
 }
