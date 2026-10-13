@@ -1256,8 +1256,38 @@ export default function DeckStudio({
                 <span>Size</span>
                 <input
                   className="p-input" type="number"
-                  value={selected.style.fontSize ?? 18}
-                  onChange={(e) => patchSelected({ style: { ...selected.style, fontSize: parseFloat(e.target.value) } })}
+                  // For a comparison table, Size edits the cell(s), not the
+                  // element style (which the table renderer ignores). Reflect
+                  // the currently-selected cell's size, defaulting to 14.
+                  value={
+                    selected.type === "comparison-table"
+                      ? (() => {
+                          const t = normalizeTableData(selected.table);
+                          const r = selectedCell?.row ?? 0;
+                          const c = selectedCell?.col ?? 0;
+                          return t.rows[r]?.[c]?.fontSize ?? 14;
+                        })()
+                      : selected.style.fontSize ?? 18
+                  }
+                  onChange={(e) => {
+                    const size = parseFloat(e.target.value);
+                    if (selected.type === "comparison-table") {
+                      if (Number.isNaN(size)) return;
+                      const t = normalizeTableData(selected.table);
+                      // A specific cell selected → just that cell; otherwise
+                      // apply to every cell in the selected row (row 0 default).
+                      const nextRows = selectedCell
+                        ? t.rows.map((row, ri) =>
+                            ri === selectedCell.row
+                              ? row.map((cell, ci) => (ci === selectedCell.col ? { ...cell, fontSize: size } : cell))
+                              : row,
+                          )
+                        : t.rows.map((row, ri) => (ri === 0 ? row.map((cell) => ({ ...cell, fontSize: size })) : row));
+                      patchSelected({ table: { ...t, rows: nextRows } });
+                    } else {
+                      patchSelected({ style: { ...selected.style, fontSize: size } });
+                    }
+                  }}
                 />
               </label>
               <label className="dst-field">

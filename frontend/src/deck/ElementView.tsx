@@ -303,7 +303,8 @@ export default function ElementView({
                       background: isHeader ? theme.accent : undefined,
                       color: isHeader ? theme.inverse : theme.ink,
                       fontWeight: cell.bold || isHeader ? 700 : 400,
-                      fontSize: isHeader ? 12 : 14,
+                      // Per-cell size when set; otherwise the header/body default.
+                      fontSize: cell.fontSize ?? (isHeader ? 12 : 14),
                       textAlign: align,
                       verticalAlign: "middle",
                       cursor: canEdit ? "text" : "default",

@@ -56,6 +56,8 @@ export interface TableCell {
   align?: "left" | "center" | "right";
   /** Header cells get the accent background and inverse text. */
   isHeader?: boolean;
+  /** Per-cell font size in px. Falls back to 14 when unset. */
+  fontSize?: number;
 }
 
 /** A freeform grid of cells, addressed rows[rowIndex][colIndex]. */
