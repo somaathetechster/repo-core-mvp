@@ -85,13 +85,16 @@ export interface DeckStudioProps {
   onCurrentChange: (index: number) => void;
   renderChart?: (el: SlideElement) => ReactNode;
   guidesEnabled?: boolean;
+  /** Slide ids that have at least one unresolved comment — shows a dot on the
+   *  filmstrip thumbnail. */
+  slidesWithComments?: Set<string>;
 }
 
 export default function DeckStudio({
   slides, current, themeSettings, templateId, industry,
   images = [], onImagesChange,
   onSlidesChange, onThemeChange, onTemplateChange, onCurrentChange,
-  renderChart, guidesEnabled = true,
+  renderChart, guidesEnabled = true, slidesWithComments,
 }: DeckStudioProps) {
   const [panel, setPanel] = useState<Panel>("template");
   const [toolMode, setToolMode] = useState<"pointer" | "text">("pointer");
@@ -753,6 +756,17 @@ export default function DeckStudio({
                   </span>
                 )}
                 {s.customized && <span className="dst-thumb-dot" title="Hand-edited" />}
+                {slidesWithComments?.has(s.id) && (
+                  <span
+                    title="Has unresolved comments"
+                    aria-label="Has unresolved comments"
+                    style={{
+                      position: "absolute", top: 4, right: 4,
+                      width: 8, height: 8, borderRadius: "50%",
+                      background: theme.accent,
+                    }}
+                  />
+                )}
                 <span className="dst-thumb-actions" onClick={(e) => e.stopPropagation()}>
                   <button type="button" title="Move left" aria-label={`Move slide ${i + 1} left`} disabled={i === 0} onClick={() => moveSlideBy(i, -1)}>←</button>
                   <button type="button" title="Move right" aria-label={`Move slide ${i + 1} right`} disabled={i === slides.length - 1} onClick={() => moveSlideBy(i, 1)}>→</button>

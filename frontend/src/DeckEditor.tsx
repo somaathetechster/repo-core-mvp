@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   getDeck, saveDeckEditorState, regenerateDeck, updateDeckProfile, renameDeck,
-  type DeckTheme, type CompanyProfile, type AnalyzeResult, type FullDeck,
+  listComments, addComment, resolveComment, deleteComment,
+  type DeckTheme, type CompanyProfile, type AnalyzeResult, type FullDeck, type SlideComment,
 } from "./api";
 import DeckStudio from "./DeckStudio";
 import CompanyProfileForm from "./CompanyProfileForm";
@@ -169,6 +170,44 @@ export default function DeckEditor({
   const saveRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [guidesEnabled, setGuidesEnabled] = useState(() => localStorage.getItem("provisio:guides") !== "off");
   const loadedRef = useRef(false);
+
+  // ── Comments ─────────────────────────────────────────────────────────────
+  const [comments, setComments] = useState<SlideComment[]>([]);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+
+  const refreshComments = useCallback(() => {
+    listComments(deckId)
+      .then(setComments)
+      .catch(() => { /* comments are non-critical; a failed load just shows none */ });
+  }, [deckId]);
+
+  useEffect(() => { refreshComments(); }, [refreshComments]);
+
+  const currentSlideId = slides[current]?.id ?? null;
+  // Unresolved comments stay in state after being resolved (the server only
+  // returns unresolved ones) so the panel's "Show resolved" toggle has
+  // something to show within the session.
+  const unresolvedCount = comments.filter((c) => !c.resolved).length;
+  const slidesWithComments = useMemo(
+    () => new Set(comments.filter((c) => !c.resolved).map((c) => c.slide_id)),
+    [comments],
+  );
+
+  const handleAddComment = useCallback(async (content: string) => {
+    if (!currentSlideId) return;
+    const created = await addComment(deckId, currentSlideId, content);
+    setComments((prev) => [...prev, created]);
+  }, [deckId, currentSlideId]);
+
+  const handleResolveComment = useCallback(async (id: string) => {
+    const updated = await resolveComment(deckId, id, true);
+    setComments((prev) => prev.map((c) => (c.id === id ? { ...c, resolved: updated.resolved } : c)));
+  }, [deckId]);
+
+  const handleDeleteComment = useCallback(async (id: string) => {
+    await deleteComment(deckId, id);
+    setComments((prev) => prev.filter((c) => c.id !== id));
+  }, [deckId]);
 
   // ── Auto-sync ──────────────────────────────────────────────────────────
   // The server `updated_at` for the version we currently hold. The 30s poll
@@ -778,6 +817,28 @@ export default function DeckEditor({
           <button className="p-btn p-btn-ghost" onClick={regenerate} disabled={!!busy}>
             {busy ?? "Regenerate"}
           </button>
+          <button
+            className={`p-btn p-btn-ghost ${commentsOpen ? "deck-view-btn-active" : ""}`}
+            onClick={() => setCommentsOpen((o) => !o)}
+            title="Comments"
+            aria-pressed={commentsOpen}
+            style={{ position: "relative" }}
+          >
+            <span aria-hidden="true">💬</span> Comments
+            {unresolvedCount > 0 && (
+              <span
+                aria-label={`${unresolvedCount} unresolved comments`}
+                style={{
+                  position: "absolute", top: -6, right: -6,
+                  minWidth: 18, height: 18, padding: "0 5px",
+                  borderRadius: 9, background: "var(--gold)", color: "#1a1a1a",
+                  fontSize: 11, fontWeight: 700, lineHeight: "18px", textAlign: "center",
+                }}
+              >
+                {unresolvedCount}
+              </span>
+            )}
+          </button>
           <span
             className="deck-last-synced"
             title={lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : undefined}
@@ -837,21 +898,36 @@ export default function DeckEditor({
       )}
 
       {view === "studio" ? (
-        <DeckStudio
-          slides={slides}
-          current={current}
-          themeSettings={themeSettings}
-          templateId={templateId}
-          industry={deckProfile?.industry ?? null}
-          images={images}
-          onImagesChange={(next) => { setImages(next); markDirty(); }}
-          renderChart={renderChart}
-          onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); markDirty(); }}
-          onThemeChange={(next) => { setThemeSettings(next); markDirty(); }}
-          onTemplateChange={applyTemplate}
-          onCurrentChange={setCurrent}
-          guidesEnabled={guidesEnabled}
-        />
+        <div className="deck-studio-row" style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+            <DeckStudio
+              slides={slides}
+              current={current}
+              themeSettings={themeSettings}
+              templateId={templateId}
+              industry={deckProfile?.industry ?? null}
+              images={images}
+              onImagesChange={(next) => { setImages(next); markDirty(); }}
+              renderChart={renderChart}
+              onSlidesChange={(next, label) => { setSlides(next, label ?? "edit"); markDirty(); }}
+              onThemeChange={(next) => { setThemeSettings(next); markDirty(); }}
+              onTemplateChange={applyTemplate}
+              onCurrentChange={setCurrent}
+              guidesEnabled={guidesEnabled}
+              slidesWithComments={slidesWithComments}
+            />
+          </div>
+          {commentsOpen && (
+            <CommentsPanel
+              comments={comments.filter((c) => c.slide_id === currentSlideId)}
+              hasSlide={!!currentSlideId}
+              onAdd={handleAddComment}
+              onResolve={handleResolveComment}
+              onDelete={handleDeleteComment}
+              onClose={() => setCommentsOpen(false)}
+            />
+          )}
+        </div>
       ) : (
         deckProfile && (
           <CompanyProfileForm
@@ -864,5 +940,161 @@ export default function DeckEditor({
       )}
       </div>{/* deck-editor-content */}
     </div>
+  );
+}
+
+/** "just now" / "4m ago" / "3h ago" / "2d ago" / a date for older. */
+function timeAgo(iso: string | null): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const sec = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (sec < 45) return "just now";
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+/**
+ * The comments sidebar for the current slide. Unresolved comments show first;
+ * resolved ones are tucked behind a "Show resolved (N)" toggle. A text box at
+ * the bottom adds a new comment to the current slide.
+ */
+function CommentsPanel({
+  comments, hasSlide, onAdd, onResolve, onDelete, onClose,
+}: {
+  comments: SlideComment[];
+  hasSlide: boolean;
+  onAdd: (content: string) => Promise<void>;
+  onResolve: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [showResolved, setShowResolved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const unresolved = comments.filter((c) => !c.resolved);
+  const resolved = comments.filter((c) => c.resolved);
+  const shown = showResolved ? [...unresolved, ...resolved] : unresolved;
+
+  async function submit() {
+    const content = draft.trim();
+    if (!content) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onAdd(content);
+      setDraft("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't add that comment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const panelStyle: React.CSSProperties = {
+    width: 280, flexShrink: 0, height: "100%",
+    borderLeft: "1px solid var(--ink-border)",
+    background: "var(--ink-raised)",
+    display: "flex", flexDirection: "column", overflow: "hidden",
+  };
+
+  return (
+    <aside style={panelStyle} aria-label="Slide comments">
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0.7rem 0.9rem", borderBottom: "1px solid var(--ink-border)", flexShrink: 0,
+      }}>
+        <strong style={{ fontSize: "0.9rem" }}>Comments</strong>
+        <button className="p-btn p-btn-ghost" style={{ padding: "0.2rem 0.5rem" }} onClick={onClose} title="Close comments">×</button>
+      </div>
+
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0.75rem 0.9rem" }}>
+        {!hasSlide ? (
+          <p style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>No slide selected.</p>
+        ) : shown.length === 0 ? (
+          <p style={{ color: "var(--text-dim)", fontSize: "0.85rem" }}>No comments on this slide yet.</p>
+        ) : (
+          shown.map((c) => (
+            <div
+              key={c.id}
+              style={{
+                border: "1px solid var(--ink-border)", borderRadius: 8,
+                padding: "0.6rem 0.7rem", marginBottom: "0.55rem",
+                background: "rgba(255,255,255,0.02)", opacity: c.resolved ? 0.55 : 1,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>{c.author_name}</span>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>{timeAgo(c.created_at)}</span>
+              </div>
+              <p style={{ margin: "0.35rem 0 0.5rem", fontSize: "0.85rem", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>
+                {c.content}
+              </p>
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                {!c.resolved && (
+                  <button
+                    className="p-btn p-btn-ghost"
+                    style={{ padding: "0.2rem 0.5rem", fontSize: "0.8rem" }}
+                    onClick={() => onResolve(c.id)}
+                    title="Resolve"
+                  >
+                    ✓ Resolve
+                  </button>
+                )}
+                <button
+                  className="p-btn p-btn-ghost"
+                  style={{ padding: "0.2rem 0.5rem", fontSize: "0.8rem", color: "var(--danger)" }}
+                  onClick={() => onDelete(c.id)}
+                  title="Delete"
+                >
+                  × Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+
+        {resolved.length > 0 && (
+          <button
+            className="p-btn p-btn-ghost"
+            style={{ padding: "0.3rem 0.4rem", fontSize: "0.8rem", marginTop: "0.25rem" }}
+            onClick={() => setShowResolved((s) => !s)}
+          >
+            {showResolved ? "Hide resolved" : `Show resolved (${resolved.length})`}
+          </button>
+        )}
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--ink-border)", padding: "0.7rem 0.9rem", flexShrink: 0 }}>
+        {error && <p className="p-error" style={{ fontSize: "0.8rem", margin: "0 0 0.4rem" }}>{error}</p>}
+        <textarea
+          className="p-input"
+          rows={3}
+          placeholder={hasSlide ? "Add a comment on this slide…" : "Select a slide first"}
+          value={draft}
+          disabled={!hasSlide || busy}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); }
+          }}
+          style={{ width: "100%", resize: "vertical" }}
+        />
+        <button
+          className="p-btn p-btn-secondary"
+          style={{ marginTop: "0.5rem", width: "100%" }}
+          onClick={submit}
+          disabled={!hasSlide || busy || !draft.trim()}
+        >
+          {busy ? "Adding…" : "Comment"}
+        </button>
+      </div>
+    </aside>
   );
 }

@@ -813,3 +813,52 @@ export async function acceptInvite(token: string): Promise<AcceptResult> {
   if (!res.ok) await throwWithDetail(res, "Couldn't accept this invitation.");
   return res.json();
 }
+
+/* ---------------------------------------------------------------- */
+/* Slide comments                                                    */
+/* ---------------------------------------------------------------- */
+
+export interface SlideComment {
+  id: string;
+  deck_id: string;
+  slide_id: string;
+  content: string;
+  resolved: boolean;
+  created_at: string | null;
+  author_name: string;
+  author_email: string | null;
+}
+
+export async function listComments(deckId: string): Promise<SlideComment[]> {
+  const res = await fetch(`${API_BASE}/decks/${deckId}/comments`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load comments.");
+  return (await res.json()).comments ?? [];
+}
+
+export async function addComment(deckId: string, slideId: string, content: string): Promise<SlideComment> {
+  const res = await fetch(`${API_BASE}/decks/${deckId}/comments`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ slide_id: slideId, content }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't add that comment.");
+  return res.json();
+}
+
+export async function resolveComment(deckId: string, commentId: string, resolved = true): Promise<SlideComment> {
+  const res = await fetch(`${API_BASE}/decks/${deckId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't update that comment.");
+  return res.json();
+}
+
+export async function deleteComment(deckId: string, commentId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/decks/${deckId}/comments/${commentId}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't delete that comment.");
+}
