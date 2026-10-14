@@ -3,10 +3,11 @@ Read/write the founder's company profile: the manually-entered evidence
 layer that sits alongside GitHub extraction. A single record per user.
 """
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.core.deps import get_current_user_id
 from app.core.db import AsyncSessionLocal
+from app.core.workspace import READ, UPDATE, authorize
 from app.models.company_profile import CompanyProfileModel
 
 router = APIRouter(prefix="/company-profile", tags=["company-profile"])
@@ -86,9 +87,12 @@ class CompanyProfileIn(BaseModel):
 
 
 @router.get("")
-async def get_company_profile(user_id: str = Depends(get_current_user_id)):
+async def get_company_profile(request: Request, user_id: str = Depends(get_current_user_id)):
+    # When acting inside another user's workspace, return that owner's profile,
+    # not the caller's own. A plain viewer may read it.
+    owner_id = await authorize(request, user_id, READ)
     async with AsyncSessionLocal() as session:
-        profile = await session.get(CompanyProfileModel, user_id)
+        profile = await session.get(CompanyProfileModel, owner_id)
         if not profile:
             return CompanyProfileIn().model_dump()
         return {
@@ -99,17 +103,20 @@ async def get_company_profile(user_id: str = Depends(get_current_user_id)):
 
 
 @router.put("")
-async def save_company_profile(body: CompanyProfileIn, user_id: str = Depends(get_current_user_id)):
+async def save_company_profile(request: Request, body: CompanyProfileIn, user_id: str = Depends(get_current_user_id)):
+    # Saving into a workspace writes the owner's profile, so it requires edit
+    # rights there (viewers/commenters get a 403).
+    owner_id = await authorize(request, user_id, UPDATE)
     data = body.model_dump()
     data["team_members"] = [tm for tm in data["team_members"]]  # already dicts from model_dump
 
     async with AsyncSessionLocal() as session:
-        profile = await session.get(CompanyProfileModel, user_id)
+        profile = await session.get(CompanyProfileModel, owner_id)
         if profile:
             for field, value in data.items():
                 setattr(profile, field, value)
         else:
-            profile = CompanyProfileModel(user_id=user_id, **data)
+            profile = CompanyProfileModel(user_id=owner_id, **data)
             session.add(profile)
         await session.commit()
     return {"status": "saved"}

@@ -15,7 +15,7 @@ import ChangePassword from "./ChangePassword";
 import WelcomeCelebration from "./WelcomeCelebration";
 import SettingsPage from "./SettingsPage";
 import InvitePage from "./InvitePage";
-import { WorkspaceProvider } from "./WorkspaceContext";
+import { WorkspaceProvider, WorkspaceScope } from "./WorkspaceContext";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import "./theme.css";
 import "./dashboard.css";
@@ -277,6 +277,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
         <WelcomeCelebration planName={celebration} onDismiss={() => setCelebration(null)} />
       )}
 
+      <WorkspaceScope>
       <Suspense fallback={<TabLoading />}>
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
@@ -343,6 +344,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </Suspense>
+      </WorkspaceScope>
     </div>
     </WorkspaceProvider>
   );
