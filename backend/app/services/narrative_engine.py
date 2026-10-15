@@ -48,6 +48,7 @@ HOW TO WRITE
 - Write like a person who knows the business, not like marketing copy.
 - A slide's lead line should be able to stand alone as the single thing a reader remembers.
 - SLIDE DENSITY: One lead sentence. Two to four supporting points. Never more than four. A crowded slide loses the room faster than a sparse one.
+- COMPETITION SLIDE SPECIAL RULE: If the competitive landscape input describes positioning intentions rather than specific competitors, still write the slide. Structure it as: (1) the category of alternatives users have today, (2) why each category falls short, (3) what the company does differently. Never leave a competition slide empty — an honest category-level analysis is better than a blank slide.
 
 WHAT YOU MAY NOT DO
 - Never invent a number, a customer, a partnership, a date, or a credential. If the founder didn't supply it, it does not exist.
