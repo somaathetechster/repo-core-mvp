@@ -441,14 +441,29 @@ export const composeTechnical: Composer = (c) => {
 
   // Dense numbered rows, full width, hairline separated. Nothing centred,
   // nothing floating: the page reads like a spec.
-  c.paragraphs.slice(0, 5).forEach((p, i) => {
-    const y = 152 + i * 96;
+  const rows = c.paragraphs.slice(0, 5);
+  const ROW_TOP = 152;
+  // The sources block sits at CANVAS_H - 76; rows must finish above it, and
+  // nothing may cross the 700 ceiling (20px margin below the 720 canvas).
+  const BOTTOM = Math.min(700, CANVAS_H - 76 - 16);
+  // Each row takes an equal share of the band, capped so one row can't grow
+  // unbounded. With two long paragraphs the boxes are tall enough that the
+  // text no longer wraps past its slot; with five short ones they pack as
+  // before. This is what stops the overflow that bled rows into each other.
+  const slot = rows.length ? Math.min(132, (BOTTOM - ROW_TOP) / rows.length) : 0;
+  let y = ROW_TOP;
+  rows.forEach((p, i) => {
+    const textH = slot - 20; // leaves room for the separator and the gap
     els.push(makeElement("caption", { x: m, y: y + 4, w: 40, h: 18, z: 10 },
       { color: "accent", fontFamily: "label", fontSize: 12 }, { text: String(i + 1).padStart(2, "0") }));
-    els.push(makeElement("text", { x: m + 56, y, w: CANVAS_W - m * 2 - 56, h: 76, z: 10 },
+    els.push(makeElement("text", { x: m + 56, y, w: CANVAS_W - m * 2 - 56, h: textH, z: 10 },
       { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: i === 0 ? 19 : 16.5, lineHeight: 1.55 },
       { text: p.text, source: p.source }));
-    els.push(makeElement("rule", { x: m, y: y + 84, w: CANVAS_W - m * 2, h: 1, z: 10 }, { background: "rule" }));
+    // The rule and the next row are derived from this row's bottom (y + h),
+    // never a fixed i * step, so a wrapped paragraph can't collide downward.
+    const ruleY = y + textH + 8;
+    els.push(makeElement("rule", { x: m, y: ruleY, w: CANVAS_W - m * 2, h: 1, z: 10 }, { background: "rule" }));
+    y = ruleY + 12;
   });
   els.push(...sourcesElement(c, m, CANVAS_H - 76));
   return { elements: els };
