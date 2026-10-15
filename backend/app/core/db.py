@@ -12,12 +12,21 @@ from app.core.config import settings
 # proxy (pgbouncer / Supabase): a cached statement can land on a different
 # backend connection than the one that prepared it, raising
 # "prepared statement does not exist" / "already exists" errors.
+#
+# pool_pre_ping is disabled for the same reason: its per-checkout liveness
+# probe runs an extra statement against a pooled connection, which is one more
+# chance for a prepared statement to collide across backend connections.
 engine = create_async_engine(
     settings.database_url,
-    pool_pre_ping=True,
+    pool_pre_ping=False,
     connect_args={
         "prepared_statement_cache_size": 0,
         "statement_cache_size": 0,
+        # Force generic plans so the server does not retain per-statement
+        # custom plans tied to a prepared statement on a pooled connection.
+        "server_settings": {
+            "plan_cache_mode": "force_generic_plan",
+        },
     },
 )
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
