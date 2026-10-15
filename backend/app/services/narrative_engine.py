@@ -185,6 +185,27 @@ def _verify_numbers(copy_text: str, source_text: str) -> list[str]:
     return sorted(set(unmatched))
 
 
+# Hard caps enforced in Python on the model's output, not via the prompt. The
+# SLIDE DENSITY prompt rule asks for this, but a model still occasionally
+# returns five long paragraphs, and anything past these caps overflows the
+# slide canvas downstream — so they are applied after generation.
+_MAX_POINTS = 4
+_MAX_PARA_CHARS = 300
+
+
+def _truncate_paragraph(text: str, limit: int = _MAX_PARA_CHARS) -> str:
+    """Caps a paragraph at `limit` characters, cut at the nearest word boundary
+    so a word is never split. The returned string never exceeds `limit`."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    boundary = cut.rfind(" ")
+    if boundary <= 0:
+        # A single token longer than the limit: hard cut, nothing to back to.
+        return cut.rstrip()
+    return cut[:boundary].rstrip() + "…"
+
+
 def generate_narrative(
     profile: dict,
     diligence: dict | None = None,
@@ -226,11 +247,16 @@ def generate_narrative(
         lead = (item.get("lead") or "").strip()
         if not lead:
             continue
+        # Post-generation truncation: keep at most four body paragraphs, and
+        # cap the length of every paragraph (lead included). See the module
+        # caps above — this is a hard limit, not a prompt suggestion.
+        points = [p.strip() for p in item.get("points", []) if p and p.strip()]
+        points = [_truncate_paragraph(p) for p in points[:_MAX_POINTS]]
         slides.append(SlideCopy(
             kind=item.get("kind", "custom"),
             title=(item.get("title") or "").strip() or item.get("kind", "Slide").title(),
-            lead=lead,
-            points=[p.strip() for p in item.get("points", []) if p and p.strip()],
+            lead=_truncate_paragraph(lead),
+            points=points,
             sources=item.get("sources", []),
         ))
 
