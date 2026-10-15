@@ -148,9 +148,9 @@ export function chooseVariant(
     candidates.push({ variant: "two-column", fit: 7 });
   }
 
-  // Always available, and the right answer for a lead plus a couple of
-  // supporting points, which is the most common shape.
-  candidates.push({ variant: "lead-and-points", fit: 6 });
+  // Always available as the universal fallback, so `candidates` is never
+  // empty. numbered-rows is the safe default for an ordinary content slide.
+  candidates.push({ variant: "numbered-rows", fit: 6 });
 
   // Penalise anything used in the last two slides, so the deck doesn't run
   // three identical pages in a row when several slides share a shape.

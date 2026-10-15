@@ -376,7 +376,7 @@ export default function DeckStudio({
     image: item.elements.find((el) => ["image", "portrait", "logo"].includes(el.type))?.src,
     chart: item.elements.find((el) => el.type === "chart")?.chart,
   }))), [slides]);
-  const currentVariant = slideVariants[slide?.id ?? ""] ?? plannedVariants[current] ?? "lead-and-points";
+  const currentVariant = slideVariants[slide?.id ?? ""] ?? plannedVariants[current] ?? "numbered-rows";
 
   function customizeLayout(variant: LayoutVariant) {
     if (!slide) return;
