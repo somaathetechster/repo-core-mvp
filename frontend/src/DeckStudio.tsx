@@ -400,6 +400,13 @@ export default function DeckStudio({
     let freeIndex = 0;
     const elements = slide.elements.map((item) => {
       if (item.locked) return item;
+      // lead-and-points is a two-column text layout. The Technical template's
+      // hairline rules and § number captions are not part of it, so they must
+      // not be positioned as points. Hide them off-canvas AND skip the index
+      // bump, otherwise a rule lands on top of text or steals a point slot.
+      if (variant === "lead-and-points" && (item.type === "rule" || item.type === "caption")) {
+        return { ...item, frame: { ...item.frame, x: 0, y: 800, w: 0, h: 0 } };
+      }
       const next = { ...item, frame: frameFor(item, freeIndex) };
       freeIndex += 1;
       return next;
