@@ -358,7 +358,7 @@ export const composeTechnical: Composer = (c) => {
         { objectFit: "contain", opacity: 0.95 }, { src: c.logo, locked: true }));
     }
     els.push(makeElement("heading", { x: m, y: 250, w: 900, h: 130, z: 10 },
-      { color: "ink", fontFamily: "display", fontSize: 54, fontWeight: 700, lineHeight: 1.04, letterSpacing: "-0.025em" },
+      { color: "ink", fontFamily: "display", fontSize: 54, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.025em" },
       { text: c.title }));
     els.push(makeElement("rule", { x: m, y: 404, w: CANVAS_W - m * 2, h: 1, z: 10 }, { background: "rule" }));
     if (c.paragraphs[0]) {
@@ -384,16 +384,22 @@ export const composeTechnical: Composer = (c) => {
     { color: "accent", fontFamily: "label", fontSize: 10.5, letterSpacing: "0.1em" },
     { text: `§ ${String(c.pageNumber ?? 1).padStart(2, "0")}` }));
   els.push(makeElement("heading", { x: m, y: 66, w: 900, h: 44, z: 10 },
-    { color: "ink", fontFamily: "display", fontSize: 32, fontWeight: 600, letterSpacing: "-0.015em" },
+    { color: "ink", fontFamily: "display", fontSize: 32, fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.015em" },
     { text: c.title }));
   els.push(makeElement("rule", { x: m, y: 122, w: CANVAS_W - m * 2, h: 1, z: 10 }, { background: "rule" }));
   els.push(...chrome(c, { margin: m, logoAt: "top-right", numberStyle: "padded", logoSize: 18, labelFont: "label" }));
 
   if (c.kind === "contents") {
-    (c.contents ?? []).forEach((e, i) => {
-      els.push(makeElement("list", { x: m, y: 152 + i * 38, w: CANVAS_W - m * 2, h: 32, z: 10 },
+    const items = c.contents ?? [];
+    // Cumulative vertical rhythm. The step compresses when the list is long
+    // so the final row's bottom never crosses the 700 ceiling.
+    const step = items.length ? Math.min(38, (700 - 152) / items.length) : 38;
+    let cy = 152;
+    items.forEach((e, i) => {
+      els.push(makeElement("list", { x: m, y: cy, w: CANVAS_W - m * 2, h: step - 6, z: 10 },
         { color: "ink", fontFamily: "body", fontSize: 17, borderTop: 1, borderColor: "rule", padding: 8 },
         { text: `${String(i + 3).padStart(2, "0")}   ${e.title}` }));
+      cy += step; // next row from the previous row's top + its full slot (h + gap)
     });
     return { elements: els };
   }
@@ -404,11 +410,18 @@ export const composeTechnical: Composer = (c) => {
     const twoCol = c.team.length > 5;
     const colW = twoCol ? (CANVAS_W - m * 2 - 40) / 2 : CANVAS_W - m * 2;
     const perCol = twoCol ? Math.ceil(c.team.length / 2) : c.team.length;
+    const ruleOffset = twoCol ? 88 : 104; // the lowest element in each cell
+    // Row pitch compresses when a column is tall so the last person's rule
+    // stays inside the 700 ceiling, without dropping anyone from the grid.
+    const pitchMax = twoCol ? 96 : 112;
+    const pitch = perCol > 1
+      ? Math.min(pitchMax, (700 - 150 - ruleOffset) / (perCol - 1))
+      : pitchMax;
     c.team.forEach((p, i) => {
       const col = twoCol ? Math.floor(i / perCol) : 0;
       const row = twoCol ? i % perCol : i;
       const x = m + col * (colW + 40);
-      const y = 150 + row * (twoCol ? 96 : 112);
+      const y = 150 + row * pitch;
       const thumb = twoCol ? 64 : 96;
       els.push(makeElement("portrait", { x, y, w: thumb, h: thumb, z: 10 },
         { objectFit: "cover", filter: "grayscale(0.4)" }, { src: p.photo_data_url || null, text: p.name }));
@@ -424,7 +437,7 @@ export const composeTechnical: Composer = (c) => {
         els.push(makeElement("text", { x: x + thumb + 20, y: y + 46, w: colW - thumb - 20, h: dense ? 38 : 50, z: 10 },
           { color: "muted", fontFamily: "body", fontSize: 13, lineHeight: 1.45 }, { text: bio }));
       }
-      els.push(makeElement("rule", { x, y: y + (twoCol ? 88 : 104), w: colW, h: 1, z: 10 }, { background: "rule" }));
+      els.push(makeElement("rule", { x, y: y + ruleOffset, w: colW, h: 1, z: 10 }, { background: "rule" }));
     });
     return { elements: els };
   }
@@ -453,11 +466,15 @@ export const composeTechnical: Composer = (c) => {
   const slot = rows.length ? Math.min(132, (BOTTOM - ROW_TOP) / rows.length) : 0;
   let y = ROW_TOP;
   rows.forEach((p, i) => {
-    const textH = slot - 20; // leaves room for the separator and the gap
+    const fontSize = i === 0 ? 19 : 16.5;
+    // Rule-3 body cap (three lines), then never taller than the slot. Leaves
+    // room below for the separator and the gap.
+    const bodyCap = fontSize * 1.55 * 3 + 10;
+    const textH = Math.min(slot - 20, bodyCap);
     els.push(makeElement("caption", { x: m, y: y + 4, w: 40, h: 18, z: 10 },
       { color: "accent", fontFamily: "label", fontSize: 12 }, { text: String(i + 1).padStart(2, "0") }));
     els.push(makeElement("text", { x: m + 56, y, w: CANVAS_W - m * 2 - 56, h: textH, z: 10 },
-      { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: i === 0 ? 19 : 16.5, lineHeight: 1.55 },
+      { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize, lineHeight: 1.55 },
       { text: p.text, source: p.source }));
     // The rule and the next row are derived from this row's bottom (y + h),
     // never a fixed i * step, so a wrapped paragraph can't collide downward.
