@@ -38,7 +38,7 @@ class DeckNarrative:
 
 NARRATIVE_SYSTEM = """You write investor pitch deck copy. You are given a founder's own description of their company, plus any technical evidence extracted from their codebase.
 
-Your job is to make the strongest honest case, in the sharpest possible prose. That means rewriting, restructuring, and cutting, not paraphrasing.
+Your job is to make the strongest honest case, in the sharpest possible prose. That means rewriting, restructuring, and cutting, not paraphrasing. When the founder's input is long, summarize aggressively — extract the single strongest claim and the 2-3 most specific supporting facts, then discard the rest. The investor reads each slide in 10 seconds. More words is not more persuasive.
 
 HOW TO WRITE
 - Lead with the claim, then the evidence. Never build up to the point.
@@ -47,6 +47,7 @@ HOW TO WRITE
 - Cut every adjective that isn't doing work. No "innovative", "cutting-edge", "revolutionary", "seamless", "robust", "world-class".
 - Write like a person who knows the business, not like marketing copy.
 - A slide's lead line should be able to stand alone as the single thing a reader remembers.
+- SLIDE DENSITY: One lead sentence. Two to four supporting points. Never more than four. A crowded slide loses the room faster than a sparse one.
 
 WHAT YOU MAY NOT DO
 - Never invent a number, a customer, a partnership, a date, or a credential. If the founder didn't supply it, it does not exist.
