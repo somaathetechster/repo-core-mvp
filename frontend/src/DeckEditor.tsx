@@ -682,6 +682,32 @@ export default function DeckEditor({
     flash("Slide reset to the template. Undo if that wasn't what you wanted.");
   }
 
+  // Reset every hand-edited slide at once, through the same per-slide
+  // resetToTemplate pipeline (customized -> false, elements dropped, then
+  // recomposed). Text content survives; only hand-positioning is discarded.
+  function resetAllSlides() {
+    const count = slides.filter((s) => s.customized).length;
+    if (count === 0) {
+      flash("No slides have hand-positioned layouts to reset.");
+      return;
+    }
+    if (!window.confirm(
+      `Reset ${count} hand-edited slide${count === 1 ? "" : "s"} to the template layout? ` +
+      "Text content is kept; hand-positioning is discarded. Undo if that wasn't what you wanted.",
+    )) return;
+    setSlides((prev) => prev.map((s, i) => {
+      if (!s.customized) return s;
+      const storedMatch = stored.find((x) => x.id === s.id);
+      return resetToTemplate(s, storedMatch, templateId, {
+        companyName: deckName,
+        pageNumber: i + 1,
+        totalPages: prev.length,
+      });
+    }), "reset-all-template");
+    markDirty();
+    flash(`Reset ${count} slide${count === 1 ? "" : "s"} to the template.`);
+  }
+
   function addSlide() {
     const requested = window.prompt("Name this slide", "New slide");
     if (requested === null) return;
@@ -798,6 +824,14 @@ export default function DeckEditor({
             title="Discard hand-positioning on this slide and re-apply the template"
           >
             Reset layout
+          </button>
+          <button
+            className="p-btn p-btn-ghost"
+            onClick={resetAllSlides}
+            disabled={slides.every((s) => !s.customized)}
+            title="Discard hand-positioning on every slide and re-apply the template"
+          >
+            Reset all slides
           </button>
           <button
             className="p-btn p-btn-ghost"
