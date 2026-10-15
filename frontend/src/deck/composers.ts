@@ -464,9 +464,12 @@ export const composeTechnical: Composer = (c) => {
   // text no longer wraps past its slot; with five short ones they pack as
   // before. This is what stops the overflow that bled rows into each other.
   const slot = rows.length ? Math.min(132, (BOTTOM - ROW_TOP) / rows.length) : 0;
+  // Cap at four rows; past that the slide reads as an undifferentiated wall.
+  const shownCount = Math.min(rows.length, 4);
   let y = ROW_TOP;
-  rows.forEach((p, i) => {
-    const fontSize = i === 0 ? 19 : 16.5;
+  rows.slice(0, 4).forEach((p, i) => {
+    // 1-2 rows keep the larger size; 3-4 rows step down so they fit the band.
+    const fontSize = shownCount <= 2 ? (i === 0 ? 19 : 16.5) : (i === 0 ? 16 : 14);
     // Rule-3 body cap (three lines), then never taller than the slot. Leaves
     // room below for the separator and the gap.
     const bodyCap = fontSize * 1.55 * 3 + 10;
