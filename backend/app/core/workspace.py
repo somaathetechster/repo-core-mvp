@@ -20,10 +20,9 @@ Capability ladder (weakest to strongest):
     admin               everything
 """
 from fastapi import HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import text
 
 from app.core.db import AsyncSessionLocal
-from app.models.collaboration import CollaboratorModel
 
 _ROLE_RANK = {"viewer": 0, "commenter": 0, "editor": 1, "manager": 2, "admin": 3}
 
@@ -49,18 +48,26 @@ async def get_effective_user(request: Request, current_user: str) -> tuple[str, 
     if not workspace_id or workspace_id == current_user:
         return current_user, "admin"
 
+    # A plain parameterised text() query rather than the ORM, to keep this
+    # lookup off SQLAlchemy's compiled-construct path. Parameters are bound
+    # (:owner_id / :user_id), so this is not string interpolation.
     async with AsyncSessionLocal() as session:
-        collab = (await session.execute(
-            select(CollaboratorModel).where(
-                CollaboratorModel.owner_id == workspace_id,
-                CollaboratorModel.invitee_user_id == current_user,
-                CollaboratorModel.status == "accepted",
-            )
-        )).scalars().first()
+        result = await session.execute(
+            text(
+                "SELECT id, owner_id, invitee_email, invitee_user_id, role, status "
+                "FROM collaborators "
+                "WHERE owner_id = :owner_id "
+                "AND invitee_user_id = :user_id "
+                "AND status = 'accepted' "
+                "LIMIT 1"
+            ),
+            {"owner_id": workspace_id, "user_id": current_user},
+        )
+        row = result.fetchone()
 
-    if not collab:
+    if not row:
         raise HTTPException(status_code=403, detail="You don't have access to this workspace.")
-    return workspace_id, collab.role
+    return workspace_id, row.role
 
 
 async def authorize(request: Request, current_user: str, required: str) -> str:
