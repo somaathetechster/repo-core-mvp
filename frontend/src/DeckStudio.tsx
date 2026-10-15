@@ -384,7 +384,10 @@ export default function DeckStudio({
       const image = ["image", "portrait", "logo"].includes(item.type);
       const text = item.text !== undefined;
       if (variant === "statement") return index === 0 ? { ...item.frame, x: 110, y: 190, w: 1060, h: 190 } : { ...item.frame, x: 110, y: 430 + index * 42, w: 1060, h: 34 };
-      if (variant === "lead-and-points") return index === 0 ? { ...item.frame, x: 110, y: 150, w: 620, h: 250 } : { ...item.frame, x: 790, y: 150 + (index - 1) * 105, w: 370, h: 80 };
+      // Lead on the left; up to 4 supporting points stacked on the right at a
+      // 120px step. The point slot is capped at index 4 (Math.min) so a 5th+
+      // point can never be placed past the 700px floor — bottom stays at 620.
+      if (variant === "lead-and-points") return index === 0 ? { ...item.frame, x: 110, y: 150, w: 600, h: 220 } : { ...item.frame, x: 790, y: 150 + Math.min(index - 1, 3) * 120, w: 430, h: 110 };
       if (variant === "numbered-rows") return { ...item.frame, x: 120, y: 135 + index * 92, w: 980, h: 68 };
       if (variant === "grid") return { ...item.frame, x: 110 + (index % 3) * 365, y: 160 + Math.floor(index / 3) * 210, w: 320, h: 170 };
       if (variant === "split-image") return image ? { ...item.frame, x: 700, y: 110, w: 470, h: 500 } : { ...item.frame, x: 110, y: 150 + index * 80, w: 500, h: text ? 70 : item.frame.h };
