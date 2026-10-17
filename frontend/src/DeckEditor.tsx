@@ -536,6 +536,26 @@ export default function DeckEditor({
     return () => window.removeEventListener("keydown", onKey);
   }, [history]);
 
+  // Left/Right arrows step through slides, skipped while typing so they don't
+  // fight the caret inside a text field. The filmstrip's own ← → buttons
+  // reorder slides rather than navigate, so this is the only arrow-key nav.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement;
+      if (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setCurrent((c) => Math.max(0, c - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setCurrent((c) => Math.min(slides.length - 1, c + 1));
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [slides.length]);
+
   useEffect(() => {
     function warn(e: BeforeUnloadEvent) {
       if (dirty) { e.preventDefault(); e.returnValue = ""; }
