@@ -388,7 +388,9 @@ export default function DeckStudio({
       // 120px step. The point slot is capped at index 4 (Math.min) so a 5th+
       // point can never be placed past the 700px floor — bottom stays at 620.
       if (variant === "lead-and-points") return index === 0 ? { ...item.frame, x: 110, y: 150, w: 600, h: 220 } : { ...item.frame, x: 790, y: 150 + Math.min(index - 1, 3) * 120, w: 430, h: 110 };
-      if (variant === "numbered-rows") return { ...item.frame, x: 120, y: 135 + index * 92, w: 980, h: 68 };
+      // Taller rows (90px) at a 110px step give each one room for ~3 wrapped
+      // lines. Capped at 5 rows (index 4) so a 6th+ row never runs off canvas.
+      if (variant === "numbered-rows") return { ...item.frame, x: 120, y: 135 + Math.min(index, 4) * 110, w: 980, h: 90 };
       if (variant === "grid") return { ...item.frame, x: 110 + (index % 3) * 365, y: 160 + Math.floor(index / 3) * 210, w: 320, h: 170 };
       if (variant === "split-image") return image ? { ...item.frame, x: 700, y: 110, w: 470, h: 500 } : { ...item.frame, x: 110, y: 150 + index * 80, w: 500, h: text ? 70 : item.frame.h };
       if (variant === "image-led") return image ? { ...item.frame, x: 100, y: 90, w: 1080, h: 500 } : { ...item.frame, x: 120, y: 610, w: 1040, h: 50 };
