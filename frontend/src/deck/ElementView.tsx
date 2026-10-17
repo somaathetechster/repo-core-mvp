@@ -78,6 +78,11 @@ export function elementStyleToCss(el: SlideElement, theme: DeckTheme): CSSProper
     css.textAlign = s.align ?? "left";
     css.whiteSpace = "pre-wrap";
     css.overflowWrap = "break-word";
+    // Clip text to its frame so a block that wraps taller than its fixed
+    // height can't bleed over the rule or row beneath it. Covers every
+    // text-bearing type: text, heading, eyebrow, statement, caption, list,
+    // quote, metric, pageNumber.
+    css.overflow = "hidden";
     if (s.verticalAlign) {
       css.display = "flex";
       css.flexDirection = "column";
