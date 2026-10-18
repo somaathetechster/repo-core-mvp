@@ -17,6 +17,7 @@ import {
   type SlideElement, type ElementSlide, type SlideKind,
 } from "./elements";
 import { measureHeight } from "./measure";
+import { DEFAULT_FAMILIES } from "./layout";
 
 /** Normalised content handed to every composer. */
 export interface SlideContentInput {
@@ -320,14 +321,26 @@ export const composeEditorial: Composer = (c) => {
     { color: "ink", fontFamily: "display", fontSize: 40, fontWeight: 600, lineHeight: 1.12, letterSpacing: "-0.015em" },
     { text: c.title }));
 
+  // Body right column: each block's height is MEASURED from its wrapped text
+  // (measure.ts) rather than estimated from character count, then capped to
+  // its fair share of the remaining band so the stack can't run into the
+  // sources line. compose()'s fit-pass shrinks the font of any block capped.
+  const bodyX = 468, bodyW = CANVAS_W - m - bodyX;
+  const bodyFloor = CANVAS_H - 96; // the sources line sits here
+  const bodyGap = 20;
+  const bodyParas = c.paragraphs.slice(0, 4);
   let y = 104;
-  c.paragraphs.slice(0, 4).forEach((p, i) => {
+  bodyParas.forEach((p, i) => {
     const fs = i === 0 ? 26 : 20;
-    const h = Math.max(50, Math.ceil(p.text.length / 52) * (fs * 1.55));
-    els.push(makeElement("text", { x: 468, y, w: CANVAS_W - m - 468, h, z: 10 },
-      { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: i === 0 ? 1.4 : 1.55 },
+    const lh = i === 0 ? 1.4 : 1.55;
+    const measured = Math.ceil(measureHeight(p.text, bodyW, { family: DEFAULT_FAMILIES.body, size: fs }, lh));
+    const remaining = bodyParas.length - i;
+    const fairShare = (bodyFloor - y - bodyGap * (remaining - 1)) / remaining;
+    const h = Math.max(40, Math.min(measured, fairShare));
+    els.push(makeElement("text", { x: bodyX, y, w: bodyW, h, z: 10 },
+      { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: lh },
       { text: p.text, source: p.source }));
-    y += h + 20;
+    y += h + bodyGap;
   });
 
   if (c.image) {
@@ -470,10 +483,12 @@ export const composeTechnical: Composer = (c) => {
   rows.slice(0, 4).forEach((p, i) => {
     // 1-2 rows keep the larger size; 3-4 rows step down so they fit the band.
     const fontSize = shownCount <= 2 ? (i === 0 ? 19 : 16.5) : (i === 0 ? 16 : 14);
-    // Rule-3 body cap (three lines), then never taller than the slot. Leaves
-    // room below for the separator and the gap.
-    const bodyCap = fontSize * 1.55 * 3 + 10;
-    const textH = Math.min(slot - 20, bodyCap);
+    // Height MEASURED from the wrapped text (measure.ts), not a 3-line
+    // assumption, then capped to the row's slot so a long paragraph can't eat
+    // the next row. compose()'s fit-pass shrinks the font if a row is capped.
+    const rowW = CANVAS_W - m * 2 - 56;
+    const measured = Math.ceil(measureHeight(p.text, rowW, { family: DEFAULT_FAMILIES.body, size: fontSize }, 1.55));
+    const textH = Math.max(24, Math.min(slot - 20, measured));
     els.push(makeElement("caption", { x: m, y: y + 4, w: 40, h: 18, z: 10 },
       { color: "accent", fontFamily: "label", fontSize: 12 }, { text: String(i + 1).padStart(2, "0") }));
     els.push(makeElement("text", { x: m + 56, y, w: CANVAS_W - m * 2 - 56, h: textH, z: 10 },
@@ -676,14 +691,22 @@ export const composeInstitutional: Composer = (c) => {
     return { elements: els };
   }
 
+  // Measured heights (measure.ts), not char-count estimates, each capped to
+  // its fair share of the remaining band. compose()'s fit-pass handles caps.
+  const instFloor = CANVAS_H - 80;
+  const instGap = 18;
+  const instParas = c.paragraphs.slice(0, 4);
   let y = 196;
-  c.paragraphs.slice(0, 4).forEach((p, i) => {
+  instParas.forEach((p, i) => {
     const fs = i === 0 ? 21 : 18;
-    const h = Math.max(48, Math.ceil(p.text.length / 62) * (fs * 1.7));
+    const measured = Math.ceil(measureHeight(p.text, MEASURE, { family: DEFAULT_FAMILIES.body, size: fs }, 1.7));
+    const remaining = instParas.length - i;
+    const fairShare = (instFloor - y - instGap * (remaining - 1)) / remaining;
+    const h = Math.max(40, Math.min(measured, fairShare));
     els.push(makeElement("text", { x: centred(MEASURE), y, w: MEASURE, h, z: 10 },
       { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: 1.7, align: "center" },
       { text: p.text, source: p.source }));
-    y += h + 18;
+    y += h + instGap;
   });
   return { elements: els };
 };
@@ -876,14 +899,22 @@ export const composeNarrative: Composer = (c) => {
   els.push(makeElement("heading", { x: NAR_M, y: 164, w: textW, h: 110, z: 10 },
     { color: "ink", fontFamily: "display", fontSize: 42, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.02em" },
     { text: c.title }));
+  // Measured heights (measure.ts), not char-count estimates, each capped to
+  // its fair share of the remaining band. compose()'s fit-pass handles caps.
+  const narFloor = CANVAS_H - 96;
+  const narGap = 16;
+  const narParas = c.paragraphs.slice(0, 3);
   let ny = 296;
-  c.paragraphs.slice(0, 3).forEach((p, i) => {
+  narParas.forEach((p, i) => {
     const fs = i === 0 ? 20 : 17;
-    const h = Math.max(48, Math.ceil(p.text.length / (textW / 9)) * (fs * 1.55));
+    const measured = Math.ceil(measureHeight(p.text, textW, { family: DEFAULT_FAMILIES.body, size: fs }, 1.55));
+    const remaining = narParas.length - i;
+    const fairShare = (narFloor - ny - narGap * (remaining - 1)) / remaining;
+    const h = Math.max(40, Math.min(measured, fairShare));
     els.push(makeElement("text", { x: NAR_M, y: ny, w: textW, h, z: 10 },
       { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: 1.55 },
       { text: p.text, source: p.source }));
-    ny += h + 16;
+    ny += h + narGap;
   });
   els.push(...chrome(c, { margin: NAR_M, logoAt: "top-left", numberStyle: "none", logoSize: 20 }));
   return { elements: els };
@@ -1178,11 +1209,88 @@ function ensureChrome(
   return out;
 }
 
+/** Text-bearing element types, mirroring ElementView's text branch. */
+const TEXT_TYPES = new Set([
+  "text", "heading", "eyebrow", "statement", "caption", "list", "quote", "metric", "pageNumber",
+]);
+
+function familyFor(token: string | undefined): string {
+  return token === "display" ? DEFAULT_FAMILIES.display
+    : token === "label" ? DEFAULT_FAMILIES.label
+      : DEFAULT_FAMILIES.body;
+}
+
+const CANVAS_FLOOR = 700; // 20px safe margin below the 720px canvas
+
+/**
+ * Canvas bounds guard (safety net). A text element pushed entirely below the
+ * floor is dropped; one that straddles it is clipped to end at the floor.
+ * Non-text elements — full-bleed shapes, images, background fields, rules —
+ * are left alone so a deliberate full-canvas ground is never trimmed.
+ */
+function clampTextToCanvas(elements: SlideElement[]): SlideElement[] {
+  const out: SlideElement[] = [];
+  for (const el of elements) {
+    if (!TEXT_TYPES.has(el.type)) { out.push(el); continue; }
+    if (el.frame.y > CANVAS_FLOOR) continue; // entirely off-canvas → remove
+    if (el.frame.y + el.frame.h > CANVAS_FLOOR) {
+      out.push({ ...el, frame: { ...el.frame, h: Math.max(20, CANVAS_FLOOR - el.frame.y) } });
+    } else {
+      out.push(el);
+    }
+  }
+  return out;
+}
+
+/**
+ * Fit-pass (safety net). Shrinks any text element's font (1px steps, floor
+ * 10px) until its wrapped content fits the element's frame, so a paragraph a
+ * composer mis-sized — or one longer than expected — can never spill past its
+ * box. Uses measure.ts's wrap model; the overflow:hidden in ElementView clips
+ * anything still too long at the 10px floor. This is the single net that
+ * catches every composer, including the templates-v2 ones.
+ */
+function fitTextToFrames(elements: SlideElement[]): SlideElement[] {
+  return elements.map((el) => {
+    const text = el.text;
+    if (!TEXT_TYPES.has(el.type) || !text || !text.trim()) return el;
+    const s = el.style ?? {};
+    const size = typeof s.fontSize === "number" ? s.fontSize : 18;
+    if (size <= 10) return el;
+    const lineHeight = typeof s.lineHeight === "number" ? s.lineHeight : 1.5;
+    const weight = typeof s.fontWeight === "number" ? s.fontWeight : 400;
+    const family = familyFor(s.fontFamily);
+    // Account for padding/borders that shrink the usable area (see ElementView).
+    const pad = typeof s.padding === "number" ? s.padding : 0;
+    const padLeft = pad + (s.borderLeft ? 12 : 0);
+    const padTop = s.borderTop ? (pad || 8) : pad;
+    const usableW = Math.max(12, el.frame.w - padLeft - pad);
+    const usableH = Math.max(12, el.frame.h - padTop - pad);
+
+    // wrapText counts full leading on the last line, so a box sized for exactly
+    // N lines would shrink needlessly; tolerate half a line of slack. A real
+    // extra line (+1.0 line) is well past the tolerance, so overflow is caught.
+    const fits = (sz: number) =>
+      measureHeight(text, usableW, { family, size: sz, weight }, lineHeight)
+        <= usableH + sz * lineHeight * 0.5;
+
+    if (fits(size)) return el;
+    let sz = size;
+    while (sz > 10 && !fits(sz)) sz -= 1;
+    return { ...el, style: { ...s, fontSize: sz } };
+  });
+}
+
 export function compose(templateId: string, content: SlideContentInput): ElementSlide {
   const composer = COMPOSERS[templateId] ?? composeEditorial;
   const composed = composer(content);
   const background = composed.background;
-  const elements = ensureChrome(composed.elements, content, background);
+  // ensureChrome adds any missing logo/number/name; the canvas guard keeps
+  // text on-canvas; the fit-pass then shrinks any text that still overruns its
+  // (possibly clamped) frame. Guard before fit so a clamped box is fitted to
+  // its final height rather than its original one.
+  const withChrome = ensureChrome(composed.elements, content, background);
+  const elements = fitTextToFrames(clampTextToCanvas(withChrome));
   return {
     id: elementId("slide"),
     kind: content.kind,
