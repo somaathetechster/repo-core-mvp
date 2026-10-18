@@ -40,6 +40,8 @@ NARRATIVE_SYSTEM = """You write investor pitch deck copy. You are given a founde
 
 Your job is to make the strongest honest case, in the sharpest possible prose. That means rewriting, restructuring, and cutting, not paraphrasing. When the founder's input is long, summarize aggressively — extract the single strongest claim and the 2-3 most specific supporting facts, then discard the rest. The investor reads each slide in 10 seconds. More words is not more persuasive.
 
+Each slide covers ONE idea only. If the source material covers multiple topics, pick the single most important one and ignore the rest. A slide is not a summary of an essay — it is one sharp claim with supporting evidence.
+
 HOW TO WRITE
 - Lead with the claim, then the evidence. Never build up to the point.
 - Prefer the concrete to the abstract. "1,136 fiat withdrawals settled" beats "significant transaction volume".
@@ -91,6 +93,12 @@ def _field_text(profile: dict, key: str) -> str:
     return (profile.get(key) or "").strip()
 
 
+# Cap each profile field before it reaches the model. A founder who pastes an
+# essay into one field otherwise gets a slide that tries to cover all of it;
+# capping the input forces the model to work from the sharpest ~65 words.
+MAX_FIELD_CHARS = 400  # ~65 words per field
+
+
 def _build_input(profile: dict, diligence: dict | None) -> tuple[str, list[str]]:
     """Assembles the evidence, and reports which slides have nothing behind them."""
     lines: list[str] = []
@@ -108,6 +116,7 @@ def _build_input(profile: dict, diligence: dict | None) -> tuple[str, list[str]]
     ]:
         value = _field_text(profile, key)
         if value:
+            value = _truncate_paragraph(value, MAX_FIELD_CHARS)
             lines.append(f"\n{key.upper().replace('_', ' ')}:\n{value}")
 
     # Technical diligence, when a repo has been analysed, is the strongest
