@@ -322,11 +322,11 @@ export const composeEditorial: Composer = (c) => {
     { text: c.title }));
 
   // Body right column: each block's height is MEASURED from its wrapped text
-  // (measure.ts) rather than estimated from character count, then capped to
-  // its fair share of the remaining band so the stack can't run into the
-  // sources line. compose()'s fit-pass shrinks the font of any block capped.
+  // (measure.ts) rather than estimated from character count, and chained from
+  // the previous block's real bottom. Capped at the canvas ceiling so a block
+  // can't run off-canvas; compose()'s fit-pass then shrinks the font of any
+  // block the ceiling truncates.
   const bodyX = 468, bodyW = CANVAS_W - m - bodyX;
-  const bodyFloor = CANVAS_H - 96; // the sources line sits here
   const bodyGap = 20;
   const bodyParas = c.paragraphs.slice(0, 4);
   let y = 104;
@@ -334,9 +334,7 @@ export const composeEditorial: Composer = (c) => {
     const fs = i === 0 ? 26 : 20;
     const lh = i === 0 ? 1.4 : 1.55;
     const measured = Math.ceil(measureHeight(p.text, bodyW, { family: DEFAULT_FAMILIES.body, size: fs }, lh));
-    const remaining = bodyParas.length - i;
-    const fairShare = (bodyFloor - y - bodyGap * (remaining - 1)) / remaining;
-    const h = Math.max(40, Math.min(measured, fairShare));
+    const h = Math.max(40, Math.min(measured, CANVAS_H - y - 20));
     els.push(makeElement("text", { x: bodyX, y, w: bodyW, h, z: 10 },
       { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: lh },
       { text: p.text, source: p.source }));
@@ -469,26 +467,19 @@ export const composeTechnical: Composer = (c) => {
   // nothing floating: the page reads like a spec.
   const rows = c.paragraphs.slice(0, 5);
   const ROW_TOP = 152;
-  // The sources block sits at CANVAS_H - 76; rows must finish above it, and
-  // nothing may cross the 700 ceiling (20px margin below the 720 canvas).
-  const BOTTOM = Math.min(700, CANVAS_H - 76 - 16);
-  // Each row takes an equal share of the band, capped so one row can't grow
-  // unbounded. With two long paragraphs the boxes are tall enough that the
-  // text no longer wraps past its slot; with five short ones they pack as
-  // before. This is what stops the overflow that bled rows into each other.
-  const slot = rows.length ? Math.min(132, (BOTTOM - ROW_TOP) / rows.length) : 0;
   // Cap at four rows; past that the slide reads as an undifferentiated wall.
   const shownCount = Math.min(rows.length, 4);
   let y = ROW_TOP;
   rows.slice(0, 4).forEach((p, i) => {
     // 1-2 rows keep the larger size; 3-4 rows step down so they fit the band.
     const fontSize = shownCount <= 2 ? (i === 0 ? 19 : 16.5) : (i === 0 ? 16 : 14);
-    // Height MEASURED from the wrapped text (measure.ts), not a 3-line
-    // assumption, then capped to the row's slot so a long paragraph can't eat
-    // the next row. compose()'s fit-pass shrinks the font if a row is capped.
+    // Height MEASURED from the wrapped text (measure.ts); the rule and next
+    // row chain off this row's real bottom (y + textH), so a row grows to its
+    // content without eating the next one. Capped at the canvas ceiling;
+    // compose()'s fit-pass shrinks the font if the ceiling truncates a row.
     const rowW = CANVAS_W - m * 2 - 56;
     const measured = Math.ceil(measureHeight(p.text, rowW, { family: DEFAULT_FAMILIES.body, size: fontSize }, 1.55));
-    const textH = Math.max(24, Math.min(slot - 20, measured));
+    const textH = Math.max(24, Math.min(measured, CANVAS_H - y - 20));
     els.push(makeElement("caption", { x: m, y: y + 4, w: 40, h: 18, z: 10 },
       { color: "accent", fontFamily: "label", fontSize: 12 }, { text: String(i + 1).padStart(2, "0") }));
     els.push(makeElement("text", { x: m + 56, y, w: CANVAS_W - m * 2 - 56, h: textH, z: 10 },
@@ -691,18 +682,16 @@ export const composeInstitutional: Composer = (c) => {
     return { elements: els };
   }
 
-  // Measured heights (measure.ts), not char-count estimates, each capped to
-  // its fair share of the remaining band. compose()'s fit-pass handles caps.
-  const instFloor = CANVAS_H - 80;
+  // Measured heights (measure.ts), not char-count estimates, chained from each
+  // block's real bottom and capped at the canvas ceiling. compose()'s fit-pass
+  // shrinks the font of any block the ceiling truncates.
   const instGap = 18;
   const instParas = c.paragraphs.slice(0, 4);
   let y = 196;
   instParas.forEach((p, i) => {
     const fs = i === 0 ? 21 : 18;
     const measured = Math.ceil(measureHeight(p.text, MEASURE, { family: DEFAULT_FAMILIES.body, size: fs }, 1.7));
-    const remaining = instParas.length - i;
-    const fairShare = (instFloor - y - instGap * (remaining - 1)) / remaining;
-    const h = Math.max(40, Math.min(measured, fairShare));
+    const h = Math.max(40, Math.min(measured, CANVAS_H - y - 20));
     els.push(makeElement("text", { x: centred(MEASURE), y, w: MEASURE, h, z: 10 },
       { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: 1.7, align: "center" },
       { text: p.text, source: p.source }));
@@ -899,18 +888,16 @@ export const composeNarrative: Composer = (c) => {
   els.push(makeElement("heading", { x: NAR_M, y: 164, w: textW, h: 110, z: 10 },
     { color: "ink", fontFamily: "display", fontSize: 42, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.02em" },
     { text: c.title }));
-  // Measured heights (measure.ts), not char-count estimates, each capped to
-  // its fair share of the remaining band. compose()'s fit-pass handles caps.
-  const narFloor = CANVAS_H - 96;
+  // Measured heights (measure.ts), not char-count estimates, chained from each
+  // block's real bottom and capped at the canvas ceiling. compose()'s fit-pass
+  // shrinks the font of any block the ceiling truncates.
   const narGap = 16;
   const narParas = c.paragraphs.slice(0, 3);
   let ny = 296;
   narParas.forEach((p, i) => {
     const fs = i === 0 ? 20 : 17;
     const measured = Math.ceil(measureHeight(p.text, textW, { family: DEFAULT_FAMILIES.body, size: fs }, 1.55));
-    const remaining = narParas.length - i;
-    const fairShare = (narFloor - ny - narGap * (remaining - 1)) / remaining;
-    const h = Math.max(40, Math.min(measured, fairShare));
+    const h = Math.max(40, Math.min(measured, CANVAS_H - ny - 20));
     els.push(makeElement("text", { x: NAR_M, y: ny, w: textW, h, z: 10 },
       { color: i === 0 ? "ink" : "muted", fontFamily: "body", fontSize: fs, lineHeight: 1.55 },
       { text: p.text, source: p.source }));
@@ -1220,35 +1207,21 @@ function familyFor(token: string | undefined): string {
       : DEFAULT_FAMILIES.body;
 }
 
-const CANVAS_FLOOR = 700; // 20px safe margin below the 720px canvas
-
 /**
- * Canvas bounds guard (safety net). A text element pushed entirely below the
- * floor is dropped; one that straddles it is clipped to end at the floor.
- * Non-text elements — full-bleed shapes, images, background fields, rules —
- * are left alone so a deliberate full-canvas ground is never trimmed.
- */
-function clampTextToCanvas(elements: SlideElement[]): SlideElement[] {
-  const out: SlideElement[] = [];
-  for (const el of elements) {
-    if (!TEXT_TYPES.has(el.type)) { out.push(el); continue; }
-    if (el.frame.y > CANVAS_FLOOR) continue; // entirely off-canvas → remove
-    if (el.frame.y + el.frame.h > CANVAS_FLOOR) {
-      out.push({ ...el, frame: { ...el.frame, h: Math.max(20, CANVAS_FLOOR - el.frame.y) } });
-    } else {
-      out.push(el);
-    }
-  }
-  return out;
-}
-
-/**
- * Fit-pass (safety net). Shrinks any text element's font (1px steps, floor
- * 10px) until its wrapped content fits the element's frame, so a paragraph a
- * composer mis-sized — or one longer than expected — can never spill past its
- * box. Uses measure.ts's wrap model; the overflow:hidden in ElementView clips
- * anything still too long at the 10px floor. This is the single net that
- * catches every composer, including the templates-v2 ones.
+ * Fit-pass (safety net): grow-then-shrink.
+ *
+ * For each text element, measure how tall its wrapped content actually is at
+ * the current font size. If it needs more room than its frame gives:
+ *   1. GROW the frame height to the content — capped at the canvas ceiling
+ *      (CANVAS_H - y - 20), so a box never runs off the 720px canvas.
+ *   2. Only if the ceiling prevented it from growing enough, SHRINK the font
+ *      (1px steps, floor 10px) until the content fits the grown frame.
+ * If the content already fits, the element is left untouched — boxes grow to
+ * their content and the font shrinks only when the canvas won't allow growth.
+ *
+ * This is the single net that catches every composer, including the
+ * templates-v2 ones. The overflow:hidden in ElementView clips anything still
+ * too long at the 10px floor. Non-text elements are never touched.
  */
 function fitTextToFrames(elements: SlideElement[]): SlideElement[] {
   return elements.map((el) => {
@@ -1256,7 +1229,6 @@ function fitTextToFrames(elements: SlideElement[]): SlideElement[] {
     if (!TEXT_TYPES.has(el.type) || !text || !text.trim()) return el;
     const s = el.style ?? {};
     const size = typeof s.fontSize === "number" ? s.fontSize : 18;
-    if (size <= 10) return el;
     const lineHeight = typeof s.lineHeight === "number" ? s.lineHeight : 1.5;
     const weight = typeof s.fontWeight === "number" ? s.fontWeight : 400;
     const family = familyFor(s.fontFamily);
@@ -1264,20 +1236,33 @@ function fitTextToFrames(elements: SlideElement[]): SlideElement[] {
     const pad = typeof s.padding === "number" ? s.padding : 0;
     const padLeft = pad + (s.borderLeft ? 12 : 0);
     const padTop = s.borderTop ? (pad || 8) : pad;
+    const insetH = padTop + pad;
     const usableW = Math.max(12, el.frame.w - padLeft - pad);
-    const usableH = Math.max(12, el.frame.h - padTop - pad);
+    const usableH = Math.max(12, el.frame.h - insetH);
 
     // wrapText counts full leading on the last line, so a box sized for exactly
-    // N lines would shrink needlessly; tolerate half a line of slack. A real
+    // N lines would otherwise look one line short; tolerate half a line. A real
     // extra line (+1.0 line) is well past the tolerance, so overflow is caught.
-    const fits = (sz: number) =>
-      measureHeight(text, usableW, { family, size: sz, weight }, lineHeight)
-        <= usableH + sz * lineHeight * 0.5;
+    const measured = measureHeight(text, usableW, { family, size, weight }, lineHeight);
+    if (measured <= usableH + size * lineHeight * 0.5) return el; // fits → leave it
 
-    if (fits(size)) return el;
-    let sz = size;
-    while (sz > 10 && !fits(sz)) sz -= 1;
-    return { ...el, style: { ...s, fontSize: sz } };
+    // Grow the frame to the content, capped at the canvas ceiling.
+    const ceiling = Math.max(20, CANVAS_H - el.frame.y - 20);
+    const newFrameH = Math.min(measured + insetH, ceiling);
+    const frame = { ...el.frame, h: newFrameH };
+    const grownUsableH = Math.max(12, newFrameH - insetH);
+
+    // If the ceiling capped growth and the text still doesn't fit, shrink font.
+    if (measured > grownUsableH + size * lineHeight * 0.5 && size > 10) {
+      let sz = size;
+      while (sz > 10) {
+        sz -= 1;
+        if (measureHeight(text, usableW, { family, size: sz, weight }, lineHeight)
+          <= grownUsableH + sz * lineHeight * 0.5) break;
+      }
+      return { ...el, frame, style: { ...s, fontSize: sz } };
+    }
+    return { ...el, frame };
   });
 }
 
@@ -1285,12 +1270,11 @@ export function compose(templateId: string, content: SlideContentInput): Element
   const composer = COMPOSERS[templateId] ?? composeEditorial;
   const composed = composer(content);
   const background = composed.background;
-  // ensureChrome adds any missing logo/number/name; the canvas guard keeps
-  // text on-canvas; the fit-pass then shrinks any text that still overruns its
-  // (possibly clamped) frame. Guard before fit so a clamped box is fitted to
-  // its final height rather than its original one.
+  // ensureChrome adds any missing logo/number/name; the fit-pass then grows
+  // each text box to its content (capped at the canvas ceiling) and shrinks
+  // the font only when the ceiling blocks growth.
   const withChrome = ensureChrome(composed.elements, content, background);
-  const elements = fitTextToFrames(clampTextToCanvas(withChrome));
+  const elements = fitTextToFrames(withChrome);
   return {
     id: elementId("slide"),
     kind: content.kind,
