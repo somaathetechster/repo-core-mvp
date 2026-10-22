@@ -418,7 +418,7 @@ export default function DeckEditor({
       imageMapRef.current = packed.images;
 
       const bytes = mapBytes(packed.images) + JSON.stringify(packed.slides).length;
-      if (bytes > 8_000_000) {
+      if (bytes > 12_000_000) {
         setError(
           `This deck is about ${(bytes / 1_000_000).toFixed(1)}MB, which is too large to save. ` +
           `Remove a few images from the Images panel, or use smaller files.`,

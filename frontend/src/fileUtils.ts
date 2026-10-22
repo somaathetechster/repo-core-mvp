@@ -1,9 +1,33 @@
-export function fileToDataUrl(file: File): Promise<string> {
+/**
+ * Compresses a user-uploaded image before it is stored in application state.
+ * Deck and profile images are persisted inline, so keeping the original
+ * camera-sized file makes saves unnecessarily large and slow.
+ */
+export function compressImage(file: File, maxWidth = 1200, quality = 0.8): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("Couldn't read that file."));
-    reader.readAsDataURL(file);
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    const cleanup = () => URL.revokeObjectURL(url);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ratio = Math.min(1, maxWidth / img.width);
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        cleanup();
+        reject(new Error("Couldn't process that image."));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      cleanup();
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => {
+      cleanup();
+      reject(new Error("That file doesn't appear to be an image."));
+    };
+    img.src = url;
   });
 }
 

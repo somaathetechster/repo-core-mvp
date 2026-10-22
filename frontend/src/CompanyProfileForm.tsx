@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import DeckImport from "./DeckImport";
 import WordCount from "./WordCount";
 import { getCompanyProfile, saveCompanyProfile, type CompanyProfile, type TeamMember, type TaggedImage } from "./api";
-import { fileToDataUrl, extractDominantColor, MAX_IMAGE_BYTES } from "./fileUtils";
+import { compressImage, extractDominantColor, MAX_IMAGE_BYTES } from "./fileUtils";
 import "./theme.css";
 import "./profile-form.css";
 
@@ -233,7 +233,7 @@ export default function CompanyProfileForm({
       setError("Logo is too large. Please use an image under 2MB.");
       return;
     }
-    const dataUrl = await fileToDataUrl(file);
+    const dataUrl = await compressImage(file);
     setProfile((p) => ({ ...p, logo_data_url: dataUrl }));
 
     // Suggest a brand color from the logo, but only if the founder hasn't
@@ -252,7 +252,7 @@ export default function CompanyProfileForm({
       setError("Image is too large. Please use an image under 2MB.");
       return;
     }
-    const dataUrl = await fileToDataUrl(file);
+    const dataUrl = await compressImage(file);
     setProfile((p) => ({
       ...p,
       company_image_data_urls: [...p.company_image_data_urls, { data_url: dataUrl, tag: "other" }],
@@ -291,7 +291,7 @@ export default function CompanyProfileForm({
       setError("Photo is too large. Please use an image under 2MB.");
       return;
     }
-    const dataUrl = await fileToDataUrl(file);
+    const dataUrl = await compressImage(file);
     updateTeamMember(index, "photo_data_url", dataUrl);
   }
 

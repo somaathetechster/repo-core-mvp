@@ -1,3 +1,5 @@
+import { compressImage } from "../fileUtils";
+
 /**
  * Image handling for slides.
  *
@@ -138,19 +140,22 @@ export function slideKindsForTag(tag: ImageTag): string[] {
  * frames; placing both into an identical box is a large part of why
  * auto-placed imagery usually looks wrong.
  */
-export function readImageFile(file: File): Promise<{ data_url: string; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Couldn't read that image."));
-    reader.onload = () => {
-      const data_url = String(reader.result);
-      const img = new Image();
-      img.onload = () => resolve({ data_url, width: img.naturalWidth, height: img.naturalHeight });
-      img.onerror = () => reject(new Error("That file doesn't appear to be an image."));
-      img.src = data_url;
+export async function readImageFile(file: File): Promise<{ data_url: string; width: number; height: number }> {
+  const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    const cleanup = () => URL.revokeObjectURL(url);
+    img.onload = () => {
+      cleanup();
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      cleanup();
+      reject(new Error("That file doesn't appear to be an image."));
+    };
+    img.src = url;
   });
+  return { data_url: await compressImage(file), width, height };
 }
 
 /**
