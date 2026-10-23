@@ -6,11 +6,12 @@ html2canvas, see chartCapture.tsx) need to be sent in the request body,
 they're too large and numerous to fit in a query string.
 """
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from app.core.deps import get_current_user_id
 from app.core.db import AsyncSessionLocal
+from app.core.workspace import READ, authorize as _authorize
 from app.models.deck import DeckModel
 from app.services.exporters import build_pptx, build_pdf
 from app.services.element_export import (
@@ -51,15 +52,17 @@ class ExportRequest(BaseModel):
 @router.post("/{deck_id}/export")
 async def export_deck(
     deck_id: str,
+    request: Request,
     body: ExportRequest,
     user_id: str = Depends(get_current_user_id),
 ):
     if body.format not in ("pptx", "pdf"):
         raise HTTPException(status_code=400, detail="format must be 'pptx' or 'pdf'.")
 
+    user_id = await _authorize(request, user_id, READ)
     async with AsyncSessionLocal() as session:
         deck = await session.get(DeckModel, deck_id)
-        if not deck or deck.user_id != user_id:
+        if not deck:
             raise HTTPException(status_code=404, detail="Deck not found.")
 
         # The gate. Raises 402 with the plan list if they can't export yet.

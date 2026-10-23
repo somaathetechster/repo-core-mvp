@@ -34,8 +34,13 @@ export default function AdminDashboard() {
     setError(null);
     try {
       const r = await adminListUsers();
-      setUsers(r.users);
-      setTotals(r.totals);
+      setUsers(r);
+      setTotals({
+        users: r.length,
+        paying: r.filter((u) => u.plan !== "free").length,
+        decks: r.reduce((sum, u) => sum + u.deck_count, 0),
+        exports: r.reduce((sum, u) => sum + u.export_count, 0),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load the dashboard.");
     } finally {

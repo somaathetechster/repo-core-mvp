@@ -36,7 +36,12 @@ class DeckNarrative:
     warnings: list[str] = field(default_factory=list)
 
 
-NARRATIVE_SYSTEM = """You write investor pitch deck copy. You are given a founder's own description of their company, plus any technical evidence extracted from their codebase.
+NARRATIVE_SYSTEM = """HARD RULES — these override everything else:
+- Every slide: one lead sentence (max 25 words), two or three bullet points (max 20 words each).
+- If founder input is longer than this, cut it. You are a ruthless editor, not a transcriber.
+- A slide is a headline, not a paragraph.
+
+You write investor pitch deck copy. You are given a founder's own description of their company, plus any technical evidence extracted from their codebase.
 
 Your job is to make the strongest honest case, in the sharpest possible prose. That means rewriting, restructuring, and cutting, not paraphrasing. When the founder's input is long, summarize aggressively — extract the single strongest claim and the 2-3 most specific supporting facts, then discard the rest. The investor reads each slide in 10 seconds. More words is not more persuasive.
 
@@ -49,7 +54,7 @@ HOW TO WRITE
 - Cut every adjective that isn't doing work. No "innovative", "cutting-edge", "revolutionary", "seamless", "robust", "world-class".
 - Write like a person who knows the business, not like marketing copy.
 - A slide's lead line should be able to stand alone as the single thing a reader remembers.
-- SLIDE DENSITY: One lead sentence. Two to four supporting points. Never more than four. A crowded slide loses the room faster than a sparse one.
+- SLIDE DENSITY: One lead sentence. Two or three supporting points. A crowded slide loses the room faster than a sparse one.
 - COMPETITION SLIDE SPECIAL RULE: If the competitive landscape input describes positioning intentions rather than specific competitors, still write the slide. Structure it as: (1) the category of alternatives users have today, (2) why each category falls short, (3) what the company does differently. Never leave a competition slide empty — an honest category-level analysis is better than a blank slide.
 
 WHAT YOU MAY NOT DO
@@ -198,8 +203,9 @@ def _verify_numbers(copy_text: str, source_text: str) -> list[str]:
 # SLIDE DENSITY prompt rule asks for this, but a model still occasionally
 # returns five long paragraphs, and anything past these caps overflows the
 # slide canvas downstream — so they are applied after generation.
-_MAX_POINTS = 4
-_MAX_PARA_CHARS = 300
+_MAX_POINTS = 3
+_MAX_PARA_CHARS = 200
+_MAX_LEAD_CHARS = 180
 
 
 def _truncate_paragraph(text: str, limit: int = _MAX_PARA_CHARS) -> str:
@@ -264,7 +270,7 @@ def generate_narrative(
         slides.append(SlideCopy(
             kind=item.get("kind", "custom"),
             title=(item.get("title") or "").strip() or item.get("kind", "Slide").title(),
-            lead=_truncate_paragraph(lead),
+            lead=_truncate_paragraph(lead, _MAX_LEAD_CHARS),
             points=points,
             sources=item.get("sources", []),
         ))

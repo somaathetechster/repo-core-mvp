@@ -97,7 +97,7 @@ export default function SupportWidget({ accessToken }: { accessToken: string | n
       if (open) loadMessages(); else loadUnread();
     };
     tick();
-    const interval = setInterval(tick, open ? 6000 : 20000);
+    const interval = setInterval(tick, 20000);
     return () => clearInterval(interval);
   }, [open, accessToken, loadMessages, loadUnread]);
 

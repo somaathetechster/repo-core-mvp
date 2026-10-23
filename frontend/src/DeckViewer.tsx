@@ -16,10 +16,13 @@ import {
   saveDeckEditorState,
   regenerateDeck,
   updateDeckProfile,
+  getActiveWorkspaceOwnerId,
+  PaymentRequiredError,
   type DeckSlide,
   type DeckTheme,
   type CompanyProfile,
   type AnalyzeResult,
+  type PlanDTO,
 } from "./api";
 import SlideThumb from "./SlideThumb";
 import DesignedSlide from "./DesignedSlide";
@@ -27,6 +30,7 @@ import TemplatePicker, { type DeckStyle } from "./TemplatePicker";
 import { DEFAULT_TEMPLATE_ID } from "./deck/templates";
 import FreeformCanvas from "./FreeformCanvas";
 import CompanyProfileForm from "./CompanyProfileForm";
+import Paywall from "./Paywall";
 import { defaultLayoutForSlide, type LayoutElement } from "./layoutTypes";
 import { ASSETS, assetToSvg } from "./deck/assets";
 import SlideCanvas from "./deck/SlideCanvas";
@@ -536,6 +540,7 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadStage, setDownloadStage] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [paywall, setPaywall] = useState<{ message: string; plans: PlanDTO[] } | null>(null);
 
   async function handleDownload(format: "pptx" | "pdf") {
     setDownloading(true);
@@ -557,11 +562,13 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+      const workspaceOwnerId = getActiveWorkspaceOwnerId();
       const res = await fetch(`${API_BASE}/decks/${deckId}/export`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          ...(workspaceOwnerId ? { "X-Workspace-Id": workspaceOwnerId } : {}),
         },
         body: JSON.stringify({ format, chart_images: chartImages, asset_images: assetImages, slide_images: slideImages }),
       });
@@ -570,7 +577,6 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
         // paywall rather than a generic failure message.
         const body = await res.json().catch(() => ({}));
         const detail = body?.detail ?? {};
-        const { PaymentRequiredError } = await import("./api");
         throw new PaymentRequiredError(
           detail.message ?? "Exporting requires a plan.",
           detail.plans ?? [],
@@ -589,6 +595,10 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e) {
+      if (e instanceof PaymentRequiredError) {
+        setPaywall({ message: e.message, plans: e.plans });
+        return;
+      }
       setError(e instanceof Error ? e.message : "Couldn't download this deck.");
     } finally {
       setDownloading(false);
@@ -608,6 +618,14 @@ export function DownloadMenu({ deckId }: { deckId: string }) {
         </div>
       )}
       {error && <span className="p-error download-menu-error">{error}</span>}
+      {paywall && (
+        <Paywall
+          message={paywall.message}
+          plans={paywall.plans}
+          onClose={() => setPaywall(null)}
+          onChoose={() => { window.location.href = "/billing"; }}
+        />
+      )}
     </div>
   );
 }

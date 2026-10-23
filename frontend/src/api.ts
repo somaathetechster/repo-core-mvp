@@ -654,10 +654,7 @@ export interface AdminUser {
   joined: string | null;
 }
 
-export async function adminListUsers(): Promise<{
-  users: AdminUser[];
-  totals: { users: number; paying: number; decks: number; exports: number };
-}> {
+export async function adminListUsers(): Promise<AdminUser[]> {
   const res = await fetch(`${API_BASE}/admin/users`, { headers: await authHeaders() });
   if (!res.ok) await throwWithDetail(res, "Couldn't load users.");
   return res.json();

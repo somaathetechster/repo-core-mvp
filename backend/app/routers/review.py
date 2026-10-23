@@ -15,6 +15,7 @@ from sqlalchemy import select, delete
 
 from app.core.db import AsyncSessionLocal
 from app.core.deps import get_current_user_id
+from app.models.deck import DeckModel
 from app.models.review import ReviewFindingAction
 
 router = APIRouter(prefix="/review", tags=["review"])
@@ -40,6 +41,10 @@ async def save_finding_action(body: FindingActionIn, user_id: str = Depends(get_
         raise HTTPException(400, "deck_id and finding_id are required.")
 
     async with AsyncSessionLocal() as session:
+        deck = await session.get(DeckModel, deck_id)
+        if not deck or deck.user_id != user_id:
+            raise HTTPException(404, "Deck not found")
+
         existing = (await session.execute(
             select(ReviewFindingAction).where(
                 ReviewFindingAction.user_id == user_id,

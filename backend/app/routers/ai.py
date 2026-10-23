@@ -1,4 +1,6 @@
 """AI assistance endpoints."""
+import asyncio
+import logging
 from typing import Any, Literal
 
 from openai import OpenAI
@@ -9,6 +11,7 @@ from app.core.config import settings
 from app.core.deps import get_current_user_id
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+log = logging.getLogger(__name__)
 
 
 class CoachMessage(BaseModel):
@@ -82,7 +85,8 @@ async def deck_coach(body: DeckCoachRequest, _user_id: str = Depends(get_current
             {"role": "system", "content": coach_system_prompt(body.deck_context)},
             *(message.model_dump() for message in body.messages),
         ]
-        response = client.chat.completions.create(
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
             model="gpt-4o",
             max_tokens=900,
             messages=messages,
@@ -90,4 +94,5 @@ async def deck_coach(body: DeckCoachRequest, _user_id: str = Depends(get_current
         reply = response.choices[0].message.content or ""
         return {"reply": reply}
     except Exception as exc:
+        log.exception("AI deck coach failed: %s", exc)
         raise HTTPException(status_code=502, detail="The AI coach could not answer right now.") from exc

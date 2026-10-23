@@ -63,14 +63,16 @@ def _with_www_variants(origins: list[str]) -> list[str]:
     return expanded
 
 
-_configured_origins = list({*_with_www_variants([_frontend_url, *_extra]), *_dev_origins})
+_known_origins = [
+    "https://provisio.vercel.app",
+    "https://repo-core-mvp.vercel.app",
+]
+_configured_origins = list({*_with_www_variants([_frontend_url, *_extra, *_known_origins]), *_dev_origins})
 print(f"[CORS] Allowed origins: {_configured_origins}")
-print("[CORS] Also allowing any *.vercel.app origin via regex.")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_configured_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
