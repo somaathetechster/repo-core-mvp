@@ -243,7 +243,7 @@ def generate_narrative(
         task="deck_narrative",
         system=NARRATIVE_SYSTEM,
         prompt=source_text,
-        max_tokens=3500,
+        max_tokens=1500,
         api_key_override=api_key_override,
     ))
 

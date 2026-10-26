@@ -70,6 +70,7 @@ def _generate_anthropic(req: GenerateRequest) -> str:
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=req.max_tokens,
+        temperature=0.3,
         system=req.system,
         messages=[{"role": "user", "content": req.prompt}],
     )
@@ -85,6 +86,7 @@ def _generate_openai(req: GenerateRequest) -> str:
     response = client.chat.completions.create(
         model="gpt-4o",
         max_tokens=req.max_tokens,
+        temperature=0.3,
         messages=[
             {"role": "system", "content": req.system},
             {"role": "user", "content": req.prompt},
