@@ -16,7 +16,8 @@ from app.models import support as _support_models  # noqa: F401
 from app.models import review as _review_models  # noqa: F401
 from app.models import collaboration as _collaboration_models  # noqa: F401
 from app.models import comments as _comments_models  # noqa: F401
-from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import, billing, support, payments, ai, review, collaboration, comments
+from app.models import document as _document_models  # noqa: F401
+from app.routers import github_auth, repos, company_profile, decks, data_records, export, data_studio, deck_import, billing, support, payments, ai, review, collaboration, comments, documents
 
 app = FastAPI(title="repo-core API")
 
@@ -128,6 +129,7 @@ app.include_router(ai.router)
 app.include_router(review.router)
 app.include_router(collaboration.router)
 app.include_router(comments.router)
+app.include_router(documents.router)
 
 
 @app.get("/health")

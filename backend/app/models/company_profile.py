@@ -57,6 +57,13 @@ class CompanyProfileModel(Base):
     # or "classic" (a traditional serif body, more formal/institutional).
     brand_font_style: Mapped[str] = mapped_column(String, default="serif")
 
+    # Brand kit fields used as the default letterhead for Provisio Docs. The
+    # brand colours above (brand_primary_color / brand_secondary_color) double
+    # as the document accent; these two add the postal address and tagline that
+    # sit under the company name in a document header.
+    address: Mapped[str] = mapped_column(Text, default="")
+    tagline: Mapped[str] = mapped_column(String, default="")
+
     # The narrative
     problem: Mapped[str] = mapped_column(Text, default="")
     solution: Mapped[str] = mapped_column(Text, default="")

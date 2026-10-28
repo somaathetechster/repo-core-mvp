@@ -27,6 +27,8 @@ import "./dashboard.css";
 const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
 const DecksHome = lazy(() => import("./DecksHome"));
 const DeckEditor = lazy(() => import("./DeckEditor"));
+const DocumentsPage = lazy(() => import("./DocumentsPage"));
+const DocumentEditor = lazy(() => import("./DocumentEditor"));
 const DataStudio = lazy(() => import("./DataStudio"));
 const Evidence = lazy(() => import("./Evidence"));
 const DeckReview = lazy(() => import("./DeckReview"));
@@ -167,6 +169,7 @@ const DASH_TABS = [
   { to: "/evidence", label: "Evidence" },
   { to: "/profile", label: "Company profile" },
   { to: "/deck", label: "Deck" },
+  { to: "/documents", label: "Documents" },
   { to: "/review", label: "Review" },
   { to: "/data", label: "Data" },
   { to: "/security", label: "Security" },
@@ -315,6 +318,8 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           />
           <Route path="/deck" element={<DecksHome analyzedRepos={analyzedRepos} />} />
           <Route path="/deck/:id" element={<DeckEditorRoute analyzedRepos={analyzedRepos} />} />
+          <Route path="/documents" element={<div className="dash-body"><DocumentsPage /></div>} />
+          <Route path="/documents/:id" element={<DocumentEditorRoute />} />
           <Route path="/review" element={<DeckReview onOpenDeck={openDeck} onNavigate={navigateTo} />} />
           <Route path="/data" element={<DataStudio />} />
           <Route
@@ -368,4 +373,13 @@ function DeckEditorRoute({ analyzedRepos }: { analyzedRepos: AnalyzeResult[] }) 
       onBack={() => navigate("/deck")}
     />
   );
+}
+
+// Reads the document id from the path and renders the document editor. Back
+// returns to the documents list.
+function DocumentEditorRoute() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  if (!id) return <Navigate to="/documents" replace />;
+  return <DocumentEditor key={id} docId={id} onBack={() => navigate("/documents")} />;
 }

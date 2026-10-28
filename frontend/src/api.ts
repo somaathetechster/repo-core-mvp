@@ -106,6 +106,8 @@ export interface CompanyProfile {
   brand_primary_color: string;
   brand_secondary_color: string;
   brand_font_style: "serif" | "sans" | "classic";
+  address: string;
+  tagline: string;
 
   problem: string;
   solution: string;
@@ -858,4 +860,124 @@ export async function deleteComment(deckId: string, commentId: string): Promise<
     headers: await authHeaders(),
   });
   if (!res.ok) await throwWithDetail(res, "Couldn't delete that comment.");
+}
+
+/* ---------------------------------------------------------------- */
+/* Documents (Provisio Docs)                                         */
+/* ---------------------------------------------------------------- */
+
+export type DocType =
+  | "proposal" | "business_plan" | "investment_memo"
+  | "pitch_summary" | "report" | "general";
+
+export type DocStatus = "draft" | "generated" | "final";
+
+/** Labels for the known document types, in menu order. */
+export const DOC_TYPE_OPTIONS: { value: DocType; label: string }[] = [
+  { value: "proposal", label: "Proposal" },
+  { value: "business_plan", label: "Business plan" },
+  { value: "investment_memo", label: "Investment memo" },
+  { value: "pitch_summary", label: "Pitch summary" },
+  { value: "report", label: "Report" },
+  { value: "general", label: "General document" },
+];
+
+export interface DocSection {
+  heading: string;
+  body: string;
+}
+
+export interface DocContent {
+  sections: DocSection[];
+}
+
+export interface Letterhead {
+  logo_url: string;
+  company_name: string;
+  address: string;
+  tagline: string;
+  primary_color: string;
+}
+
+export interface DocumentSummary {
+  id: string;
+  title: string;
+  doc_type: DocType;
+  status: DocStatus;
+  updated_at: string | null;
+  created_at: string | null;
+}
+
+export interface FullDocument extends DocumentSummary {
+  content: DocContent;
+  /** null means "use the company profile's brand as the letterhead". */
+  letterhead: Letterhead | null;
+}
+
+export async function listDocuments(): Promise<DocumentSummary[]> {
+  const res = await fetch(`${API_BASE}/documents`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't load your documents.");
+  return res.json();
+}
+
+export async function createDocument(title: string, doc_type: DocType): Promise<FullDocument> {
+  const res = await fetch(`${API_BASE}/documents`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ title, doc_type }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't create that document.");
+  return res.json();
+}
+
+export async function getDocument(id: string): Promise<FullDocument> {
+  const res = await fetch(`${API_BASE}/documents/${id}`, { headers: await authHeaders() });
+  if (!res.ok) await throwWithDetail(res, "Couldn't open this document.");
+  return res.json();
+}
+
+export async function updateDocument(
+  id: string,
+  changes: {
+    title?: string;
+    content?: DocContent;
+    letterhead?: Letterhead | null;
+    status?: DocStatus;
+  },
+): Promise<FullDocument> {
+  const res = await fetch(`${API_BASE}/documents/${id}`, {
+    method: "PUT",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify(changes),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't save this document.");
+  return res.json();
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/documents/${id}`, {
+    method: "DELETE",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't delete this document.");
+}
+
+export async function generateDocument(id: string, doc_type: DocType, brief?: string): Promise<FullDocument> {
+  const res = await fetch(`${API_BASE}/documents/${id}/generate`, {
+    method: "POST",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_type, brief }),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't generate this document.");
+  return res.json();
+}
+
+/** Returns the PDF as a Blob so the caller can trigger a download. */
+export async function exportDocument(id: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/documents/${id}/export`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+  if (!res.ok) await throwWithDetail(res, "Couldn't export this document.");
+  return res.blob();
 }

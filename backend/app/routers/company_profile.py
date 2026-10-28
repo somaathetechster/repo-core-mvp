@@ -43,6 +43,8 @@ class CompanyProfileIn(BaseModel):
     brand_primary_color: str = ""
     brand_secondary_color: str = ""
     brand_font_style: str = "serif"
+    address: str = ""
+    tagline: str = ""
 
     problem: str = ""
     solution: str = ""
