@@ -24,6 +24,8 @@ const EMPTY_PROFILE: CompanyProfile = {
   brand_primary_color: "",
   brand_secondary_color: "",
   brand_font_style: "serif",
+  address: "",
+  tagline: "",
   problem: "",
   solution: "",
   evidence_of_innovation: "",
