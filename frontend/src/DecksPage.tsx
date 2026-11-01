@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   listDecks, createDeck, deleteDeck, renameDeck,
@@ -8,15 +8,22 @@ import { DownloadMenu } from "./DeckViewer";
 import "./theme.css";
 import "./decks-home.css";
 
-interface DecksHomeProps {
+interface DecksPageProps {
   analyzedRepos: AnalyzeResult[];
 }
 
-export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
+/**
+ * The decks-only workspace at /decks: a header with the "New Deck" action, a
+ * search bar, and a grid of deck cards (open / download / delete, with inline
+ * rename). Deck creation opens the same NewDeckWizard generation flow as
+ * before; nothing about generation changed.
+ */
+export default function DecksPage({ analyzedRepos }: DecksPageProps) {
   const navigate = useNavigate();
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   // Inline rename state for the deck cards.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -69,16 +76,35 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
 
   const openDeck = (id: string) => navigate(`/deck/${id}`);
 
+  const filtered = useMemo(() => {
+    if (!decks) return null;
+    const q = query.trim().toLowerCase();
+    if (!q) return decks;
+    return decks.filter((d) => d.name.toLowerCase().includes(q));
+  }, [decks, query]);
+
   return (
     <div className="decks-home">
       <div className="decks-home-header">
         <div className="decks-home-title">
-          Your decks{decks && <span>({decks.length})</span>}
+          Your Decks{decks && <span>({decks.length})</span>}
         </div>
         <button className="decks-home-new" onClick={() => setShowWizard(true)}>
-          ＋ New deck
+          ＋ New Deck
         </button>
       </div>
+
+      {decks && decks.length > 0 && (
+        <div className="decks-search">
+          <input
+            className="decks-search-input"
+            type="search"
+            placeholder="Search decks…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
 
       {error && <p className="p-error">{error}</p>}
 
@@ -90,12 +116,18 @@ export default function DecksHome({ analyzedRepos }: DecksHomeProps) {
         <div className="decks-home-empty-state">
           <div className="decks-empty-icon">✦</div>
           <div className="decks-empty-title">No decks yet</div>
-          <div className="decks-empty-sub">Generate your first pitch deck from your GitHub evidence and company profile.</div>
+          <div className="decks-empty-sub">Create your first. Generate a pitch deck from your GitHub evidence and company profile.</div>
           <button className="decks-home-new" onClick={() => setShowWizard(true)}>Generate first deck →</button>
+        </div>
+      ) : filtered && filtered.length === 0 ? (
+        <div className="decks-home-empty-state">
+          <div className="decks-empty-icon">🔍</div>
+          <div className="decks-empty-title">No decks match "{query}"</div>
+          <div className="decks-empty-sub">Try a different search.</div>
         </div>
       ) : (
         <div className="decks-home-grid">
-          {decks.map((d) => {
+          {filtered!.map((d) => {
             const ago = d.updated_at ? Math.floor((Date.now()-new Date(d.updated_at).getTime())/86400000) : null;
             const relAgo = ago===null?"":ago===0?"today":ago===1?"yesterday":`${ago}d ago`;
             const initials = d.name.split(" ").map((w: string)=>w[0]).join("").toUpperCase().slice(0,2);

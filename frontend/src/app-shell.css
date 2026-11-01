@@ -1,0 +1,149 @@
+/* App shell ── persistent sidebar + main column */
+
+.app-shell { display: flex; min-height: 100svh; background: var(--ink); }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
+.app-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #070707;
+  border-right: 1px solid var(--ink-border);
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow-y: auto;
+  z-index: 40;
+}
+
+.shell-top {
+  padding: 1.25rem 1.1rem 1rem;
+  border-bottom: 1px solid var(--ink-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.shell-brand {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.shell-brand:hover { color: var(--gold); }
+
+/* ── Navigation ──────────────────────────────────────────────────────── */
+.shell-nav { flex: 1; padding: 1rem 0.65rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.shell-nav-section { display: flex; flex-direction: column; gap: 0.15rem; }
+.shell-nav-section-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #6f6b61);
+  padding: 0 0.6rem 0.35rem;
+}
+
+.shell-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-family: var(--font-body);
+  border: none;
+  background: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.shell-nav-item:hover { background: rgba(255, 255, 255, 0.05); color: var(--text); }
+.shell-nav-item-active { background: rgba(242, 183, 5, 0.12); color: var(--gold); }
+.shell-nav-icon { flex-shrink: 0; }
+.shell-nav-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.shell-soon-badge {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8a8578);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ink-border);
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+}
+
+/* ── Account block (pinned bottom) ───────────────────────────────────── */
+.shell-account {
+  padding: 0.9rem 0.65rem 1.1rem;
+  border-top: 1px solid var(--ink-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.shell-logout { color: var(--text-dim); margin-top: 0.1rem; }
+.shell-logout:hover { color: var(--danger); background: rgba(255, 107, 94, 0.08); }
+.shell-user {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  padding: 0.6rem 0.6rem 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shell-domani { font-size: 0.68rem; color: var(--text-muted, #6f6b61); text-decoration: none; padding: 0 0.6rem; }
+.shell-domani:hover { color: var(--gold); }
+
+/* ── Main column ─────────────────────────────────────────────────────── */
+.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* ── Mobile toggle / overlay (hidden on desktop) ─────────────────────── */
+.shell-hamburger {
+  display: none;
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 60;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink-raised);
+  border: 1px solid var(--ink-border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+.shell-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 45;
+}
+
+@media (max-width: 860px) {
+  .shell-hamburger { display: flex; }
+  .shell-overlay { display: block; }
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  .app-sidebar-open { transform: translateX(0); }
+  /* Leave room for the hamburger so page headers don't hide under it. */
+  .app-main { padding-top: 3.5rem; }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
-import { Routes, Route, Navigate, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabaseClient";
 import { type AnalyzeResult } from "./api";
@@ -16,7 +16,7 @@ import WelcomeCelebration from "./WelcomeCelebration";
 import SettingsPage from "./SettingsPage";
 import InvitePage from "./InvitePage";
 import { WorkspaceProvider, WorkspaceScope } from "./WorkspaceContext";
-import WorkspaceSwitcher from "./WorkspaceSwitcher";
+import AppShell from "./AppShell";
 import "./theme.css";
 import "./dashboard.css";
 
@@ -25,13 +25,14 @@ import "./dashboard.css";
 // the initial page load. Someone who only ever uses Evidence and Home
 // shouldn't have to download charting/drag-and-drop code they never touch.
 const CompanyProfileForm = lazy(() => import("./CompanyProfileForm"));
-const DecksHome = lazy(() => import("./DecksHome"));
+const DecksPage = lazy(() => import("./DecksPage"));
 const DeckEditor = lazy(() => import("./DeckEditor"));
 const DocumentsPage = lazy(() => import("./DocumentsPage"));
 const DocumentEditor = lazy(() => import("./DocumentEditor"));
 const DataStudio = lazy(() => import("./DataStudio"));
 const Evidence = lazy(() => import("./Evidence"));
 const DeckReview = lazy(() => import("./DeckReview"));
+const ComingSoonPage = lazy(() => import("./ComingSoonPage"));
 
 const API_BASE = import.meta.env.VITE_API_BASE as string;
 
@@ -164,21 +165,6 @@ export default function App() {
   );
 }
 
-const DASH_TABS = [
-  { to: "/home", label: "Home" },
-  { to: "/evidence", label: "Evidence" },
-  { to: "/profile", label: "Company profile" },
-  { to: "/deck", label: "Deck" },
-  { to: "/documents", label: "Documents" },
-  { to: "/review", label: "Review" },
-  { to: "/data", label: "Data" },
-  { to: "/security", label: "Security" },
-  { to: "/settings", label: "Settings" },
-  // Billing is reached through Settings → Billing now, so it's no longer a
-  // top-level nav item — but the /billing route stays registered below so
-  // existing links (emails, checkout redirects) keep working.
-] as const;
-
 function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; userName: string; accessToken: string }) {
   const navigate = useNavigate();
   const [analyzedRepos, setAnalyzedRepos] = useState<AnalyzeResult[]>([]);
@@ -240,39 +226,9 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
 
   return (
     <WorkspaceProvider>
-    <div className="provisio dashboard">
-      {/* Persistent notifications (incl. the plan-upgrade banner) sit above
-          the topbar, per spec. */}
+    <AppShell userName={userName} userEmail={userEmail}>
+      {/* Persistent notifications (incl. the plan-upgrade banner). */}
       <NotificationBanner accessToken={accessToken} />
-
-      <div className="dash-topbar">
-        <div className="dash-brand-group">
-          <button className="brand-mark brand-mark-link" onClick={() => navigate("/home")}>
-            Provisio
-          </button>
-          <WorkspaceSwitcher />
-        </div>
-        <nav className="dash-tabs">
-          {DASH_TABS.map((t) => (
-            <NavLink
-              key={t.to}
-              to={t.to}
-              className={({ isActive }) => `dash-tab ${isActive ? "dash-tab-active" : ""}`}
-            >
-              {t.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="dash-user">
-          <a className="dash-domani" href="https://www.domanimedia.com" target="_blank" rel="noopener noreferrer">
-            Powered by Domani
-          </a>
-          <span className="dash-email">{userName || userEmail}</span>
-          <button className="p-btn p-btn-ghost" onClick={() => supabase.auth.signOut()}>
-            Log out
-          </button>
-        </div>
-      </div>
 
       <SupportWidget accessToken={accessToken} />
 
@@ -287,9 +243,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
           <Route
             path="/home"
             element={
-              <div className="dash-body">
-                <HomeDashboard userName={userName} onNavigate={navigateTo} onOpenDeck={openDeck} />
-              </div>
+              <HomeDashboard userName={userName} />
             }
           />
           <Route
@@ -316,10 +270,15 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
               />
             }
           />
-          <Route path="/deck" element={<DecksHome analyzedRepos={analyzedRepos} />} />
+          {/* The decks workspace moved to /decks; keep /deck pointing there so
+              older links (and the editor's "< Decks" back button) still land. */}
+          <Route path="/decks" element={<DecksPage analyzedRepos={analyzedRepos} />} />
+          <Route path="/deck" element={<Navigate to="/decks" replace />} />
           <Route path="/deck/:id" element={<DeckEditorRoute analyzedRepos={analyzedRepos} />} />
-          <Route path="/documents" element={<div className="dash-body"><DocumentsPage /></div>} />
+          <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/documents/:id" element={<DocumentEditorRoute />} />
+          <Route path="/brand" element={<ComingSoonPage product="Brand" />} />
+          <Route path="/sign" element={<ComingSoonPage product="Sign" />} />
           <Route path="/review" element={<DeckReview onOpenDeck={openDeck} onNavigate={navigateTo} />} />
           <Route path="/data" element={<DataStudio />} />
           <Route
@@ -350,7 +309,7 @@ function Dashboard({ userEmail, userName, accessToken }: { userEmail: string; us
         </Routes>
       </Suspense>
       </WorkspaceScope>
-    </div>
+    </AppShell>
     </WorkspaceProvider>
   );
 }
@@ -361,7 +320,7 @@ function DeckEditorRoute({ analyzedRepos }: { analyzedRepos: AnalyzeResult[] }) 
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  if (!id) return <Navigate to="/deck" replace />;
+  if (!id) return <Navigate to="/decks" replace />;
   const slideParam = searchParams.get("slide");
   const initialSlide = slideParam != null && Number.isFinite(Number(slideParam)) ? Number(slideParam) : undefined;
   return (
@@ -370,7 +329,7 @@ function DeckEditorRoute({ analyzedRepos }: { analyzedRepos: AnalyzeResult[] }) 
       deckId={id}
       initialSlide={initialSlide}
       analyzedRepos={analyzedRepos}
-      onBack={() => navigate("/deck")}
+      onBack={() => navigate("/decks")}
     />
   );
 }
