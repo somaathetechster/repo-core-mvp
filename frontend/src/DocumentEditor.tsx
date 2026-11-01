@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Node } from "@tiptap/core";
+import { Node, type JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Typography } from "@tiptap/extension-typography";
@@ -33,13 +33,13 @@ const DEFAULT_ACCENT = "#b8860b";
 /* Content conversion                                                  */
 /* ------------------------------------------------------------------ */
 
-type TipTapDoc = { type: "doc"; content: unknown[] };
+type TipTapDoc = JSONContent;
 
 const EMPTY_DOC: TipTapDoc = { type: "doc", content: [{ type: "paragraph" }] };
 
 /** Convert the legacy {sections:[{heading, body}]} shape into TipTap JSON. */
 function sectionsToDoc(sections: { heading?: string; body?: string }[]): TipTapDoc {
-  const nodes: unknown[] = [];
+  const nodes: JSONContent[] = [];
   for (const s of sections) {
     const heading = (s.heading || "").trim();
     if (heading) {

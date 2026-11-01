@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import type { JSONContent } from "@tiptap/core";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -894,7 +895,7 @@ export interface DocContent {
 /** The document body. New documents store TipTap JSON ({type:"doc", content:[…]});
  *  legacy documents may still hold the old {sections:[…]} shape, which the editor
  *  converts to TipTap JSON on load. */
-export type DocBody = any;
+export type DocBody = JSONContent | { sections: Array<{ heading: string; body: string }> };
 
 /** Which of the five built-in letterhead designs a document uses. */
 export type LetterheadTemplate = "minimal" | "classic" | "bold" | "modern" | "legal";
