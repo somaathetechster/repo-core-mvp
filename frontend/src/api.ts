@@ -891,11 +891,23 @@ export interface DocContent {
   sections: DocSection[];
 }
 
+/** The document body. New documents store TipTap JSON ({type:"doc", content:[…]});
+ *  legacy documents may still hold the old {sections:[…]} shape, which the editor
+ *  converts to TipTap JSON on load. */
+export type DocBody = any;
+
+/** Which of the five built-in letterhead designs a document uses. */
+export type LetterheadTemplate = "minimal" | "classic" | "bold" | "modern" | "legal";
+
 export interface Letterhead {
+  /** Chosen design. Absent on legacy letterheads; treated as "minimal". */
+  template?: LetterheadTemplate;
   logo_url: string;
   company_name: string;
   address: string;
   tagline: string;
+  /** Phone / email line. */
+  contact?: string;
   primary_color: string;
 }
 
@@ -909,8 +921,9 @@ export interface DocumentSummary {
 }
 
 export interface FullDocument extends DocumentSummary {
-  content: DocContent;
-  /** null means "use the company profile's brand as the letterhead". */
+  /** TipTap JSON (or legacy {sections}). See DocBody. */
+  content: DocBody;
+  /** null means "no letterhead on this document" (letterhead is opt-in). */
   letterhead: Letterhead | null;
 }
 
@@ -940,7 +953,7 @@ export async function updateDocument(
   id: string,
   changes: {
     title?: string;
-    content?: DocContent;
+    content?: DocBody;
     letterhead?: Letterhead | null;
     status?: DocStatus;
   },

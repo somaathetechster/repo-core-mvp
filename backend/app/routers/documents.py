@@ -8,6 +8,7 @@ edited, and exported to a letterheaded PDF.
 """
 from typing import Any
 import logging
+import re
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -49,6 +50,33 @@ def _letterhead_from_profile(profile: dict) -> dict:
         "tagline": profile.get("tagline") or "",
         "primary_color": profile.get("brand_primary_color") or "",
     }
+
+
+def _sections_to_tiptap(sections: list[dict]) -> dict:
+    """Convert the AI's ``{heading, body}`` sections into a TipTap JSON document
+    so the editor loads the generated content directly, with no section wrapper.
+
+    Each heading becomes a level-2 heading node; each body is split on blank
+    lines into paragraph nodes. An empty result still yields one paragraph so the
+    editor always has a valid, editable document.
+    """
+    nodes: list[dict] = []
+    for s in sections or []:
+        heading = (s.get("heading") or "").strip()
+        if heading:
+            nodes.append({
+                "type": "heading",
+                "attrs": {"level": 2},
+                "content": [{"type": "text", "text": heading}],
+            })
+        body = (s.get("body") or "").strip()
+        for para in re.split(r"\n{2,}", body):
+            para = para.strip()
+            if para:
+                nodes.append({"type": "paragraph", "content": [{"type": "text", "text": para}]})
+    if not nodes:
+        nodes.append({"type": "paragraph"})
+    return {"type": "doc", "content": nodes}
 
 
 def _doc_summary(d: DocumentModel) -> dict:
@@ -199,7 +227,7 @@ async def generate_document_content(doc_id: str, request: Request, body: Generat
             raise HTTPException(status_code=502, detail=f"Couldn't generate this document: {e}")
 
         doc.doc_type = doc_type
-        doc.content = {"sections": result.get("sections", [])}
+        doc.content = _sections_to_tiptap(result.get("sections", []))
         doc.status = "generated"
         generated_title = (result.get("title") or "").strip()
         # Only adopt the AI title when the user hasn't named the doc themselves.
