@@ -33,12 +33,10 @@ const DEFAULT_ACCENT = "#b8860b";
 /* Content conversion                                                  */
 /* ------------------------------------------------------------------ */
 
-type TipTapDoc = JSONContent;
-
-const EMPTY_DOC: TipTapDoc = { type: "doc", content: [{ type: "paragraph" }] };
+const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };
 
 /** Convert the legacy {sections:[{heading, body}]} shape into TipTap JSON. */
-function sectionsToDoc(sections: { heading?: string; body?: string }[]): TipTapDoc {
+function sectionsToDoc(sections: { heading?: string; body?: string }[]): JSONContent {
   const nodes: JSONContent[] = [];
   for (const s of sections) {
     const heading = (s.heading || "").trim();
@@ -58,10 +56,10 @@ function sectionsToDoc(sections: { heading?: string; body?: string }[]): TipTapD
 /** Normalise whatever is stored on the document into a TipTap JSON doc the
  *  editor can load: pass through TipTap JSON, convert the legacy section
  *  format, or fall back to an empty document. */
-function toTipTapDoc(content: unknown): TipTapDoc {
+function toTipTapDoc(content: unknown): JSONContent {
   if (content && typeof content === "object") {
     const c = content as Record<string, unknown>;
-    if (c.type === "doc" && Array.isArray(c.content)) return c as unknown as TipTapDoc;
+    if (c.type === "doc" && Array.isArray(c.content)) return c as unknown as JSONContent;
     if (Array.isArray(c.sections)) return sectionsToDoc(c.sections as { heading?: string; body?: string }[]);
   }
   return EMPTY_DOC;
